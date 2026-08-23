@@ -15,10 +15,11 @@ repo's own Godot dispatch brief and stays canon for material/shader work).
 
 ## Status
 
-Playable vertical slice: twin-stick movement, dash with i-frames, shooting,
-two enemy types (GLOBBO chaser, YELA_CUBE flopper), an escalating wave
-director, HP/wave/score HUD, one shared gel shader. Full detail and the
-ordered list of what's next: `PORT_STATUS.md`.
+Playable vertical slice: twin-stick movement, dash with i-frames, shooting
+both ways, four enemy types (GLOBBO pouncer, YELA_CUBE flopper, and the
+ranged SPITTOR and FANNER), a budget-based wave director with a shooter cap,
+HP/wave/score HUD, one shared gel shader. Full detail and the ordered list of
+what's next: `PORT_STATUS.md`.
 
 ## Running it
 
@@ -40,8 +41,10 @@ godot --headless --script tests/smoke.gd
 ```
 
 A bare-`SceneTree` gate (no GPU, no wall-clock dependence) exercising player
-movement/firing/damage, both enemy types, and the wave director's spawn/clear
-cycle — 16 checks. Run it before every commit that touches `scripts/`.
+movement/firing/damage/i-frames, all four enemy types (including SPITTOR's
+wind-up tell and FANNER's every-third-wide volley beat), the wave budget
+curve and the spawn/clear cycle — 41 checks. Run it before every commit that
+touches `scripts/`.
 
 ## Layout
 
@@ -57,10 +60,14 @@ scripts/
   input_manager.gd      keyboard+mouse / gamepad → move/aim/dash/pause
   player.gd             port of js/player.js
   bullet_pool.gd         port of js/bullet.js (MultiMesh instead of InstancedMesh)
-  enemy.gd               shared enemy base: gel material, hit-wobble, spring squash
-  globbo.gd               GLOBBO — chaser blob, lunging speed pulse
+  enemy.gd               shared enemy base: gel material, hit-wobble, spring
+                          squash, and the telegraph->fire + hold-at-range
+                          scaffolding every ranged type shares
+  globbo.gd               GLOBBO — chaser blob, lunge pulse + stalk/crouch/leap
   yela_cube.gd            YELA_CUBE — edge-pivot flop instead of sliding
-  wave_director.gd        spawns escalating waves, cross pattern
+  spittor.gd              SPITTOR — holds range, swells, spits a ring of 8
+  fanner.gd               FANNER — circles and fans, every 3rd volley wider
+  wave_director.gd        budget-based wave composition + shooter cap
 tests/smoke.gd         headless gate — see "Testing" above
 PORT_BRIEF.md         inherited visual/material brief (Godot-side canon for shaders/lighting)
 PORT_STATUS.md        living doc: what's ported, what's next, in priority order

@@ -2,8 +2,10 @@
 ##
 ## Shared base for every enemy body, ported from the common parts of
 ## toko-drop/js/enemy.js: one gel material per body (see shaders/gel.gdshader
-## + PORT_BRIEF.md §0/§1), hit-wobble decay and the CPU spring-squash used on
-## hit/land. Subclasses (globbo.gd, yela_cube.gd) own their own movement.
+## + PORT_BRIEF.md §0/§1), hit-wobble decay, the CPU spring-squash used on
+## hit/land, and the telegraph→fire scaffolding every ranged type shares.
+## Subclasses (globbo.gd, yela_cube.gd, spittor.gd, fanner.gd) own movement
+## and decide what their volley looks like.
 ##
 ## Deliberately NOT driven by Godot's automatic _process/_physics_process —
 ## wave_director.gd calls update(delta) explicitly from main.gd's game loop,
@@ -23,13 +25,22 @@ var speed := 2.5
 var color := Color(0.0, 0.8, 0.67)
 
 var target: Node3D          # the player — chasers steer toward this
+var bullets: BulletPool     # set by WaveDirector; null for melee-only types
 var half_x := 9.0
 var half_z := 9.0
+
+## Ranged types set these in init(); melee types leave fire_interval at 0.
+var bullet_color := Color(1.0, 0.33, 0.2)
+var fire_interval := 0.0
 
 var mesh: MeshInstance3D
 var mat: ShaderMaterial
 
-var _t := 0.0
+var _t := 0.0                # free-running clock, also drives the gel ripple
+var _fire_t := 0.0           # counts UP toward fire_interval (enemy.js `_t`)
+var _telegraph_t := 0.0      # counts DOWN through the wind-up
+var _is_telegraphing := false
+var _inflate := 0.0          # extra scale during a telegraph (SPITTOR's tell)
 var _hit_wobble := 0.0
 var _sq := 1.0
 var _sqv := 0.0
@@ -69,9 +80,9 @@ func setup(p_color: Color, p_radius: float, p_speed: float, p_hp: int, is_cube: 
 	mesh.material_override = mat
 	add_child(mesh)
 
-## Called once by WaveDirector right after position/target/half_x/half_z are
+## Called once by WaveDirector right after position/target/bullets/half_* are
 ## set, in place of relying on _ready() ordering. Subclasses override to pick
-## their stats + starting state (see globbo.gd / yela_cube.gd).
+## their stats + starting state (see globbo.gd / yela_cube.gd / spittor.gd).
 func init() -> void:
 	pass
 
@@ -92,7 +103,8 @@ func die() -> void:
 	queue_free()
 
 ## Call from a subclass's update(delta) before its own movement. Advances the
-## shared clock, decays hit-wobble and applies the spring squash to mesh.scale.
+## shared clock, decays hit-wobble and applies the spring squash (plus any
+## telegraph inflate) to mesh.scale.
 func _update_common(delta: float) -> void:
 	_t += delta
 	if _hit_wobble > 0.0:
@@ -101,10 +113,95 @@ func _update_common(delta: float) -> void:
 	_sqv = (_sqv - (_sq - 1.0) * 0.28) * 0.84
 	_sq = clampf(_sq + _sqv, 0.55, 1.55)
 	var sxz := 1.0 / sqrt(maxf(_sq, 0.1))
-	mesh.scale = Vector3(sxz, _sq, sxz)
+	# The telegraph inflate multiplies the spring rather than replacing it, so
+	# it composes with breathe/squash instead of stomping them (enemy.js
+	# applies it inside the blob scale block for the same reason).
+	var infl := 1.0 + _inflate
+	mesh.scale = Vector3(sxz * infl, _sq * infl, sxz * infl)
 
 	mat.set_shader_parameter("wobble_time", _t)
 	mat.set_shader_parameter("hit_wobble", _hit_wobble)
+
+## Shared "hold your ground at arm's length" motion for the HOLDER archetype
+## (TUNING.movement.roles.HOLDER). Closes when further than want+band, backs
+## off when nearer than want-band, and stands still inside the band — the
+## hysteresis is what stops it jittering on the boundary. Mirrors the
+## SPITTOR/FANNER/BOTFLY cases in enemy.js. Returns the unit vector toward
+## the target so callers can reuse it for aiming/strafing.
+func _hold_at_range(delta: float, want: float, band: float, strafe: float = 0.0) -> Vector2:
+	if target == null:
+		return Vector2.ZERO
+	var dx := target.position.x - position.x
+	var dz := target.position.z - position.z
+	var dist := Vector2(dx, dz).length()
+	if dist < 0.001:
+		return Vector2.ZERO
+	var nx := dx / dist
+	var nz := dz / dist
+
+	var radial := 0.0
+	if dist > want + band:
+		radial = 1.0
+	elif dist < want - band:
+		radial = -1.0
+
+	# Perpendicular, for types that circle while they hold (FANNER).
+	var px := -nz
+	var pz := nx
+	position.x += (nx * radial + px * strafe) * speed * delta
+	position.z += (nz * radial + pz * strafe) * speed * delta
+	_clamp_to_arena()
+	return Vector2(nx, nz)
+
+func _clamp_to_arena() -> void:
+	var hx := half_x - radius
+	var hz := half_z - radius
+	position.x = clampf(position.x, -hx, hx)
+	position.z = clampf(position.z, -hz, hz)
+
+## Drives the shared fire clock. Returns true on the single frame the volley
+## should actually go off; the subclass then spawns whatever shape it fires.
+## `windup` is the telegraph length — the wind-up is the whole point of these
+## enemies, so it is not optional (enemy.js gives every shooter one).
+func _tick_fire(delta: float, windup: float) -> bool:
+	if fire_interval <= 0.0 or bullets == null:
+		return false
+	if not _is_telegraphing:
+		_fire_t += delta
+		if _fire_t >= fire_interval:
+			_fire_t = 0.0
+			_telegraph_t = windup
+			_is_telegraphing = true
+	if _is_telegraphing:
+		_telegraph_t -= delta
+		if _telegraph_t <= 0.0:
+			_is_telegraphing = false
+			_inflate = 0.0
+			return true
+	return false
+
+## enemy.js `_ring()` — count shots evenly around the circle, rotated so that
+## shot 0 points along `base`. Passing the angle toward the player as `base`
+## is what makes a symmetric ring read as aimed at you.
+func _ring(x: float, z: float, count: int, base: float) -> void:
+	for i in count:
+		var a := base + (float(i) / float(count)) * TAU
+		bullets.spawn_dir(x, z, cos(a), sin(a), false, bullet_color)
+
+## A fan of `count` shots spanning `span` radians, centred on `base`.
+func _fan(x: float, z: float, count: int, span: float, base: float) -> void:
+	if count <= 1:
+		bullets.spawn_dir(x, z, cos(base), sin(base), false, bullet_color)
+		return
+	for i in count:
+		var a := base - span * 0.5 + float(i) * (span / float(count - 1))
+		bullets.spawn_dir(x, z, cos(a), sin(a), false, bullet_color)
+
+## Angle from this enemy toward the player, in the XZ plane.
+func _angle_to_target() -> float:
+	if target == null:
+		return 0.0
+	return atan2(target.position.z - position.z, target.position.x - position.x)
 
 ## Overridden by subclasses; base does nothing but the common upkeep.
 func update(delta: float) -> void:

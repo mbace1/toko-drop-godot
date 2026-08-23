@@ -49,6 +49,7 @@ func _ready() -> void:
 	waves.half_x = HALF_X
 	waves.half_z = HALF_Z
 	waves.target = player
+	waves.bullets = bullets
 	waves.enemies_root = enemies_root
 	waves.wave_cleared.connect(_on_wave_cleared)
 
@@ -191,8 +192,9 @@ func _process_playing(delta: float) -> void:
 			var r := e.radius + 0.15
 			if dx * dx + dz * dz < r * r:
 				b.alive = false
+				var was_max := e.max_hp
 				if e.take_hit(1):
-					score += 100
+					score += 100 * was_max   # tougher bodies are worth more
 
 	# Enemy contact vs. player.
 	if player.alive and not player.invincible:
@@ -203,6 +205,21 @@ func _process_playing(delta: float) -> void:
 			var dz := e.position.z - player.position.z
 			var r := e.radius + Player.RADIUS
 			if dx * dx + dz * dz < r * r:
+				player.hit()
+				break
+
+	# Enemy bullets vs. player. Checked after contact so a single frame can
+	# never cost two HP — player.hit() is a no-op while mercy i-frames run,
+	# which the first hit of the frame has already started.
+	if player.alive and not player.invincible:
+		for b in bullets.active:
+			if not b.alive or b.is_player:
+				continue
+			var dx := b.x - player.position.x
+			var dz := b.z - player.position.z
+			var r := Player.RADIUS + 0.15
+			if dx * dx + dz * dz < r * r:
+				b.alive = false
 				player.hit()
 				break
 
