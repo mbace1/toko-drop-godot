@@ -60,6 +60,23 @@ target is `PORT_BRIEF.md`.
   `_hold_at_range()` (the HOLDER archetype's hysteresis band, from
   `TUNING.movement.roles.HOLDER`), and `_ring()` / `_fan()` volley shapes.
 
+**Death, and the corpses biting back**
+- Death pop — a killed body swells `1 + t·1.3` while fading on a SQUARED
+  curve over 0.28s, so it is mostly transparent by the time it is large
+  (`enemy.js` updateDeath()). Corpses leave the live list immediately (they
+  cannot be shot again and never hold up a wave clear) and finish popping in
+  `WaveDirector.corpses`.
+- **Revenge volleys** — CLOSE COMBAT, the headline of the roadmap's own
+  tagline (`main.js` onKill(), v187/v220). A corpse's retaliation *speaks the
+  species' language*: SPITTOR spits a slow AIMED burst of 3, FANNER throws a
+  slow FAN of 5, everything else blooms the classic RING (4, or 7 for a body
+  over radius 0.75). All of it at `TUNING.revenge.speedMult` 0.6 — "the graze
+  game, not a wall" — behind the same 240-bullet pool guard the source uses so
+  a mass grave cannot starve the living of bullets.
+- Revenge **palette shift** (`main.js` revengeColor()): warm goes dark blood,
+  yellow goes poison green, cool goes deep venom. A corpse never wears living
+  colours, so the two attack classes read apart at a glance.
+
 **Material**
 - One shared `shaders/gel.gdshader`: vertex ripple + hit shockwave, Fresnel
   rim glow, CPU-driven spring squash. Per-instance uniforms via
@@ -71,7 +88,7 @@ target is `PORT_BRIEF.md`.
   "biggest single jump, near-free".
 
 **Testing**
-- `tests/smoke.gd` — 41 checks, bare `SceneTree`, no GPU. Run before every
+- `tests/smoke.gd` — 55 checks, bare `SceneTree`, no GPU. Run before every
   commit touching `scripts/`.
 
 ## Not ported yet — in priority order
@@ -87,11 +104,11 @@ visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
    wheel body + exact telegraph, `TOKO_DROP_PORT_BRIEF.md` Part 4 — and
    BAMBU needs the landing-ring lob (Part 5), the one genuinely new
    gameplay affordance in that document.
-2. **Death FX.** Killed enemies just `queue_free()`. The source pops them
-   (`TUNING.fx.killDroplets/killChunks`) and, more importantly, has
-   **revenge rings** — corpses bite back, per the roadmap's own tagline.
-   `TUNING.revenge` (tuning.js line 230) is a complete spec: a per-species
-   dialect (AIMED/FAN/RING) echoing how the thing attacked in life.
+2. **Kill particles.** The pop and the revenge volley are in; the *debris*
+   is not — `TUNING.fx.killDroplets` 22 / `killChunks` 5, plus the splat
+   decal they leave. Worth doing as `GPUParticles3D` straight away rather
+   than as flat meshes, since `PORT_BRIEF.md` §3/§5 wants particles here
+   anyway.
 3. **Player weapon modes.** `player.js`'s SPREAD/BURST/HOMING/RAPID are
    stubbed out — only SINGLE exists here.
 4. **Touch controls.** `input_manager.gd` has no touch path; the browser's

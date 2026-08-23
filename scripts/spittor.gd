@@ -29,6 +29,7 @@ func init() -> void:
 	setup(Color(1.0, 0.333, 0.2), 0.9, 1.6, 3, false)
 	bullet_color = Color(1.0, 0.467, 0.333)
 	fire_interval = 2.2
+	revenge_dialect = Revenge.AIMED   # TUNING.revenge.byType: SPITTOR -> AIMED
 
 func update(delta: float) -> void:
 	_update_common(delta)

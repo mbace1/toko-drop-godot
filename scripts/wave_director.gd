@@ -51,6 +51,19 @@ const BODY_CAP_BASE := 4
 const BODY_CAP_PER := 1
 const BODY_CAP_MAX := 14
 
+# tuning.js revenge — "revenge is slow: the graze game, not a wall"
+const REV_SPEED_MULT := 0.6
+const REV_AIMED_COUNT := 3
+const REV_AIMED_SPREAD := 0.14
+const REV_FAN_COUNT := 5
+const REV_FAN_SPREAD := 0.5
+const REV_RING_SMALL := 4
+const REV_RING_BIG := 7
+const REV_RING_BIG_RADIUS := 0.75
+## main.js guards revenge with `bullets.active.length < 240` so a mass grave
+## cannot exhaust the pool and leave the living unable to shoot.
+const REV_POOL_GUARD := 240
+
 var wave := 0
 var half_x := 9.0
 var half_z := 9.0
@@ -58,6 +71,10 @@ var target: Node3D
 var bullets: BulletPool
 var enemies_root: Node3D
 var enemies: Array[Enemy] = []
+## Bodies mid-death-pop. They are out of `enemies` (so they cannot be shot
+## again and do not hold up a wave clear) but still on screen until the pop
+## finishes.
+var corpses: Array[Enemy] = []
 
 ## tuning.js waves.scale.budget — ramps to the knee, then flattens.
 func budget_for(w: int) -> float:
@@ -140,16 +157,69 @@ func _make(name: String) -> Enemy:
 func update(delta: float) -> void:
 	for i in range(enemies.size() - 1, -1, -1):
 		var e := enemies[i]
-		if not is_instance_valid(e) or not e.alive:
+		if not is_instance_valid(e):
 			enemies.remove_at(i)
 			continue
+		if not e.alive:
+			# Just died: fire its revenge, then move it to the corpse list so
+			# the pop plays out without blocking the wave clear.
+			enemies.remove_at(i)
+			_fire_revenge(e)
+			corpses.append(e)
+			continue
 		e.update(delta)
+
+	for i in range(corpses.size() - 1, -1, -1):
+		var c := corpses[i]
+		if not is_instance_valid(c):
+			corpses.remove_at(i)
+			continue
+		if c.update_death(delta):
+			corpses.remove_at(i)
+			c.queue_free()
+
 	if enemies.is_empty() and wave > 0:
 		wave_cleared.emit(wave)
+
+## CLOSE COMBAT: the dead shoot back (main.js onKill(), v187/v220). The volley
+## SPEAKS THE SPECIES' LANGUAGE — a gunner's corpse spits a slow aimed burst,
+## an arc species throws a slow fan, everything else blooms the classic ring —
+## all of it at 0.6x speed and in the revenge palette, so it demands its own
+## strategy rather than imitating living fire.
+func _fire_revenge(e: Enemy) -> void:
+	if bullets == null or target == null:
+		return
+	if bullets.active.size() >= REV_POOL_GUARD:
+		return
+	var col := e.revenge_color()
+	var ex := e.position.x
+	var ez := e.position.z
+
+	match e.revenge_dialect:
+		Enemy.Revenge.AIMED, Enemy.Revenge.FAN:
+			var aimed: bool = e.revenge_dialect == Enemy.Revenge.AIMED
+			var count := REV_AIMED_COUNT if aimed else REV_FAN_COUNT
+			var spread := REV_AIMED_SPREAD if aimed else REV_FAN_SPREAD
+			var bx := target.position.x - ex
+			var bz := target.position.z - ez
+			var base := atan2(bz, bx) if Vector2(bx, bz).length() > 1e-3 else randf() * TAU
+			for j in count:
+				var a := base + (float(j) - float(count - 1) * 0.5) * spread
+				bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
+		_:
+			var n := REV_RING_BIG if e.radius > REV_RING_BIG_RADIUS else REV_RING_SMALL
+			var a0 := randf() * TAU
+			for j in n:
+				var a := a0 + (float(j) / float(n)) * TAU
+				bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
 
 func clear() -> void:
 	for e in enemies:
 		if is_instance_valid(e):
 			e.queue_free()
 	enemies.clear()
+	for c in corpses:
+		if is_instance_valid(c):
+			c.queue_free()
+	corpses.clear()
 	wave = 0

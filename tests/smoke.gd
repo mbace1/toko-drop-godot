@@ -18,6 +18,8 @@ func _init() -> void:
 	_test_spittor_holds_range_and_spits(root)
 	_test_fanner_fans(root)
 	_test_wave_budget(root)
+	_test_death_pop(root)
+	_test_revenge(root)
 	_test_wave_clears_and_advances(root)
 
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
@@ -188,6 +190,84 @@ func _test_wave_budget(root: Node3D) -> void:
 
 	_check(wd.shooter_cap_for(1) == 1, "wave 1 allows a single shooter")
 	_check(wd.shooter_cap_for(99) == WaveDirector.SHOOTER_CAP_MAX, "the shooter cap tops out")
+
+func _test_death_pop(root: Node3D) -> void:
+	var e: Globbo = _place(root, Globbo.new(), Vector3(3.0, 0.0, 0.0), null, null)
+	e.take_hit(1)
+	_check(not e.alive, "a killed body is out of play immediately")
+	_check(not e.update_death(1.0 / 60.0), "the death pop is still running one frame later")
+
+	var scale_at_start := e.mesh.scale.x
+	for i in 10:
+		e.update_death(1.0 / 60.0)
+	_check(e.mesh.scale.x > scale_at_start, "the corpse SWELLS as it pops")
+	var alpha: float = e.mat.get_shader_parameter("alpha_amt")
+	_check(alpha < e._base_alpha, "and fades while it does (alpha %.2f)" % alpha)
+
+	var frames := 0
+	while not e.update_death(1.0 / 60.0) and frames < 120:
+		frames += 1
+	_check(frames < 120, "the pop finishes rather than running forever")
+	_check(is_equal_approx(Enemy.DEATH_TIME, 0.28), "the pop is enemy.js's 0.28s")
+
+func _test_revenge(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+
+	# A melee body blooms the classic RING; a small radius takes the small one.
+	var bullets := _make_pool(root)
+	var wd := _rev_director(root, target, bullets)
+	var g: Globbo = _place(root, Globbo.new(), Vector3(4.0, 0.0, 0.0), target, null)
+	wd.enemies.append(g)
+	g.take_hit(1)
+	wd.update(1.0 / 60.0)
+	_check(bullets.active.size() == WaveDirector.REV_RING_SMALL,
+		"a melee corpse blooms a ring of %d (got %d)" % [WaveDirector.REV_RING_SMALL, bullets.active.size()])
+	_check(wd.corpses.size() == 1, "the corpse moves to the corpse list, not out of existence")
+	_check(wd.enemies.is_empty(), "and out of the live list, so it cannot hold up a wave clear")
+
+	var living_speed := BulletPool.ENEMY_SPEED
+	var rev_speed := Vector2(bullets.active[0].vx, bullets.active[0].vz).length()
+	_check(rev_speed < living_speed,
+		"revenge is SLOW — the graze game (%.1f vs living %.1f)" % [rev_speed, living_speed])
+	_check(is_equal_approx(rev_speed, living_speed * WaveDirector.REV_SPEED_MULT),
+		"revenge runs at exactly TUNING.revenge.speedMult")
+
+	# A gunner's corpse speaks its own language: a slow AIMED burst.
+	var b2 := _make_pool(root)
+	var wd2 := _rev_director(root, target, b2)
+	var sp: Spittor = _place(root, Spittor.new(), Vector3(4.0, 0.0, 0.0), target, b2)
+	wd2.enemies.append(sp)
+	while sp.alive:
+		sp.take_hit(sp.hp)
+	wd2.update(1.0 / 60.0)
+	_check(b2.active.size() == WaveDirector.REV_AIMED_COUNT,
+		"a SPITTOR corpse spits an AIMED burst of %d (got %d)" % [WaveDirector.REV_AIMED_COUNT, b2.active.size()])
+
+	# An arc species throws a slow FAN instead.
+	var b3 := _make_pool(root)
+	var wd3 := _rev_director(root, target, b3)
+	var fa: Fanner = _place(root, Fanner.new(), Vector3(4.0, 0.0, 0.0), target, b3)
+	wd3.enemies.append(fa)
+	while fa.alive:
+		fa.take_hit(fa.hp)
+	wd3.update(1.0 / 60.0)
+	_check(b3.active.size() == WaveDirector.REV_FAN_COUNT,
+		"a FANNER corpse throws a FAN of %d (got %d)" % [WaveDirector.REV_FAN_COUNT, b3.active.size()])
+
+	# The palette shift is the whole point: revenge must not wear living colours.
+	_check(fa.revenge_color() != fa.bullet_color,
+		"revenge fire never wears the living bullet colour")
+
+func _rev_director(root: Node3D, target: Node3D, bullets: BulletPool) -> WaveDirector:
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+	wd.half_x = 9.0
+	wd.half_z = 9.0
+	wd.target = target
+	wd.bullets = bullets
+	wd.wave = 1   # non-zero so update() is in a "wave running" state
+	return wd
 
 func _test_wave_clears_and_advances(root: Node3D) -> void:
 	var target := Node3D.new()

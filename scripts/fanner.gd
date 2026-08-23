@@ -35,6 +35,7 @@ func init() -> void:
 	setup(Color(1.0, 0.0, 0.667), 0.75, 1.4, 3, false)
 	bullet_color = Color(1.0, 0.4, 0.8)
 	fire_interval = 1.5
+	revenge_dialect = Revenge.FAN     # TUNING.revenge.byType: FANNER -> FAN
 	_strafe_dir = 1.0 if randf() < 0.5 else -1.0
 	_strafe_timer = 2.5 + randf()
 	# Wide flat pancake — TUNING.blob.shapes.FANNER.

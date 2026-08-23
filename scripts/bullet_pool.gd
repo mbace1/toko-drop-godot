@@ -97,11 +97,13 @@ func _make_multimesh(mesh: Mesh, material: Material, use_colors: bool) -> MultiM
 
 ## isPlayer -> is_player, fat -> bigger slow lob shot (BAMBU-style, unused yet
 ## but kept so enemy scripts can opt in without a pool API change later).
-func spawn_dir(x: float, z: float, dx: float, dz: float, is_player: bool, color = null, fat: bool = false) -> void:
+## speed_mult is what makes revenge fire readable: TUNING.revenge.speedMult is
+## 0.6 — "revenge is slow — the graze game, not a wall".
+func spawn_dir(x: float, z: float, dx: float, dz: float, is_player: bool, color = null, fat: bool = false, speed_mult: float = 1.0) -> void:
 	if _pool.is_empty():
 		return
 	var b: Bullet = _pool.pop_back()
-	var speed := PLAYER_SPEED if is_player else (3.5 if fat else ENEMY_SPEED)
+	var speed := (PLAYER_SPEED if is_player else (3.5 if fat else ENEMY_SPEED)) * speed_mult
 	b.x = x
 	b.z = z
 	b.vx = dx * speed

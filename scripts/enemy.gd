@@ -16,6 +16,13 @@ extends Node3D
 
 const GEL_SHADER := preload("res://shaders/gel.gdshader")
 const HIT_WOBBLE_DECAY := 1.1   # TUNING.fx.hitWobbleDecay
+const DEATH_TIME := 0.28        # enemy.js updateDeath()
+const DEATH_GROWTH := 1.3       # "pop growth 3.2x -> 2.3x" => scale 1 + t*1.3
+
+## A corpse's retaliation SPEAKS THE SPECIES' LANGUAGE — TUNING.revenge.byType
+## (tuning.js line 237). Gunners spit a slow aimed burst, arc species throw a
+## slow fan, everything else blooms the classic ring.
+enum Revenge { RING, AIMED, FAN }
 
 var hp := 1
 var max_hp := 1
@@ -36,6 +43,12 @@ var fire_interval := 0.0
 var mesh: MeshInstance3D
 var mat: ShaderMaterial
 
+## Set by subclasses in init(); the fallback is RING (TUNING.revenge.fallback).
+var revenge_dialect := Revenge.RING
+
+var _dying := false
+var _death_t := 0.0
+var _base_alpha := 0.9
 var _t := 0.0                # free-running clock, also drives the gel ripple
 var _fire_t := 0.0           # counts UP toward fire_interval (enemy.js `_t`)
 var _telegraph_t := 0.0      # counts DOWN through the wind-up
@@ -76,7 +89,7 @@ func setup(p_color: Color, p_radius: float, p_speed: float, p_hp: int, is_cube: 
 	mat.set_shader_parameter("gel_color", color)
 	mat.set_shader_parameter("rim_color", color.lightened(0.55))
 	mat.set_shader_parameter("wobble_amp", 0.0 if is_cube else 1.0)
-	mat.set_shader_parameter("alpha_amt", 0.9)
+	mat.set_shader_parameter("alpha_amt", _base_alpha)
 	mesh.material_override = mat
 	add_child(mesh)
 
@@ -98,9 +111,46 @@ func take_hit(dmg: int) -> bool:
 		return true
 	return false
 
+## Starts the death pop. The node is NOT freed here — WaveDirector moves it to
+## its corpse list and keeps calling update_death() until the pop finishes, so
+## a kill is something you SEE rather than a body vanishing mid-frame.
 func die() -> void:
 	alive = false
-	queue_free()
+	_dying = true
+	_death_t = DEATH_TIME
+
+## enemy.js updateDeath(): swells while fading on a SQUARED curve, so the body
+## is mostly transparent by the time it is large — the death stays readable
+## without a screen-filling flash. Returns true once the pop is over and the
+## node can be freed.
+func update_death(delta: float) -> bool:
+	if not _dying:
+		return true
+	_death_t -= delta
+	var t := 1.0 - maxf(_death_t, 0.0) / DEATH_TIME
+	mesh.scale = Vector3.ONE * (1.0 + t * DEATH_GROWTH)
+	mat.set_shader_parameter("alpha_amt", (1.0 - t) * (1.0 - t) * _base_alpha)
+	# The pre-death thrash: strongest at onset, fading as it bursts.
+	mat.set_shader_parameter("hit_wobble", maxf(0.0, _death_t / DEATH_TIME))
+	if _death_t <= 0.0:
+		_dying = false
+		return true
+	return false
+
+## TUNING.revenge.palette — a corpse never wears living colours. Warm shifts to
+## dark blood, yellow to poison green, cool to deep venom, so revenge fire and
+## living fire read apart at a glance (main.js revengeColor()).
+func revenge_color() -> Color:
+	var c := bullet_color if fire_interval > 0.0 else color
+	var h := c.h
+	var sat := c.s
+	var l := c.v
+	if h >= 0.10 and h <= 0.22:                     # yellowLo / yellowHi
+		return Color.from_hsv(0.285, maxf(sat, 0.75), 0.42)   # poison green
+	elif h < 0.10 or h > 0.92:                      # warmHiCut
+		return Color.from_hsv(h * 0.4 if h < 0.10 else h,
+			minf(1.0, sat * 1.2), maxf(0.30, l * 0.55))       # dark blood
+	return Color.from_hsv(h, minf(1.0, sat * 1.2), maxf(0.30, l * 0.5))  # deep venom
 
 ## Call from a subclass's update(delta) before its own movement. Advances the
 ## shared clock, decays hit-wobble and applies the spring squash (plus any
