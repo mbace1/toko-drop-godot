@@ -1,0 +1,18 @@
+# Godot 4
+.godot/
+.import/
+export.cfg
+export_credentials.cfg
+
+# Exported builds
+build/
+*.pck
+*.wasm
+*.exe
+*.apk
+*.aab
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+*.tmp
