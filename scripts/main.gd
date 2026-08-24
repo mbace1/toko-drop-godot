@@ -41,7 +41,7 @@ const MODE_ROWS := [
 	{"mode": Mode.ROGUELIKE, "label": "ROGUELIKE MODE",
 	 "note": "no upgrades — pure arcade survival", "ready": false},
 	{"mode": Mode.RUSH, "label": "RUSH MODE",
-	 "note": "heat, boost and level tiers — in design", "ready": false},
+	 "note": "boost to kill — shoot and you lose your shield", "ready": true},
 ]
 
 var state := State.MENU
@@ -58,6 +58,8 @@ var audio: AudioKit
 var save: SaveService
 var sticks: TouchSticks
 
+var rush: RushRules
+var _rush_label: Label
 var _floor_mat: ShaderMaterial
 var hud: CanvasLayer
 var _hp_label: Label
@@ -102,6 +104,11 @@ func _ready() -> void:
 	save = SaveService.new()
 	add_child(save)
 	save.load_state()
+
+	rush = RushRules.new()
+	add_child(rush)
+	rush.overheated.connect(func(): audio.play("player"))
+	rush.level_changed.connect(func(_n, up): audio.play("wave" if up else "hit"))
 
 	_setup_hud()
 	_show_menu()
@@ -286,6 +293,14 @@ func _setup_hud() -> void:
 	_msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud.add_child(_msg_label)
 
+	_rush_label = _make_label(20)
+	_rush_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_rush_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_rush_label.position.y = 44.0
+	_rush_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_rush_label.hide()
+	hud.add_child(_rush_label)
+
 	sticks = TouchSticks.new()
 	sticks.input_mgr = input_mgr
 	hud.add_child(sticks)
@@ -314,10 +329,17 @@ func _process(delta: float) -> void:
 		State.PLAYING:
 			_process_playing(delta)
 		State.MENU, State.DEAD:
-			# A touch anywhere starts a run: on a phone there is no FIRE key, and
-			# the dash edge only fires on RELEASE of the aim stick.
-			if input_mgr.dash_pressed() or Input.is_action_just_pressed("fire") \
+			# Up/down walks the mode rows; anything else starts the run.
+			if Input.is_action_just_pressed("move_down"):
+				_menu_row = mini(_menu_row + 1, MODE_ROWS.size() - 1)
+				_msg_label.text = _menu_text()
+			elif Input.is_action_just_pressed("move_up"):
+				_menu_row = maxi(_menu_row - 1, 0)
+				_msg_label.text = _menu_text()
+			elif input_mgr.dash_pressed() or Input.is_action_just_pressed("fire") \
 					or input_mgr.left.active or input_mgr.right.active:
+				var row: Dictionary = MODE_ROWS[_menu_row]
+				mode = row["mode"] if row["ready"] else Mode.CLASSIC
 				_start_game()
 
 	_update_hud()
@@ -325,8 +347,11 @@ func _process(delta: float) -> void:
 func _process_playing(delta: float) -> void:
 	var move := input_mgr.get_move_dir()
 	var aim := input_mgr.get_aim_dir(player.position)
+	var firing: bool = aim["valid"]
 
-	if input_mgr.dash_pressed():
+	if mode == Mode.RUSH:
+		_process_rush(delta, firing)
+	elif input_mgr.dash_pressed():
 		var was_ready := player.can_dash()
 		player.dash(aim)
 		if was_ready:
@@ -355,6 +380,22 @@ func _process_playing(delta: float) -> void:
 				else:
 					audio.play_varied("hit")
 
+	# Rush: boosting THROUGH a body kills it and chains the multiplier,
+	# instead of costing a life. This one branch is the whole mode.
+	if mode == Mode.RUSH and rush.boosting and player.alive:
+		for e in waves.enemies:
+			if not is_instance_valid(e) or not e.alive:
+				continue
+			var bdx := e.position.x - player.position.x
+			var bdz := e.position.z - player.position.z
+			var br := e.radius + Player.RADIUS
+			if bdx * bdx + bdz * bdz < br * br:
+				var bmax := e.max_hp
+				if e.take_hit(99):
+					rush.add_boost_kill()
+					score += rush.award(100 * bmax)
+					audio.play_varied("kill")
+
 	# Enemy contact vs. player.
 	if player.alive and not player.invincible:
 		for e in waves.enemies:
@@ -364,8 +405,7 @@ func _process_playing(delta: float) -> void:
 			var dz := e.position.z - player.position.z
 			var r := e.radius + Player.RADIUS
 			if dx * dx + dz * dz < r * r:
-				player.hit()
-				audio.play("player")
+				_damage_player()
 				break
 
 	# Enemy bullets vs. player. Checked after contact so a single frame can
@@ -380,18 +420,64 @@ func _process_playing(delta: float) -> void:
 			var r := Player.RADIUS + 0.15
 			if dx * dx + dz * dz < r * r:
 				b.alive = false
-				player.hit()
-				audio.play("player")
+				_damage_player()
 				break
 
 	if not player.alive:
 		_on_player_dead()
 
+## One damage path for both rulesets. Rush spends a LIFE and drops the
+## chain; classic spends HP. Both take the mercy window, so a single frame
+## can never cost two.
+func _damage_player() -> void:
+	if mode == Mode.RUSH:
+		if player.invincible:
+			return
+		audio.play("player")
+		player.start_mercy()
+		if rush.take_hit():
+			player.die()
+		return
+	player.hit()
+	audio.play("player")
+
+## Rush Mode's frame: heat, boost, the ability and the extra-life award.
+func _process_rush(delta: float, firing: bool) -> void:
+	input_mgr.poll_edges()
+	rush.update(delta, input_mgr.boost_held(), firing)
+
+	player.rush_shotgun = true
+	player.rush_speed_mult = rush.speed_mult()
+	player.rush_boosting = rush.boosting
+	# Boosting is a shield you drop the moment you pull the trigger.
+	player.rush_invuln = rush.invulnerable(firing)
+
+	if input_mgr.ability_pressed():
+		var r := rush.fire_ability()
+		if r > 0.0:
+			audio.play("dead")
+			for e in waves.enemies:
+				if not is_instance_valid(e) or not e.alive:
+					continue
+				var ax := e.position.x - player.position.x
+				var az := e.position.z - player.position.z
+				if ax * ax + az * az < r * r:
+					var m := e.max_hp
+					if e.take_hit(99):
+						rush.add_boost_kill()
+						score += rush.award(100 * m)
+
+	if rush.note_score(score):
+		audio.play("wave")
+
 func _start_game() -> void:
 	state = State.PLAYING
 	score = 0
 	input_mgr.reset()
+	input_mgr.set_rush(mode == Mode.RUSH)
 	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
+	rush.reset()
+	player.rush_shotgun = mode == Mode.RUSH
 	player.reset()
 	waves.clear()
 	bullets.clear()
@@ -463,9 +549,21 @@ func _update_hud() -> void:
 	_hp_label.visible = in_run
 	_wave_label.visible = in_run
 	_score_label.visible = in_run
+	_rush_label.visible = in_run and mode == Mode.RUSH
 	if not in_run:
 		return
-	_hp_label.text = "HP " + "●".repeat(maxi(player.hp, 0)) + "○".repeat(maxi(player.max_hp - player.hp, 0))
-	_wave_label.text = "WAVE %d" % waves.wave
+	if mode == Mode.RUSH:
+		_hp_label.text = "LIVES " + "●".repeat(maxi(rush.lives, 0))
+		_wave_label.text = "LEVEL %d" % rush.level
+		var pips := int(round(rush.heat * 10.0))
+		# U+2591 rendered as a hatched slab in the default font and read as a
+		# second FULL bar; a middle dot leaves the empty run obviously empty.
+		var bar := "█".repeat(pips) + "·".repeat(10 - pips)
+		var heat_txt := "OVERHEAT" if rush.overheated_now else "HEAT " + bar
+		var ab := "   HEAT EXCHANGE READY" if rush.ability_ready() else ""
+		_rush_label.text = "%s    x%d%s" % [heat_txt, rush.multiplier, ab]
+	else:
+		_hp_label.text = "HP " + "●".repeat(maxi(player.hp, 0)) + "○".repeat(maxi(player.max_hp - player.hp, 0))
+		_wave_label.text = "WAVE %d" % waves.wave
 	_score_label.text = ("SCORE %d" % score) if save.hi_score <= 0 \
 		else ("SCORE %d   BEST %d" % [score, save.hi_score])

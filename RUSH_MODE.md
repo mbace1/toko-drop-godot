@@ -103,70 +103,101 @@ is very fast; Crucible reaches 10 with no time bound at all.
   Crucible**, each bending one variable (Blaze = boost, Blast = chain
   explosions, Surge = brutal, Crucible = endurance).
 
-## 3. What Rush Mode should take
+## 2b. What the patch notes settled
 
-Ordered by how much each teaches us, and how cheap it is against what the port
-already has:
+The store page and achievements gave the vocabulary; the **Steam patch notes**
+gave the design intent, and they changed the plan. Two developer sentences
+decide everything:
 
-1. **Heat.** Firing raises heat, heat falls when you stop. At 100% the gun
-   locks until it cools. Turns Toko Drop's free gun into a managed one.
-2. **Boost as a held state that kills.** Replaces the dash inside Rush Mode.
-   Sustained, directional, damages on contact, and it is what heat is *for* if
-   we route boost through the same meter.
-3. **Level tiers on a fast clock.** Reuse the existing budget-based wave
-   director but re-skin waves as levels with an aggressive cadence (~10s),
-   plus a visible tier readout.
-4. **Combo multiplier**, decaying — the port has no chain reward at all.
-5. **One ability to prove the synergy: Heat Exchange.** Spend accumulated heat
-   to burn everything near you. It makes running hot a *choice* instead of
-   only a risk.
+> *"Improved overall text to help clarify the intended playstyle of
+> **prioritising boosting over shooting**."* — Tutorial Overhaul
 
-Deliberately **out** of a first pass: bosses, ranks, the challenge/Freeplay
-split, arena events, unlocks, leaderboards.
+> *"the sound effect that plays when your **boost invulnerability ends (either
+> naturally or from disabling it by shooting)**"* — v1.6
 
-## 4. How it fits this port
+So **boost grants invulnerability, and pulling the trigger cancels it.** Boost
+is the good option; the gun is the fallback you take when you cannot afford to
+boost. That is the "weapon synergy" in one rule, and it is far better than the
+heat-only loop first proposed.
 
-- **Own ruleset**, per owner direction. A `RushRules` object holds heat, boost,
-  combo and tier; `main.gd` branches to it instead of the classic loop.
-- **The look does not move.** Same gel shader, same grid, same bodies. Heat is
-  HUD plus a rim-colour shift on the player (`gel.gdshader` already takes a
-  per-instance `rim_color`, so heat can drive it for free).
-- **Touch answer, day one.** Heat needs no new input (it is a consequence of
-  firing). Boost is the one risk: the current touch dash fires on *release* of
-  the aim stick, which cannot express a *held* boost — see question 3.
-- **Enemy roster**: the port has 6 of ~40 types. Rush Mode should run on what
-  exists rather than blocking on the roster.
+Three more things the notes revealed:
 
-## 5. Open questions
+- The game shipped as **Switchblade** before it was Blade Rush.
+- **Level is a DYNAMIC difficulty that moves both ways** — the UI has
+  *"level up / level down text"*. It is not a one-way climb.
+- The **multiplier runs on a timer**, and bonuses reset that timer
+  (*"a bonus resetting the timer, then the timer running out"*).
+- There are **mutators**, a **campaign** separate from gamemodes, **Boss Rush**
+  and **Onslaught** modes, and abilities that **recharge**.
 
-1. **Heat source** — does firing alone generate heat, or does boosting heat
-   you too? (Boost-heats is what makes the two verbs fight each other.)
-2. **Overheat consequence** — gun locked until fully cool (Blade Rush's
-   "careful not to overheat" reads punitive), or a softer penalty like a
-   fire-rate collapse?
-3. **Boost on touch** — the dash currently fires on *release* of the aim
-   stick, which cannot express a held boost. Options: a third touch zone, a
-   double-tap-and-hold on the move stick, or boost = move stick pushed to the
-   rim. Which?
-4. **Boost vs. dash** — does boost fully replace the dash in Rush Mode
-   (i-frames gone, contact damage instead), or do both exist?
-5. **Level cadence** — Blade Rush's Rush implies ~9s per level. Do we match
-   that, or tie a level to a cleared wave as the port does now?
-6. **Lives or HP** — Blade Rush counts lives; the port has 3 HP with 1.2s
-   mercy. Switch, or keep HP?
-7. **Combo rules** — what breaks the chain? Time only, taking a hit, or both?
-8. **Which ability first** — I propose Heat Exchange because it closes the
-   loop with heat. Prefer Hyper Bomb (simpler, more legible) instead?
-9. **Roguelike button** — the Godot port has no title-screen mode buttons at
-   all yet; the browser build does. Should I build the front-page selector
-   with a ROGUELIKE entry stubbed out, or Rush Mode only for now?
-10. **Name** — "Rush Mode" is Blade Rush's own mode name. Keep it, or give it
-    a Toko Drop name so the tribute is not literal?
+## 3. Decisions (owner, 2026-08-24)
+
+| # | question | decision |
+|---|---|---|
+| 1 | dash | longer, **damages**, builds the multiplier; weapon is a **shotgun** |
+| 2 | overheat | as Blade Rush — punitive lockout |
+| 3 | touch boost | **build both schemes**, toggle in a corner |
+| 4 | boost vs dash | boost replaces it: a longer dash you can **hold** |
+| 5 | levels | **60s, 90s, then longer** |
+| 6 | lives | as Blade Rush, and **you can gain more** |
+| 7 | chain breaks | **both** — the timer lapsing *and* taking a hit |
+| 8 | first ability | **Heat Exchange** |
+| 9 | placement | RUSH under ROGUELIKE — done |
+
+## 4. What shipped
+
+`scripts/rush_rules.gd` owns the whole ruleset; `main.gd` branches into it.
+
+- **Boost** — held, 17 u/s (walking is 6). Grants invulnerability, **kills on
+  contact**, and each contact kill raises the chain. Heats you at 0.55/s, so
+  roughly 1.8 seconds of continuous boost from cold.
+- **Shooting drops the shield.** `invulnerable()` is `boosting and not firing`.
+- **Heat** — the gun adds a little (0.02/shot), boost adds a lot. At 1.0 you
+  **overheat**: boost locks out until you cool to 0.35. The hysteresis stops
+  you fluttering on the edge of the meter.
+- **Shotgun** — 5 pellets across 0.5 rad, firing 3.4x slower than the classic
+  gun. Deliberately a close-range answer, so boosting stays better at range.
+- **Multiplier** — +1 per boost kill, cap 100, 2.5s window. Breaks on the
+  timer lapsing **and** on taking a hit.
+- **Lives** — 3, +1 every 25,000 points. A hit costs a life and takes the
+  mercy window, so one frame can never cost two.
+- **Levels** — 60s, 90s, then +30s each. Losing a life **levels you down**,
+  per the researched up/down behaviour.
+- **Heat Exchange** — charges over 12s; needs heat >= 0.25. Dumps all stored
+  heat as a burn whose radius scales with the heat spent, and clears the
+  overheat lock. Running hot becomes a choice rather than only a risk.
+- **Touch** — both schemes, live-switchable from a corner target:
+  **RIM** (push the move stick past 86% of its travel) and **ZONE** (a pad in
+  the left margin). Ability pad on the right, mirroring it.
+- **The look does not move.** No new materials. Rush state rides on the gel
+  shader's existing per-instance `rim_color`: cyan while shielded, orange
+  while hot.
+
+## 5. Still open
+
+1. **Does the RIM scheme survive contact with a thumb?** It costs you the
+   ability to walk at full speed without boosting; ZONE costs screen space.
+   The toggle exists so this can be answered by playing, not by arguing.
+2. **Heat balance is a first guess.** 1.8s of boost from cold, 2.4s to cool
+   fully. Wants a play session, then tuning.
+3. **Levels currently only change the wave director's clock**, not its
+   composition. Should a Rush level also widen the spawn pool faster than
+   classic does?
+4. **Boost has no cost besides heat.** Blade Rush's boost may also be limited
+   by a separate meter — the achievements do not say.
+5. **The other three abilities** (Hyper Bomb, Overcharge, Quantum Shielding)
+   are unbuilt, as is any way to *choose* one.
+6. **Mutators, Boss Rush, Onslaught, events, ranks** — all seen in the
+   research, none in scope yet.
+7. **Name** — still "Rush Mode", which is Blade Rush's own mode name.
 
 ## 6. Sources
 
 - Steam store page + API, appid 3238790 (description, tags, release).
-- Steam achievement list for 3238790 (40 entries) — the mechanical detail.
+- Steam achievement list for 3238790 (40 entries) — the mechanical vocabulary.
+- **Steam news/patch-notes API for 3238790 (20 posts)** — the design intent,
+  the boost/shoot rule, level up-and-down, the multiplier timer, and the
+  game's former name (Switchblade).
 - Steam appreviews API for 3238790 (the "asteroids type" note).
 
 Retrieved 2026-08-24. No Blade Rush code, art or text is used in this port;

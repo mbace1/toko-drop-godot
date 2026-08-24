@@ -40,6 +40,26 @@ const EYE_TILT := 0.42     # radians above the aim vector — into the camera
 const EYE_SPREAD := 0.34   # radians either side
 const EYE_SURFACE := 0.97  # fraction of RADIUS, so the eye breaks the surface
 
+# ---- Rush Mode ------------------------------------------------------------
+## Owner direction: the Rush weapon is "a shotgun type wider bullet". Five
+## pellets across a wide arc, and they die early so the gun is a CLOSE-range
+## answer — which is what keeps boosting the better option at any distance
+## (RUSH_MODE.md: "prioritising boosting over shooting").
+const SHOTGUN_PELLETS := 5
+const SHOTGUN_SPREAD := 0.50      # radians, total arc
+const SHOTGUN_RATE_MULT := 3.4    # far slower than the classic 0.09s
+const RUSH_RIM := Color(1.0, 0.55, 0.10)     # hot
+const BOOST_RIM := Color(0.45, 1.0, 1.0)     # invulnerable
+
+## Set by main.gd each frame in Rush Mode. `rush_speed_mult` scales movement
+## for the held boost; `rush_shotgun` swaps the weapon.
+var rush_speed_mult := 1.0
+var rush_shotgun := false
+var rush_boosting := false
+## Rush's shield. Set by main.gd from RushRules.invulnerable(), which is true
+## while boosting AND not firing — the trigger drops it (RUSH_MODE.md).
+var rush_invuln := false
+
 var hp := MAX_HP
 var max_hp := MAX_HP
 var alive := false
@@ -65,7 +85,7 @@ var _eye_r: Node3D
 var _built := false
 
 var invincible: bool:
-	get: return _dash_time > 0.0 or _mercy_t > 0.0
+	get: return _dash_time > 0.0 or _mercy_t > 0.0 or rush_invuln
 
 func _ready() -> void:
 	build()
@@ -178,6 +198,9 @@ func reset() -> void:
 	_fire_t = 0.0
 	_sq = 1.0
 	_sqv = 0.0
+	rush_speed_mult = 1.0
+	rush_boosting = false
+	rush_invuln = false
 	position = Vector3(0.0, RADIUS, 0.0)
 	mat.set_shader_parameter("rim_color", REST_RIM)
 	_show()
@@ -201,6 +224,13 @@ func hit() -> void:
 func can_dash() -> bool:
 	return alive and _dash_time <= 0.0 and _dash_cd <= 0.0
 
+## Starts the mercy window without touching HP — Rush counts lives elsewhere
+## but still wants the i-frames and the flicker, so one hit is one hit.
+func start_mercy() -> void:
+	_flash_t = 0.25
+	_mercy_t = MERCY_DURATION
+	_sqv -= 0.9
+
 func dash(aim: Dictionary) -> void:
 	if _dash_time > 0.0 or _dash_cd > 0.0:
 		return
@@ -221,7 +251,15 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 		_flash_t -= delta
 		mat.set_shader_parameter("rim_color", HIT_RIM)
 	elif _mercy_t <= 0.0:
-		mat.set_shader_parameter("rim_color", REST_RIM)
+		# The gel shader already takes a per-instance rim colour, so Rush's
+		# state rides on the body for free: cyan while boosting (invulnerable),
+		# orange while hot, otherwise the resting blue.
+		if rush_boosting:
+			mat.set_shader_parameter("rim_color", BOOST_RIM)
+		elif rush_speed_mult != 1.0 or rush_shotgun:
+			mat.set_shader_parameter("rim_color", RUSH_RIM)
+		else:
+			mat.set_shader_parameter("rim_color", REST_RIM)
 
 	if _dash_time > 0.0:
 		_dash_time -= delta
@@ -233,8 +271,10 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 			if _mercy_t <= 0.0:
 				_show()
 	else:
-		position.x += move.x * SPEED * delta
-		position.z += move.y * SPEED * delta
+		# Rush's boost is a HELD state, not a blink: it scales walking speed for
+		# as long as it is held, rather than firing a 0.18s burst.
+		position.x += move.x * SPEED * rush_speed_mult * delta
+		position.z += move.y * SPEED * rush_speed_mult * delta
 
 	if _mercy_t > 0.0:
 		_mercy_t -= delta
@@ -262,10 +302,18 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 		_last_aim = Vector2(ax, az)
 		var ox: float = position.x + ax * (RADIUS + 0.3)
 		var oz: float = position.z + az * (RADIUS + 0.3)
-		bullets.spawn_dir(ox, oz, ax, az, true)
+		if rush_shotgun:
+			var base := atan2(az, ax)
+			for i in SHOTGUN_PELLETS:
+				var f := (float(i) / float(SHOTGUN_PELLETS - 1)) - 0.5
+				var a := base + f * SHOTGUN_SPREAD
+				bullets.spawn_dir(ox, oz, cos(a), sin(a), true)
+			_fire_t = FIRE_RATE * SHOTGUN_RATE_MULT
+		else:
+			bullets.spawn_dir(ox, oz, ax, az, true)
+			_fire_t = FIRE_RATE
 		if on_shoot.is_valid():
 			on_shoot.call()
-		_fire_t = FIRE_RATE
 
 	mat.set_shader_parameter("wobble_time", Time.get_ticks_msec() / 1000.0)
 

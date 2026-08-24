@@ -110,6 +110,20 @@ target is `PORT_BRIEF.md`.
   yellow goes poison green, cool goes deep venom. A corpse never wears living
   colours, so the two attack classes read apart at a glance.
 
+**Rush Mode** (`scripts/rush_rules.gd`, designed in `RUSH_MODE.md`)
+- A second, self-contained ruleset selectable from the front page under
+  ROGUELIKE MODE. Boost is a held state that grants invulnerability, kills on
+  contact and builds a chain — but **firing cancels the shield**, and boosting
+  heats you until it locks out. The weapon is a shotgun. Lives, not HP.
+  Difficulty levels run 60s/90s/longer and move DOWN when you lose a life.
+  Heat Exchange dumps stored heat as a burn.
+- Built from research into Blade Rush (Noba, 2025) — its Steam patch notes
+  state the intent outright: *"prioritising boosting over shooting"*, and
+  *"boost invulnerability ends... from disabling it by shooting"*.
+- The roadmap's "No Geometry Wars aesthetic drift" holds: structure only, no
+  new materials. Rush state rides on the gel shader's existing per-instance
+  rim colour.
+
 **Material**
 - One shared `shaders/gel.gdshader`: vertex ripple + hit shockwave, Fresnel
   rim glow, clearcoat, CPU-driven spring squash. Per-instance uniforms via
@@ -140,7 +154,7 @@ target is `PORT_BRIEF.md`.
   §6**, "biggest single jump, near-free".
 
 **Testing**
-- `tests/smoke.gd` — 78 checks, bare `SceneTree`, no GPU. Run before every
+- `tests/smoke.gd` — 109 checks, bare `SceneTree`, no GPU. Run before every
   commit touching `scripts/`.
 - `tools/capture.gd` — screenshots the REAL game on a GPU. This is the other
   half of the gate and it is not optional: the source repo's own recorded

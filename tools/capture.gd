@@ -35,6 +35,8 @@ func _init() -> void:
 	# arg[3] == "menu" photographs the title screen instead of a run.
 	if OS.get_cmdline_user_args().size() > 3 and OS.get_cmdline_user_args()[3] == "menu":
 		return
+	if OS.get_cmdline_user_args().size() > 3 and OS.get_cmdline_user_args()[3] == "rush":
+		_main.set("mode", 2)   # Mode.RUSH
 	_main.call_deferred("_start_game")
 	# Jump the director forward so wave-2+ types appear in the shots.
 	var w := int(OS.get_cmdline_user_args()[2]) if OS.get_cmdline_user_args().size() > 2 else 0

@@ -21,6 +21,7 @@ func _init() -> void:
 	_test_weeva(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
+	_test_rush_rules(root)
 	_test_wave_budget(root)
 	_test_death_pop(root)
 	_test_revenge(root)
@@ -282,6 +283,89 @@ func _test_save_service(root: Node3D) -> void:
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(sv.path))
 	_check(true, "the gate cleans up its scratch save")
+
+func _test_rush_rules(root: Node3D) -> void:
+	var r := RushRules.new()
+	root.add_child(r)
+	r.reset()
+
+	# --- the core tension: boosting is a shield you drop by shooting --------
+	r.update(0.1, true, false)
+	_check(r.boosting, "boost engages while held")
+	_check(r.invulnerable(false), "boosting alone makes you invulnerable")
+	_check(not r.invulnerable(true), "SHOOTING drops the shield mid-boost")
+	_check(r.speed_mult() > 1.0, "boosting is faster than walking")
+
+	# --- heat: boosting heats fast, and overheating locks boost out --------
+	var h0 := r.heat
+	r.update(0.5, true, false)
+	_check(r.heat > h0, "boosting builds heat")
+	var hot := r.heat
+	r.update(0.5, false, false)
+	_check(r.heat < hot, "letting go cools you")
+
+	r.reset()
+	var overheat_seen := [false]
+	r.overheated.connect(func(): overheat_seen[0] = true)
+	for i in 200:
+		r.update(1.0 / 60.0, true, false)
+	_check(overheat_seen[0], "holding boost eventually overheats")
+	_check(r.boost_blocked, "overheating locks boost out")
+	_check(not r.boosting, "and you stop boosting immediately")
+
+	# Hysteresis: it must not flicker back on the instant you cool a hair.
+	r.update(1.0 / 60.0, true, false)
+	_check(r.boost_blocked, "boost stays locked while still hot")
+	for i in 200:
+		r.update(1.0 / 60.0, false, false)
+	_check(not r.boost_blocked, "boost returns once you have cooled well past the line")
+
+	# --- the chain ---------------------------------------------------------
+	r.reset()
+	r.add_boost_kill()
+	r.add_boost_kill()
+	_check(r.multiplier == 3, "each boost-kill raises the multiplier")
+	_check(r.award(100) == 300, "score is paid at the multiplier")
+	r.update(RushRules.MULT_WINDOW + 0.1, false, false)
+	_check(r.multiplier == 1, "the chain lapses on its timer")
+
+	r.add_boost_kill()
+	_check(r.multiplier == 2, "and can be rebuilt")
+	r.take_hit()
+	_check(r.multiplier == 1, "taking a hit also breaks the chain")
+
+	# --- lives, and levels that move BOTH ways -----------------------------
+	r.reset()
+	_check(r.lives == RushRules.LIVES_START, "a Rush run starts on lives, not HP")
+	r.level = 3
+	r.take_hit()
+	_check(r.lives == RushRules.LIVES_START - 1, "a hit costs a life")
+	_check(r.level == 2, "and knocks the difficulty level DOWN")
+
+	r.reset()
+	_check(is_equal_approx(r.level_duration(1), 60.0), "level 1 runs 60s")
+	_check(is_equal_approx(r.level_duration(2), 90.0), "level 2 runs 90s")
+	_check(r.level_duration(3) > r.level_duration(2), "and they keep lengthening")
+	for i in 61:
+		r.update(1.0, false, false)
+	_check(r.level == 2, "surviving the clock levels you up")
+
+	# --- Heat Exchange: spends the heat you built --------------------------
+	r.reset()
+	_check(not r.ability_ready(), "the ability is not ready from cold")
+	r.ability_charge = RushRules.ABILITY_CHARGE_SEC
+	r.heat = 0.8
+	_check(r.ability_ready(), "charged and hot, it is ready")
+	var rad := r.fire_ability()
+	_check(rad > RushRules.ABILITY_RADIUS_BASE, "its radius scales with the heat spent")
+	_check(is_equal_approx(r.heat, 0.0), "and it dumps the heat")
+	_check(not r.ability_ready(), "it needs recharging afterwards")
+
+	# --- extra lives -------------------------------------------------------
+	r.reset()
+	_check(not r.note_score(10), "a small score earns nothing")
+	_check(r.note_score(RushRules.EXTRA_LIFE_EVERY), "crossing the threshold grants a life")
+	_check(r.lives == RushRules.LIVES_START + 1, "and the life is real")
 
 func _test_wave_budget(root: Node3D) -> void:
 	var wd := WaveDirector.new()

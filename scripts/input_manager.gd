@@ -40,6 +40,24 @@ class Stick:
 	func vector() -> Vector2:
 		return (delta / STICK_RADIUS).limit_length(1.0)
 
+## Rush Mode needs a HELD boost, which the classic touch scheme cannot
+## express — its dash fires on RELEASE of the aim stick. Owner direction was to
+## try BOTH answers and put a toggle in a corner, so both are implemented and
+## `boost_scheme` picks between them live:
+##
+##   RIM  — push the move stick past BOOST_RIM_FRAC of its travel. No new
+##          screen furniture, and it reads as "run harder", but it costs you
+##          the ability to walk at full speed without boosting.
+##   ZONE — a dedicated pad in the bottom-left corner held with a third
+##          finger (or the left thumb sliding down onto it). Costs screen
+##          space, but move and boost stay independent.
+enum BoostScheme { RIM, ZONE }
+
+const BOOST_RIM_FRAC := 0.86
+const BOOST_ZONE_R := 78.0
+const TOGGLE_R := 30.0
+
+var boost_scheme := BoostScheme.RIM
 var camera: Camera3D
 var left := Stick.new()
 var right := Stick.new()
@@ -47,6 +65,9 @@ var using_touch := false
 
 var _dash_queued := false
 var _pause_queued := false
+var _ability_queued := false
+var _boost_zone_touch := -1
+var _rush_active := false      # main.gd raises this so the zone/toggle exist
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -61,6 +82,21 @@ func _on_touch(e: InputEventScreenTouch) -> void:
 		if e.position.y < PAUSE_ZONE_H and absf(e.position.x - _screen_mid()) < PAUSE_ZONE_W * 0.5:
 			_pause_queued = true
 			return
+		# The scheme toggle: a small corner target, live only in Rush Mode.
+		if _rush_active and e.position.distance_to(toggle_pos()) < TOGGLE_R:
+			boost_scheme = BoostScheme.ZONE if boost_scheme == BoostScheme.RIM \
+				else BoostScheme.RIM
+			return
+		# The boost pad, when that scheme is selected.
+		if _rush_active and boost_scheme == BoostScheme.ZONE \
+				and e.position.distance_to(boost_zone_pos()) < BOOST_ZONE_R:
+			_boost_zone_touch = e.index
+			return
+		# The ability pad, bottom-centre, always live in Rush.
+		if _rush_active and e.position.distance_to(ability_pos()) < BOOST_ZONE_R:
+			_ability_queued = true
+			return
+
 		var s := left if e.position.x < _screen_mid() else right
 		if s.active:
 			return                      # that half already has a finger on it
@@ -71,6 +107,9 @@ func _on_touch(e: InputEventScreenTouch) -> void:
 		s.down_at = _now()
 		s.travelled = 0.0
 	else:
+		if e.index == _boost_zone_touch:
+			_boost_zone_touch = -1
+			return
 		for s in [left, right]:
 			if s.touch_id != e.index:
 				continue
@@ -91,6 +130,59 @@ func _on_drag(e: InputEventScreenDrag) -> void:
 
 func _screen_mid() -> float:
 	return get_viewport().get_visible_rect().size.x * 0.5
+
+func _screen() -> Vector2:
+	return get_viewport().get_visible_rect().size
+
+func boost_zone_pos() -> Vector2:
+	var r := _screen()
+	return Vector2(r.x * 0.10, r.y * 0.50)
+
+func ability_pos() -> Vector2:
+	var r := _screen()
+	return Vector2(r.x * 0.90, r.y * 0.50)
+
+func toggle_pos() -> Vector2:
+	return Vector2(_screen().x - 46.0, 46.0)
+
+func set_rush(active: bool) -> void:
+	_rush_active = active
+	if not active:
+		_boost_zone_touch = -1
+
+## Held, unlike dash. Gamepad: left trigger or B. Keyboard: Shift (held).
+func boost_held() -> bool:
+	if Input.is_key_pressed(KEY_SHIFT):
+		return true
+	if Input.get_joy_axis(0, JOY_AXIS_TRIGGER_LEFT) > 0.4 \
+			or Input.is_joy_button_pressed(0, JOY_BUTTON_B):
+		return true
+	if _boost_zone_touch != -1:
+		return true
+	if boost_scheme == BoostScheme.RIM and left.active:
+		return left.delta.length() >= STICK_RADIUS * BOOST_RIM_FRAC
+	return false
+
+## The move vector, with the boost deadband removed under the RIM scheme so
+## that pushing to the rim does not also mean "steer harder".
+func get_move_dir_rush() -> Vector2:
+	var v := get_move_dir()
+	return v.limit_length(1.0)
+
+func ability_pressed() -> bool:
+	if _ability_queued:
+		_ability_queued = false
+		return true
+	return Input.is_key_pressed(KEY_Q) and not _q_was_down \
+		or Input.is_joy_button_pressed(0, JOY_BUTTON_X) and not _x_was_down
+
+var _q_was_down := false
+var _x_was_down := false
+
+## Called once a frame by main.gd so the key/pad edges above are honest.
+func poll_edges() -> void:
+	_q_was_down = Input.is_key_pressed(KEY_Q)
+	_x_was_down = Input.is_joy_button_pressed(0, JOY_BUTTON_X)
 
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
@@ -156,3 +248,5 @@ func reset() -> void:
 		s.touch_id = -1
 		s.delta = Vector2.ZERO
 	_dash_queued = false
+	_ability_queued = false
+	_boost_zone_touch = -1
