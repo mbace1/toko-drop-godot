@@ -157,6 +157,10 @@ heat **window** (shorten it, so the chain demands rate), not the tier table.
 4. **Should the live tier be visible, or only the stamps?** A visible live
    letter is better feedback and more pressure; some players find a letter
    sliding from A to B mid-run more discouraging than no letter at all.
-5. **Is "levels" meant as legs inside one run, or a separate stage-select
-   mode?** This doc assumes legs, which need no level select, no per-level
-   saves and no new flow. A true stage-based mode is a larger separate design.
+5. ~~**Is "levels" meant as legs inside one run, or a separate stage-select
+   mode?**~~ **Answered: both, and they are different features.** The legs in
+   this document stay as Rush's internal structure. A separate stage-select
+   campaign of rule-variant challenges is designed in
+   [`CAMPAIGN_LEVELS.md`](CAMPAIGN_LEVELS.md) — it reuses this document's
+   S/A/B/C vocabulary but **not** its threshold method, since a hand-authored
+   level has no statistical curve to integrate (see that doc §3).

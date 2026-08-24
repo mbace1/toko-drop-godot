@@ -172,7 +172,9 @@ flip after the fact — do not let it hold the item.
 - repo: toko-drop-godot
 - size: M
 - blocked-by: —
-- design: design/RUSH_MODE.md §7
+- design: design/RUSH_MODE.md §7, design/CAMPAIGN_LEVELS.md §4 (reserve the
+  per-level record shape now — it is a map of level id → best score/grade, not
+  the `{score, wave}` run list, and adding it later means a v3 migration)
 - gate: smoke checks for the migration (v1 file in, v2 out, nothing lost) and
   for round-tripping v2 — both against a scratch `path`, never the real save
 
@@ -186,7 +188,9 @@ the real save eats the player's hi-score; honour it.
 
 - status: Queued
 - repo: toko-drop-godot
-- size: M
+- size: M — **re-scope before building** if the campaign (Q-022) is wanted:
+  two chips becomes three modes plus a level grid with per-level grades, which
+  is a different screen with its own touch answer
 - blocked-by: Q-006 (last-played mode is persisted)
 - design: design/RUSH_MODE.md §6
 - gate: capture run on a touch-sized viewport; the start-anywhere fallback must
@@ -425,6 +429,58 @@ hugging the edge, since bodies clamp to the same boundary the player does and a
 corner restricts the arc you can be attacked from. A periodically live rail is
 the targeted answer, and it reuses the emissive rail material already built.
 Last of the three because it changes movement habits game-wide.
+
+### Q-022 — Level archetype scaffolding: a level as data
+
+- status: Queued
+- repo: toko-drop-godot
+- size: L
+- blocked-by: Q-002 (SEQUENCE needs the composition picker split out first)
+- design: design/CAMPAIGN_LEVELS.md §1, §2
+- gate: smoke checks that a level spec drives arena extents, HP, composition
+  and revenge parameters without touching the scripts that consume them; one
+  SEQUENCE level reproducible identically across attempts
+
+A level is a parameter set + a spawn script + a goal, **not new code** — the
+archetype is the code, the level is the data. Most levers already exist as
+parameters (`half_x`/`half_z` threaded through player, enemies, bullets and
+the director; `MAX_HP`; `FIRE_RATE`; the `POOL` and the caps; the `REV_*`
+constants), which is what keeps this proposal small. Start with SEQUENCE and
+CLOSE QUARTERS: the first is the backbone, the second is the best
+value-per-line in the project because the arena is already a parameter.
+
+### Q-023 — Per-level grading and unlocks
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-022, Q-017 (shares the S/A/B/C vocabulary)
+- design: design/CAMPAIGN_LEVELS.md §3
+- gate: for a SEQUENCE level, the theoretical maximum computed from the spawn
+  script matches what a scripted perfect run actually scores — if those two
+  disagree, the thresholds are fiction
+
+Keeps one grading language across the whole game rather than adding stars.
+**Do not reuse Rush's threshold formula**: it integrates a statistical curve
+over procedurally composed waves, and a hand-authored level has no such curve.
+Fixed spawn list ⇒ exact maximum ⇒ percentage thresholds; open composition ⇒
+measured from a reference run and recorded as a measurement.
+
+### Q-024 — Campaign vertical slice: six levels, one per archetype
+
+- status: Queued
+- repo: toko-drop-godot
+- size: L
+- blocked-by: Q-022, Q-023, Q-007 (re-scoped)
+- design: design/CAMPAIGN_LEVELS.md §4
+- gate: six levels playable end to end — select, grade, unlock, save — and
+  looked at on a touch viewport
+
+Deliberately a slice, not a campaign. Six levels of real play is enough to
+learn whether the archetype system and the threshold method hold up; committing
+to thirty up front means authoring content against a framework nothing has
+graded yet. This is a third mode on a port that is at 6/40 enemies with Rush
+itself unbuilt — sequence it against that honestly.
 
 ---
 
