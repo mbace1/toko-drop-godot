@@ -68,7 +68,9 @@ func die() -> void:
 ## Where the three children should land, spread around where the parent fell.
 func child_positions() -> Array[Vector3]:
 	var out: Array[Vector3] = []
-	var a0 := randf() * TAU
+	# WHERE the children land decides what happens next, so this draws from the
+	# run's gameplay stream, not the global one (CLAUDE.md determinism rule).
+	var a0 := rng.randf() * TAU
 	for i in CHILD_COUNT:
 		var a := a0 + (float(i) / float(CHILD_COUNT)) * TAU
 		out.append(Vector3(

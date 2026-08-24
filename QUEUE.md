@@ -77,7 +77,7 @@ not drift; the code lands wherever it belongs.
 
 ### Q-001 — Establish whether the browser build already has a Rush/time-attack mode
 
-- status: Blocked — needs `mbace1/Suds-Jack` attached to a session
+- status: **Landed** in `2b76cbd` — answered, no code needed
 - repo: both
 - size: S
 - blocked-by: repo access
@@ -104,6 +104,16 @@ once whether one question is answered or six.
 
 ## Queued
 
+
+
+**Answered 2026-08-24.** With `mbace1/Suds-Jack` attached: the browser build
+has **no** time-attack / Rush mode. Its mode flags in `toko-drop/js/main.js`
+are `roguelikeMode`, `smashMode`, `meleeOnlyMode`, `dailyMode`, `testMode`,
+the six cabinet flags, plus `landscape`/`perf`/`pixel` display toggles.
+So Rush is a genuine DIVERGENCE, the `PROPOSED` constants are free, and
+**Q-010 is "propose upstream", not "port down"**. One upstream detail worth
+having: `main.js` carries `const ROUND_DUR = 20; // seconds per wave`, so it
+has a per-wave clock without having a time-attack mode.
 
 ### Q-003 — Rush director: virtual wave, standing pressure, gated refill
 
@@ -229,7 +239,7 @@ replay is deliberately out of scope (§3 explains what it would cost).
 
 ### Q-014 — Split-on-death machinery, and SPLITTA
 
-- status: Queued
+- status: **Landed** in `db7158d`
 - repo: toko-drop-godot
 - size: L
 - blocked-by: —
@@ -244,6 +254,13 @@ here already pops for 0.28s, fires a revenge volley, awards score and can clear
 a wave, and splitting has to answer for all four. Two notes land back on Rush:
 recompute standing pressure rather than decrementing it, and decide
 deliberately whether children may exceed the body cap.
+
+
+**Landed.** `Splitta.wants_children` + `child_positions()` with the director
+owning `_split()`. Children join the LIVE list, so a wave is not clear until
+they are dealt with. The parent visibly CARRIES two child domes beforehand
+(`TOKO_DROP_PORT_BRIEF.md` Part 2). Scatter draws from `rng` as of `2b76cbd`.
+REDD_CUBE and PURP_CUBE reuse this path.
 
 ### Q-015 — Settle the HUD layout divergence before Rush occupies it
 
@@ -263,7 +280,7 @@ which may make this cheaper than it looks.
 
 ### Q-016 — Kill particles
 
-- status: Queued
+- status: **Landed** in `2097f5c`
 - repo: toko-drop-godot
 - size: M
 - blocked-by: Q-012 (must draw from the cosmetic stream, not the gameplay one)
@@ -276,6 +293,13 @@ not. Listed here mainly because it is the **next thing that would have
 reintroduced Q-011's bug** — a particle system reaching for `randf()` is the
 obvious way to pollute the gameplay stream, and now there is a rule that says
 not to. Worth doing as `GPUParticles3D` directly, per `PORT_BRIEF.md` §3/§5.
+
+
+**Landed.** `scripts/debris_pool.gd` — ballistic gel lumps with a floor
+bounce at `TUNING.fx` counts (8 droplets on a hit, 22 + 5 chunks on a kill),
+one MultiMesh. Lit rather than unlit: unlit spheres of a flat colour read as
+confetti rather than as bits of the same gel. Camera shake landed alongside
+it on main.js's trauma-squared model.
 
 ### Q-017 — Par curve, live tier, and the final grade
 
@@ -311,7 +335,7 @@ this item exists to avoid.
 
 ### Q-019 — Hazard scaffolding, and SLUDGE pools
 
-- status: Queued
+- status: **Partly landed** in `db7158d` — SLUDGE pools done, hazards open
 - repo: toko-drop-godot
 - size: M
 - blocked-by: —
@@ -327,6 +351,13 @@ pathing, no new geometry, and it uses the circle test `main.gd` already runs.
 Do SLUDGE first because it is **already required** — `PORT_STATUS.md`'s
 next-up SLUDGE_CUBE is "slow MASS + poison trail", and that trail is this
 system. One system, two features.
+
+
+**Partly landed.** `scripts/poison_field.gd` is the pooled floor-hazard
+scaffolding (MultiMesh discs, per-patch life, one shared damage tick so
+overlapping patches are a bad place to stand rather than instant death), and
+SLUDGE_CUBE lays one every 0.5s with an 8s life. The GENERAL hazard types in
+`design/HAZARDS.md` are still open and can build on this node.
 
 ### Q-020 — GRID SURGE
 

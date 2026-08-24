@@ -556,7 +556,8 @@ func _start_game() -> void:
 	input_mgr.reset()
 	input_mgr.set_rush(mode == Mode.RUSH)
 	waves.level_override = 0
-	sticks.show_hints = save.runs_for(_cur_mode_key()).is_empty()   # hints for a first-timer only
+	save.mode = _cur_mode_key()   # every read below follows from this
+	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
 	rush.reset()
 	player.rush_shotgun = mode == Mode.RUSH
 	player.reset()
@@ -588,12 +589,13 @@ func _on_player_dead() -> void:
 	var extra := {}
 	if mode == Mode.RUSH:
 		extra = {"kills": rush.kills, "heat_peak": rush.heat_peak}
-	else:
-		extra = {"wave": waves.wave}
-	var best := save.record(mkey, score, extra)
+	save.mode = mkey
+	# record() stores `wave` only for the wave-based mode and drops it for
+	# Rush, where a wave number would be a lie (design/RUSH_MODE.md 7).
+	var best := save.record(score, waves.wave, extra)
 	var out := ["YOU DIED", "", "score %d — wave %d" % [score, waves.wave]]
-	out.append("NEW BEST!" if best else "best %d" % save.hi_score_for(mkey))
-	var recent := save.recent_line(mkey)
+	out.append("NEW BEST!" if best else "best %d" % save.hi_score)
+	var recent := save.recent_line()
 	if recent != "":
 		out.append(recent)
 	out.append("")
@@ -636,7 +638,8 @@ func _menu_text() -> String:
 	out.append("keys \u2014 WASD move, hold LMB to aim and fire, SPACE dash")
 	out.append("pad \u2014 sticks move and aim, A dash, Start pause")
 	out.append("")
-	if save.hi_score_for(_menu_mode_key()) > 0:
+	save.mode = _menu_mode_key()
+	if save.hi_score > 0:
 		out.append("best %d" % save.hi_score)
 		out.append("")
 	out.append("tap, or press FIRE / DASH, to start")
@@ -646,11 +649,11 @@ func _menu_text() -> String:
 ## quote a best from. Helpers rather than inline ternaries so that no call
 ## site can quietly forget the mode again.
 func _cur_mode_key() -> String:
-	return SaveService.RUSH if mode == Mode.RUSH else SaveService.NORMAL
+	return SaveService.MODE_RUSH if mode == Mode.RUSH else SaveService.MODE_NORMAL
 
 func _menu_mode_key() -> String:
 	var r: Dictionary = MODE_ROWS[_menu_row]
-	return SaveService.RUSH if r["mode"] == Mode.RUSH else SaveService.NORMAL
+	return SaveService.MODE_RUSH if r["mode"] == Mode.RUSH else SaveService.MODE_NORMAL
 
 ## main.js: trauma decays at ~2.8/s and the offset is trauma squared.
 func _update_shake(delta: float) -> void:
@@ -696,5 +699,5 @@ func _update_hud() -> void:
 	else:
 		_hp_label.text = "HP " + "●".repeat(maxi(player.hp, 0)) + "○".repeat(maxi(player.max_hp - player.hp, 0))
 		_wave_label.text = "WAVE %d" % waves.wave
-	_score_label.text = ("SCORE %d" % score) if save.hi_score_for(_cur_mode_key()) <= 0 \
-		else ("SCORE %d   BEST %d" % [score, save.hi_score_for(_cur_mode_key())])
+	_score_label.text = ("SCORE %d" % score) if save.hi_score <= 0 \
+		else ("SCORE %d   BEST %d" % [score, save.hi_score])

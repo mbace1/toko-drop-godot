@@ -396,36 +396,36 @@ func _test_save_service(root: Node3D) -> void:
 	# Point at a scratch file: record() persists, so running the gate against
 	# the default path would overwrite the player's real hi-score.
 	sv.path = "user://_smoke_save.json"
-	sv.modes = {SaveService.NORMAL: {"hi_score": 0, "runs": []},
-		SaveService.RUSH: {"hi_score": 0, "runs": []}}
+	sv.modes = {SaveService.MODE_NORMAL: {"hi_score": 0, "runs": []},
+		SaveService.MODE_RUSH: {"hi_score": 0, "runs": []}}
 
-	_check(sv.record(SaveService.NORMAL, 500, {"wave": 3}), "a first run is a new best")
-	_check(sv.hi_score_for(SaveService.NORMAL) == 500, "the best is stored")
-	_check(not sv.record(SaveService.NORMAL, 200, {"wave": 2}), "a worse run is not a new best")
-	_check(sv.hi_score_for(SaveService.NORMAL) == 500, "and does not lower the best")
-	_check(sv.record(SaveService.NORMAL, 900, {"wave": 5}), "a better run beats it")
-	_check(sv.runs_for(SaveService.NORMAL).size() == 3, "every run is kept in history")
-	_check(int(sv.runs_for(SaveService.NORMAL)[0]["score"]) == 900, "history is newest-first")
+	_check(_rec(sv, SaveService.MODE_NORMAL, 500, {"wave": 3}), "a first run is a new best")
+	_check(_hs(sv, SaveService.MODE_NORMAL) == 500, "the best is stored")
+	_check(not _rec(sv, SaveService.MODE_NORMAL, 200, {"wave": 2}), "a worse run is not a new best")
+	_check(_hs(sv, SaveService.MODE_NORMAL) == 500, "and does not lower the best")
+	_check(_rec(sv, SaveService.MODE_NORMAL, 900, {"wave": 5}), "a better run beats it")
+	_check(_rn(sv, SaveService.MODE_NORMAL).size() == 3, "every run is kept in history")
+	_check(int(_rn(sv, SaveService.MODE_NORMAL)[0]["score"]) == 900, "history is newest-first")
 
 	# THE BUG THIS SCHEMA EXISTS FOR: a Rush run must not touch the Normal best.
-	_check(sv.record(SaveService.RUSH, 120, {"kills": 9, "heat_peak": 0.8}),
+	_check(_rec(sv, SaveService.MODE_RUSH, 120, {"kills": 9, "heat_peak": 0.8}),
 		"a Rush run records under its own mode")
-	_check(sv.hi_score_for(SaveService.NORMAL) == 900,
+	_check(_hs(sv, SaveService.MODE_NORMAL) == 900,
 		"and a WORSE Rush score does not overwrite the Normal best")
-	_check(sv.hi_score_for(SaveService.RUSH) == 120, "Rush keeps its own best")
-	_check(sv.runs_for(SaveService.RUSH).size() == 1, "and its own history")
-	_check(sv.runs_for(SaveService.NORMAL).size() == 3, "Normal history is untouched")
-	_check(int(sv.runs_for(SaveService.RUSH)[0]["kills"]) == 9,
+	_check(_hs(sv, SaveService.MODE_RUSH) == 120, "Rush keeps its own best")
+	_check(_rn(sv, SaveService.MODE_RUSH).size() == 1, "and its own history")
+	_check(_rn(sv, SaveService.MODE_NORMAL).size() == 3, "Normal history is untouched")
+	_check(int(_rn(sv, SaveService.MODE_RUSH)[0]["kills"]) == 9,
 		"a Rush run records kills, not a wave number that would be a lie")
 
 	for i in 20:
-		sv.record(SaveService.NORMAL, i, {"wave": 1})
-	_check(sv.runs_for(SaveService.NORMAL).size() == SaveService.HISTORY_MAX,
+		_rec(sv, SaveService.MODE_NORMAL, i, {"wave": 1})
+	_check(_rn(sv, SaveService.MODE_NORMAL).size() == SaveService.HISTORY_MAX,
 		"history is capped at %d" % SaveService.HISTORY_MAX)
-	_check(sv.hi_score_for(SaveService.NORMAL) == 900, "the cap never discards the best")
+	_check(_hs(sv, SaveService.MODE_NORMAL) == 900, "the cap never discards the best")
 
-	_check(not sv.recent_line(SaveService.NORMAL).begins_with(
-		"recent: %d" % int(sv.runs_for(SaveService.NORMAL)[0]["score"])),
+	_check(not _rl(sv, SaveService.MODE_NORMAL).begins_with(
+		"recent: %d" % int(_rn(sv, SaveService.MODE_NORMAL)[0]["score"])),
 		"the recent line does not repeat the run just finished")
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(sv.path))
@@ -445,17 +445,17 @@ func _test_save_service(root: Node3D) -> void:
 	root.add_child(sv2)
 	sv2.path = legacy
 	sv2.load_state()
-	_check(sv2.hi_score_for(SaveService.NORMAL) == 4242,
+	_check(_hs(sv2, SaveService.MODE_NORMAL) == 4242,
 		"a v1 save migrates its best into modes.normal")
-	_check(sv2.runs_for(SaveService.NORMAL).size() == 1, "and carries its history over")
-	_check(sv2.hi_score_for(SaveService.RUSH) == 0, "with Rush starting empty")
+	_check(_rn(sv2, SaveService.MODE_NORMAL).size() == 1, "and carries its history over")
+	_check(_hs(sv2, SaveService.MODE_RUSH) == 0, "with Rush starting empty")
 
 	# The migration is written back once, so the next load is a plain v2 read.
 	var sv3 := SaveService.new()
 	root.add_child(sv3)
 	sv3.path = legacy
 	sv3.load_state()
-	_check(sv3.hi_score_for(SaveService.NORMAL) == 4242, "and the migration persisted")
+	_check(_hs(sv3, SaveService.MODE_NORMAL) == 4242, "and the migration persisted")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy))
 	_check(true, "the gate cleans up its scratch saves")
 
@@ -979,3 +979,26 @@ func _test_level_records(root: Node3D) -> void:
 		"level records survive a reload alongside run history")
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+
+
+## Small adapters. SaveService reads and writes through a settable `mode`, so
+## a test that wants to poke two buckets in one breath has to switch between
+## them; wrapping that keeps the assertions readable.
+func _rec(sv: SaveService, m: String, score: int, extra: Dictionary) -> bool:
+	sv.mode = m
+	# record() takes `wave` positionally and ignores it outside Normal.
+	var w := int(extra.get("wave", 0))
+	extra.erase("wave")
+	return sv.record(score, w, extra)
+
+func _hs(sv: SaveService, m: String) -> int:
+	sv.mode = m
+	return sv.hi_score
+
+func _rn(sv: SaveService, m: String) -> Array:
+	sv.mode = m
+	return sv.runs
+
+func _rl(sv: SaveService, m: String) -> String:
+	sv.mode = m
+	return sv.recent_line()

@@ -249,6 +249,7 @@ func _split(parent: Splitta) -> void:
 		c.target = target
 		c.bullets = bullets
 		c.trails = trails
+		c.rng = rng          # children inherit the run's gameplay stream
 		c.init()
 		enemies.append(c)
 
