@@ -108,6 +108,10 @@ var run_t := 0.0
 
 var ability_charge := 0.0
 var buff_t := 0.0
+## Summary stats. A Rush run records these instead of a wave number,
+## which would be meaningless here (design/RUSH_MODE.md §7).
+var kills := 0
+var heat_peak := 0.0
 var _next_extra_life := EXTRA_LIFE_EVERY
 
 func def() -> Dictionary:
@@ -145,6 +149,8 @@ func reset() -> void:
 	run_t = 0.0
 	ability_charge = 0.0
 	buff_t = 0.0
+	kills = 0
+	heat_peak = 0.0
 	_next_extra_life = EXTRA_LIFE_EVERY
 
 func cycle_ability(step: int) -> void:
@@ -175,6 +181,7 @@ func update(delta: float, want_boost: bool, firing: bool) -> void:
 		heat += HEAT_PER_SHOT
 
 	heat = clampf(heat, 0.0, HEAT_MAX)
+	heat_peak = maxf(heat_peak, heat)
 
 	if not boost_blocked and heat >= HEAT_MAX:
 		boost_blocked = true
@@ -210,6 +217,7 @@ func speed_mult() -> float:
 
 ## A kill made by boosting through a body. Ordinary gunfire does not chain.
 func add_boost_kill() -> void:
+	kills += 1
 	var step := 2 if overcharged() else 1
 	multiplier = mini(MULT_MAX, multiplier + step)
 	mult_t = MULT_WINDOW

@@ -259,30 +259,68 @@ func _test_save_service(root: Node3D) -> void:
 	# Point at a scratch file: record() persists, so running the gate against
 	# the default path would overwrite the player's real hi-score.
 	sv.path = "user://_smoke_save.json"
-	sv.hi_score = 0
-	sv.runs = []
+	sv.modes = {SaveService.NORMAL: {"hi_score": 0, "runs": []},
+		SaveService.RUSH: {"hi_score": 0, "runs": []}}
 
-	_check(sv.record(500, 3), "a first run is a new best")
-	_check(sv.hi_score == 500, "the best is stored")
-	_check(not sv.record(200, 2), "a worse run is not a new best")
-	_check(sv.hi_score == 500, "and does not lower the best")
-	_check(sv.record(900, 5), "a better run beats it")
-	_check(sv.hi_score == 900, "and raises the best")
-	_check(sv.runs.size() == 3, "every run is kept in history")
-	_check(int(sv.runs[0]["score"]) == 900, "history is newest-first")
+	_check(sv.record(SaveService.NORMAL, 500, {"wave": 3}), "a first run is a new best")
+	_check(sv.hi_score_for(SaveService.NORMAL) == 500, "the best is stored")
+	_check(not sv.record(SaveService.NORMAL, 200, {"wave": 2}), "a worse run is not a new best")
+	_check(sv.hi_score_for(SaveService.NORMAL) == 500, "and does not lower the best")
+	_check(sv.record(SaveService.NORMAL, 900, {"wave": 5}), "a better run beats it")
+	_check(sv.runs_for(SaveService.NORMAL).size() == 3, "every run is kept in history")
+	_check(int(sv.runs_for(SaveService.NORMAL)[0]["score"]) == 900, "history is newest-first")
+
+	# THE BUG THIS SCHEMA EXISTS FOR: a Rush run must not touch the Normal best.
+	_check(sv.record(SaveService.RUSH, 120, {"kills": 9, "heat_peak": 0.8}),
+		"a Rush run records under its own mode")
+	_check(sv.hi_score_for(SaveService.NORMAL) == 900,
+		"and a WORSE Rush score does not overwrite the Normal best")
+	_check(sv.hi_score_for(SaveService.RUSH) == 120, "Rush keeps its own best")
+	_check(sv.runs_for(SaveService.RUSH).size() == 1, "and its own history")
+	_check(sv.runs_for(SaveService.NORMAL).size() == 3, "Normal history is untouched")
+	_check(int(sv.runs_for(SaveService.RUSH)[0]["kills"]) == 9,
+		"a Rush run records kills, not a wave number that would be a lie")
 
 	for i in 20:
-		sv.record(i, 1)
-	_check(sv.runs.size() == SaveService.HISTORY_MAX,
+		sv.record(SaveService.NORMAL, i, {"wave": 1})
+	_check(sv.runs_for(SaveService.NORMAL).size() == SaveService.HISTORY_MAX,
 		"history is capped at %d" % SaveService.HISTORY_MAX)
-	_check(sv.hi_score == 900, "the cap never discards the best")
+	_check(sv.hi_score_for(SaveService.NORMAL) == 900, "the cap never discards the best")
 
-	# The recent line skips index 0 \u2014 the run you are already looking at.
-	_check(not sv.recent_line().begins_with("recent: %d" % int(sv.runs[0]["score"])),
+	_check(not sv.recent_line(SaveService.NORMAL).begins_with(
+		"recent: %d" % int(sv.runs_for(SaveService.NORMAL)[0]["score"])),
 		"the recent line does not repeat the run just finished")
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(sv.path))
-	_check(true, "the gate cleans up its scratch save")
+
+	# --- the v1 migration --------------------------------------------------
+	# A v1 file has no "v" key. It is not corrupt and must not be discarded:
+	# everything it holds was a Normal run and has to land under modes.normal.
+	var legacy := "user://_smoke_v1.json"
+	var f := FileAccess.open(legacy, FileAccess.WRITE)
+	f.store_string(JSON.stringify({
+		"hi_score": 4242,
+		"runs": [{"score": 4242, "wave": 11, "at": "2026-01-01T00:00:00"}],
+	}))
+	f.close()
+
+	var sv2 := SaveService.new()
+	root.add_child(sv2)
+	sv2.path = legacy
+	sv2.load_state()
+	_check(sv2.hi_score_for(SaveService.NORMAL) == 4242,
+		"a v1 save migrates its best into modes.normal")
+	_check(sv2.runs_for(SaveService.NORMAL).size() == 1, "and carries its history over")
+	_check(sv2.hi_score_for(SaveService.RUSH) == 0, "with Rush starting empty")
+
+	# The migration is written back once, so the next load is a plain v2 read.
+	var sv3 := SaveService.new()
+	root.add_child(sv3)
+	sv3.path = legacy
+	sv3.load_state()
+	_check(sv3.hi_score_for(SaveService.NORMAL) == 4242, "and the migration persisted")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy))
+	_check(true, "the gate cleans up its scratch saves")
 
 func _test_rush_rules(root: Node3D) -> void:
 	var r := RushRules.new()
