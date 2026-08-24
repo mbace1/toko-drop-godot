@@ -44,6 +44,17 @@ var bullets: BulletPool     # set by WaveDirector; null for melee-only types
 var half_x := 9.0
 var half_z := 9.0
 
+## GAMEPLAY randomness only. WaveDirector hands every body the run's shared
+## generator in _spawn(), which is what lets one seed reproduce one swarm; a
+## body built outside the director (tests, tools) keeps this private one and
+## behaves exactly as it always did.
+##
+## COSMETIC draws must NOT come from here. A shimmer or a particle that
+## consumes from the gameplay stream makes the swarm depend on how much the
+## player shot — see bullet_pool.gd's `phase` and
+## design/DETERMINISM_AND_SEEDS.md §2.
+var rng := RandomNumberGenerator.new()
+
 ## Ranged types set these in init(); melee types leave fire_interval at 0.
 var bullet_color := Color(1.0, 0.33, 0.2)
 var fire_interval := 0.0

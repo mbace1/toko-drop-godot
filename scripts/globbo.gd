@@ -41,8 +41,8 @@ func init() -> void:
 	setup(Color(0.0, 0.8, 0.667), 0.55, 2.8, 1, false)
 	trail_interval = 0.08   # enemy.js TRAIL_CFG
 	trail_size = 0.45
-	_phase = randf() * TAU
-	_pounce_t = 1.6 + randf() * 1.4
+	_phase = rng.randf() * TAU
+	_pounce_t = 1.6 + rng.randf() * 1.4
 
 func update(delta: float) -> void:
 	_update_common(delta)
@@ -81,6 +81,6 @@ func update(delta: float) -> void:
 			position.z += _leap_dir.y * speed * LEAP_SPEED_MULT * delta
 			if _pounce_t <= 0.0:
 				_state = Pounce.STALK
-				_pounce_t = 1.6 + randf() * 1.4
+				_pounce_t = 1.6 + rng.randf() * 1.4
 
 	_clamp_to_arena()

@@ -36,7 +36,7 @@ func init() -> void:
 	mesh.position.y = radius * base_shape.y
 	trail_interval = 0.06   # enemy.js TRAIL_CFG
 	trail_size = 0.55
-	_spiral_angle = randf() * TAU
+	_spiral_angle = rng.randf() * TAU
 
 func update(delta: float) -> void:
 	_update_common(delta)

@@ -62,6 +62,17 @@ Read in this order before changing anything:
   If a lambda needs to report something back to its enclosing scope (see
   `tests/smoke.gd`'s `wave_cleared` check), capture a 1-element `Array` or a
   `Dictionary`, not a bare `int`/`bool`/`float`.
+- **Gameplay randomness comes from `WaveDirector.rng`; cosmetic randomness must
+  not.** Any draw that decides *what happens* — which type spawns, where it
+  lands, which way a body flops, a revenge ring's start angle — uses the
+  director's `RandomNumberGenerator` (bodies receive it in `_spawn()` before
+  `init()`). Any draw that only affects *how something looks or sounds* uses
+  the global `randf()`/`randi()` or a private generator, the way
+  `audio_kit.gd` already does. This is not tidiness: a cosmetic draw sharing
+  the gameplay stream makes wave composition depend on how much the player
+  shot, so under a seed two players diverge from the trigger. `bullet_pool.gd`'s
+  shimmer `phase` is the call site that got this wrong once and now carries a
+  comment saying not to "fix" it. See `design/DETERMINISM_AND_SEEDS.md`.
 - **Dictionaries use bracket access (`d["key"]`), never dot access
   (`d.key`)** — GDScript `Dictionary` has no dot-access sugar. `aim` results
   from `input_manager.gd` are plain Dictionaries for exactly this reason;

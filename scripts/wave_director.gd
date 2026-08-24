@@ -68,6 +68,15 @@ const REV_RING_BIG_RADIUS := 0.75
 ## cannot exhaust the pool and leave the living unable to shoot.
 const REV_POOL_GUARD := 240
 
+## The run's GAMEPLAY random stream. Every draw that decides what happens —
+## which type spawns, where it lands, which way a body flops — comes from here
+## and from the copy handed to each body in _spawn(). Cosmetic draws stay on
+## the global rng (see bullet_pool.gd's `phase`), so a seeded run cannot be
+## shifted by how much the player shot. design/DETERMINISM_AND_SEEDS.md §4.
+##
+## Left unseeded by default, so an ordinary run is as random as it ever was.
+var rng := RandomNumberGenerator.new()
+
 var wave := 0
 ## Rush Mode drives difficulty from its own LEVEL rather than from how many
 ## waves have been cleared, so that levelling down actually makes the next
@@ -108,15 +117,27 @@ func difficulty() -> int:
 
 func start_wave() -> void:
 	wave += 1
+	# difficulty(), not `wave`: Rush drives escalation from its own LEVEL, which
+	# moves DOWN when you lose a life, and composition has to follow it.
 	var d := difficulty()
-	var budget := budget_for(d)
-	var shooters_left := shooter_cap_for(d)
-	var bodies_left := body_cap_for(d)
+	_spawn(compose(d, budget_for(d), shooter_cap_for(d), body_cap_for(d)))
+	wave_started.emit(wave)
 
+## Spends a budget on types eligible at wave `w`, never exceeding `shooter_cap`
+## ranged bodies or `body_cap` bodies in total. Bails out when nothing
+## affordable is left rather than looping forever on an unspendable remainder.
+##
+## Split out of start_wave() so a second CADENCE can reuse it without forking
+## it: design/RUSH_MODE.md §3.2 holds a STANDING pressure — spending a little
+## every tick — rather than spending a whole wave at once. Two copies of a
+## ported table would drift apart, which is exactly the failure CLAUDE.md's
+## porting discipline exists to prevent.
+func compose(w: int, budget: float, shooter_cap: int, body_cap: int) -> Array[String]:
 	var picks: Array[String] = []
-	var eligible := _eligible_for(d)
-	# Spend the budget. Bail out when nothing affordable is left rather than
-	# looping forever on an unspendable remainder.
+	var shooters_left := shooter_cap
+	var bodies_left := body_cap
+	var eligible := _eligible_for(w)
+
 	while budget > 0.0 and bodies_left > 0:
 		var affordable: Array[String] = []
 		for name in eligible:
@@ -126,15 +147,14 @@ func start_wave() -> void:
 				affordable.append(name)
 		if affordable.is_empty():
 			break
-		var pick: String = affordable[randi() % affordable.size()]
+		var pick: String = affordable[rng.randi() % affordable.size()]
 		picks.append(pick)
 		budget -= float(POOL[pick][1])
 		bodies_left -= 1
 		if POOL[pick][2]:
 			shooters_left -= 1
 
-	_spawn(picks)
-	wave_started.emit(wave)
+	return picks
 
 func _eligible_for(w: int) -> Array[String]:
 	var out: Array[String] = []
@@ -153,7 +173,7 @@ func _spawn(picks: Array[String]) -> void:
 	var rz := 0.6 * half_z
 	var n := picks.size()
 	for i in n:
-		var a := (float(i) / float(maxi(n, 1))) * TAU + randf() * 0.4 - 0.2
+		var a := (float(i) / float(maxi(n, 1))) * TAU + rng.randf() * 0.4 - 0.2
 		var e := _make(picks[i])
 		enemies_root.add_child(e)
 		e.position = Vector3(cos(a) * rx, 0.0, sin(a) * rz)
@@ -164,6 +184,9 @@ func _spawn(picks: Array[String]) -> void:
 		e.trails = trails
 		if e is SludgeCube:
 			(e as SludgeCube).poison = poison
+		# Hand over the run's gameplay stream BEFORE init() — subclasses draw
+		# from it there (globbo's pounce phase, fanner's strafe, weeva's spiral).
+		e.rng = rng
 		e.init()
 		enemies.append(e)
 
@@ -250,13 +273,13 @@ func _fire_revenge(e: Enemy) -> void:
 			var spread := REV_AIMED_SPREAD if aimed else REV_FAN_SPREAD
 			var bx := target.position.x - ex
 			var bz := target.position.z - ez
-			var base := atan2(bz, bx) if Vector2(bx, bz).length() > 1e-3 else randf() * TAU
+			var base := atan2(bz, bx) if Vector2(bx, bz).length() > 1e-3 else rng.randf() * TAU
 			for j in count:
 				var a := base + (float(j) - float(count - 1) * 0.5) * spread
 				bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
 		_:
 			var n := REV_RING_BIG if e.radius > REV_RING_BIG_RADIUS else REV_RING_SMALL
-			var a0 := randf() * TAU
+			var a0 := rng.randf() * TAU
 			for j in n:
 				var a := a0 + (float(j) / float(n)) * TAU
 				bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
