@@ -84,6 +84,16 @@ has a natural Rush analogue (it is the same shape as a drain bar).
 lifetime, spread, gravity, and the splat decal's size/fade. Cheap while the
 file is open; saves a second trip when that item comes up.
 
+## Q4b — Does the browser build have hazards?
+
+`HAZARDS.md` proposes area-denial floor hazards as net-new, because this port's
+arena is an empty box. If the source already has environmental hazards, they
+should be **ported** rather than invented — same discipline as everything else.
+
+Search for floor/arena threats that are not bodies and not bullets: damage
+zones, timed traps, anything reading the player's position against the arena
+rather than against an enemy. Record the answer in `HAZARDS.md` §7 Q1.
+
 ## Q5 — The roster names
 
 `tuning.js` names all ~40 enemy types and this port has 6. Copy the full list

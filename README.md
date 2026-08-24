@@ -111,6 +111,8 @@ design/               high-level design docs, ahead of implementation
   PARITY_RECON.md            one trip into the source repo, as a checklist
   DETERMINISM_AND_SEEDS.md   seeded runs — decide before Rush ships
   SPLIT_ENEMIES.md           child-spawn-on-death (SPLITTA, REDD/PURP_CUBE)
+  HAZARDS.md                 floor hazards, and why enemies should be ported
+                              from the roster rather than invented
 ```
 
 ## Planning

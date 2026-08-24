@@ -373,6 +373,59 @@ STANDING). All three earns a ★ beside the grade — not a tier bump, because
 score buys letters and goals buy the star, and collapsing the two axes is what
 this item exists to avoid.
 
+### Q-019 — Hazard scaffolding, and SLUDGE pools
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: design/HAZARDS.md §3, §4a
+- gate: smoke checks that a hazard updates only when called (so pause freezes
+  it), that it never enters `enemies` and so cannot hold up a wave clear, and
+  that the slow applies and lifts on the arena's flat circle test
+
+The arena is an empty box — no cover, no geometry, no environmental threat, so
+every square of floor is identical and position means nothing beyond distance
+from bodies. Area-denial on the floor is the cheapest fix that fits: no
+pathing, no new geometry, and it uses the circle test `main.gd` already runs.
+Do SLUDGE first because it is **already required** — `PORT_STATUS.md`'s
+next-up SLUDGE_CUBE is "slow MASS + poison trail", and that trail is this
+system. One system, two features.
+
+### Q-020 — GRID SURGE
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-019
+- design: design/HAZARDS.md §4b
+- gate: capture run — the line must read as armed before it fires, at arena
+  scale, without competing with the bodies
+
+A row or column of the existing floor grid lights, holds a beat, then
+discharges. The best fit for what the game already is: the floor shader draws
+and pulses that grid already, so a surge is a uniform rather than an object. It
+telegraphs by construction, demands movement rather than precision (which is
+what keeps it fair on a thumb stick), and gives the arena the thing it lacks —
+a reason for one part of the floor to be worse than another, changing every
+few seconds.
+
+### Q-021 — LIVE RAIL
+
+- status: Queued
+- repo: toko-drop-godot
+- size: S
+- blocked-by: Q-019, Q-020
+- design: design/HAZARDS.md §4c
+- gate: capture run; plus a deliberate check that the arena still plays as "a
+  wide room you cross" rather than a shrinking one
+
+Exists for a specific reason, not for variety: both modes currently reward
+hugging the edge, since bodies clamp to the same boundary the player does and a
+corner restricts the arc you can be attacked from. A periodically live rail is
+the targeted answer, and it reuses the emissive rail material already built.
+Last of the three because it changes movement habits game-wide.
+
 ---
 
 ## Landed
