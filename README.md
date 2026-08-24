@@ -68,8 +68,9 @@ A bare-`SceneTree` gate (no GPU, no wall-clock dependence) exercising player
 movement/firing/damage/i-frames, all four enemy types (including SPITTOR's
 wind-up tell and FANNER's every-third-wide volley beat), the wave budget
 curve, the death pop and every revenge dialect, the spawn/clear cycle, the
-synthesised audio kit and the save service — 78 checks. Run it before every commit that
-touches `scripts/`.
+synthesised audio kit, the save service and its v1→v2 migration, the wave
+composer and the seeded gameplay random stream — 106 checks. Run it before
+every commit that touches `scripts/`.
 
 ## Layout
 

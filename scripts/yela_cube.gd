@@ -39,10 +39,10 @@ func update(delta: float) -> void:
 ## diagonal ("YELA 50% diagonals", TOKO_DROP_PORT_BRIEF Part 3); subclasses
 ## override to flop with intent — see orange_cube.gd.
 func _choose_angle() -> float:
-	var diag := randf() < 0.5
+	var diag := rng.randf() < 0.5
 	var angles := [PI / 4.0, 3.0 * PI / 4.0, -PI / 4.0, -3.0 * PI / 4.0] if diag \
 		else [0.0, PI / 2.0, PI, -PI / 2.0]
-	return angles[randi() % angles.size()]
+	return angles[rng.randi() % angles.size()]
 
 func _pick_dir() -> void:
 	var a := _choose_angle()

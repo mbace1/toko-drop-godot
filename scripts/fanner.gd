@@ -36,8 +36,8 @@ func init() -> void:
 	bullet_color = Color(1.0, 0.4, 0.8)
 	fire_interval = 1.5
 	revenge_dialect = Revenge.FAN     # TUNING.revenge.byType: FANNER -> FAN
-	_strafe_dir = 1.0 if randf() < 0.5 else -1.0
-	_strafe_timer = 2.5 + randf()
+	_strafe_dir = 1.0 if rng.randf() < 0.5 else -1.0
+	_strafe_timer = 2.5 + rng.randf()
 	# Wide flat pancake — TUNING.blob.shapes.FANNER {x:1.30, y:0.66, z:1.08}.
 	# base_shape composes with the spring squash in _update_common(), so it
 	# survives every frame instead of being stomped and re-applied.
@@ -52,7 +52,7 @@ func update(delta: float) -> void:
 	_strafe_timer -= delta
 	if _strafe_timer <= 0.0:
 		_strafe_dir = -_strafe_dir
-		_strafe_timer = 2.5 + randf()
+		_strafe_timer = 2.5 + rng.randf()
 
 	_hold_at_range(delta, HOLD_RANGE, HOLD_BAND, _strafe_dir)
 

@@ -51,6 +51,29 @@ target is `PORT_BRIEF.md`.
   because that is the run you are already reading the big number for. Nothing
   leaves the machine — no leaderboard, no network call. The daily seed is still
   open.
+- **Save schema v2 — per-mode buckets.** v1 was flat and MODE-BLIND
+  (`{hi_score, runs}`), so the first Rush run would have overwritten the Normal
+  best with a number from a different game. It also had no version field, so
+  the migration keys off the shape: a parsed dictionary with no `"v"` is v1 and
+  is carried across into `modes.normal` rather than discarded (a v1 file is
+  *old*, not corrupt). `levels` is reserved in the same pass — the campaign's
+  per-level records are a high-water mark, a different shape from a run list,
+  and adding them later would have cost a v3 migration for nothing.
+  `design/RUSH_MODE.md` §7, `design/CAMPAIGN_LEVELS.md` §4.
+- **One gameplay random stream** (`wave_director.gd`'s `rng`, handed to every
+  body in `_spawn()`). Every draw that decides *what happens* — which type
+  spawns, where it lands, which way a body flops, a revenge ring's start angle
+  — comes from it; **cosmetic** draws deliberately stay on the global rng.
+  That split is the whole point: a bullet's shimmer phase used to share the
+  stream with the spawn picker, so under a seed, firing one extra shot would
+  have shifted every later wave and two players on one daily seed would have
+  diverged from the trigger. Nothing was broken only because nothing was seeded
+  yet. The director is left unseeded by default, so an ordinary run is as
+  random as it ever was. `design/DETERMINISM_AND_SEEDS.md`.
+- **`WaveDirector.compose()`** — the affordability loop split out of
+  `start_wave()` so a second *cadence* can spend the same ported table without
+  forking it (Rush holds a standing pressure rather than spending a whole wave
+  at once). Pure refactor; the existing wave checks pass unmodified.
 
 **Enemies** (6 of ~40 in the live roster — `js/tuning.js` names all 40)
 - GLOBBO — chaser blob. Two behaviours stack: the lunging speed-pulse
@@ -140,8 +163,10 @@ target is `PORT_BRIEF.md`.
   §6**, "biggest single jump, near-free".
 
 **Testing**
-- `tests/smoke.gd` — 78 checks, bare `SceneTree`, no GPU. Run before every
-  commit touching `scripts/`.
+- `tests/smoke.gd` — 106 checks, bare `SceneTree`, no GPU. Run before every
+  commit touching `scripts/`. The determinism checks are mutation-tested:
+  reverting `compose()` to the global rng fails exactly two of them, including
+  "shooting does not move the swarm". A gate that cannot fail is not a gate.
 - `tools/capture.gd` — screenshots the REAL game on a GPU. This is the other
   half of the gate and it is not optional: the source repo's own recorded
   diagnosis is that its games stall at prototype feel because "the smoke

@@ -25,6 +25,10 @@ func _init() -> void:
 	_test_death_pop(root)
 	_test_revenge(root)
 	_test_wave_clears_and_advances(root)
+	_test_compose(root)
+	_test_seeded_stream(root)
+	_test_save_v2_migration(root)
+	_test_level_records(root)
 
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
@@ -428,3 +432,173 @@ func _test_wave_clears_and_advances(root: Node3D) -> void:
 	wd.start_wave()
 	_check(wd.wave == 2, "the next wave starts")
 	_check(wd.enemies.size() > 0, "wave 2 spawns bodies (%d)" % wd.enemies.size())
+
+## compose() is start_wave()'s affordability loop, split out so Rush can spend
+## the same ported table on a per-tick cadence instead of a whole wave at once
+## (design/RUSH_MODE.md §3.2). Checked directly, because a second caller now
+## depends on properties start_wave() only ever exercised incidentally.
+func _test_compose(root: Node3D) -> void:
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+
+	var picks := wd.compose(5, 12.0, 5, 20)
+	var cost := 0.0
+	var shooters := 0
+	for name in picks:
+		cost += float(WaveDirector.POOL[name][1])
+		if WaveDirector.POOL[name][2]:
+			shooters += 1
+	_check(cost <= 12.0, "compose() never overspends its budget (%.1f of 12)" % cost)
+	_check(picks.size() <= 20, "compose() respects the body cap")
+
+	var capped := wd.compose(9, 40.0, 2, 20)
+	var capped_shooters := 0
+	for name in capped:
+		if WaveDirector.POOL[name][2]:
+			capped_shooters += 1
+	_check(capped_shooters <= 2, "compose() respects the shooter cap (%d of 2)" % capped_shooters)
+
+	_check(wd.compose(9, 40.0, 0, 3).size() <= 3, "compose() respects a tight body cap")
+
+	# The bail-out that stops an unspendable remainder looping forever. Every
+	# type costs at least 1, so a budget of 0.5 can afford nothing.
+	_check(wd.compose(9, 0.5, 5, 20).is_empty(),
+		"compose() returns empty rather than looping on an unspendable remainder")
+
+	# Nothing is eligible before its minWave.
+	var early := wd.compose(1, 30.0, 9, 30)
+	var all_wave_1 := true
+	for name in early:
+		if WaveDirector.POOL[name][0] > 1:
+			all_wave_1 = false
+	_check(all_wave_1, "compose() never picks a type before its minWave")
+
+## The gameplay random stream. One seed must reproduce one swarm, and COSMETIC
+## draws must not be able to shift it — design/DETERMINISM_AND_SEEDS.md §2,
+## where a bullet's shimmer phase shared the global stream with the spawn
+## picker, so firing one extra shot would have moved every later wave.
+func _test_seeded_stream(root: Node3D) -> void:
+	var a := WaveDirector.new()
+	root.add_child(a)
+	var b := WaveDirector.new()
+	root.add_child(b)
+
+	a.rng.seed = 12345
+	b.rng.seed = 12345
+	var first := a.compose(7, 18.0, 5, 20)
+	var second := b.compose(7, 18.0, 5, 20)
+	_check(first == second, "the same seed composes the same wave")
+
+	# The regression that matters: burn the GLOBAL rng the way firing a lot of
+	# bullets does, and the seeded composition must not move an inch.
+	var bullets := _make_pool(root)
+	for i in 50:
+		bullets.spawn_dir(0.0, 0.0, 1.0, 0.0, true)
+	var c := WaveDirector.new()
+	root.add_child(c)
+	c.rng.seed = 12345
+	_check(c.compose(7, 18.0, 5, 20) == first,
+		"cosmetic draws cannot shift a seeded wave (shooting does not move the swarm)")
+
+	# Two different seeds should not agree — otherwise the seed is not being used.
+	var d := WaveDirector.new()
+	root.add_child(d)
+	d.rng.seed = 999
+	var many_differ := false
+	for w in range(3, 12):
+		var e := WaveDirector.new()
+		root.add_child(e)
+		e.rng.seed = 12345
+		if d.compose(w, 24.0, 5, 20) != e.compose(w, 24.0, 5, 20):
+			many_differ = true
+	_check(many_differ, "different seeds compose different waves")
+
+## Save schema v2. v1 was flat and mode-blind, so a Rush run would have
+## overwritten the Normal best; and v1 has no version field, so the migration
+## has to key off the shape (design/RUSH_MODE.md §7).
+func _test_save_v2_migration(root: Node3D) -> void:
+	var p := "user://_smoke_v1.json"
+	var abs_p := ProjectSettings.globalize_path(p)
+
+	# Hand-write a v1 payload: flat, no "v".
+	var f := FileAccess.open(p, FileAccess.WRITE)
+	f.store_string(JSON.stringify({
+		"hi_score": 4200,
+		"runs": [{"score": 4200, "wave": 11, "at": "2026-01-01T00:00:00"}],
+	}))
+	f.close()
+
+	var sv := SaveService.new()
+	root.add_child(sv)
+	sv.path = p
+	sv.load_state()
+	_check(sv.hi_score == 4200, "a v1 save migrates its best across")
+	_check(sv.runs.size() == 1 and int(sv.runs[0]["wave"]) == 11,
+		"a v1 save migrates its run history across")
+
+	# The migration must have stamped v2 on disk, and must not run twice.
+	var raw = JSON.parse_string(FileAccess.open(p, FileAccess.READ).get_as_text())
+	_check(typeof(raw) == TYPE_DICTIONARY and int(raw.get("v", 0)) == SaveService.VERSION,
+		"the migration stamps the new version on disk")
+
+	var again := SaveService.new()
+	root.add_child(again)
+	again.path = p
+	again.load_state()
+	_check(again.hi_score == 4200 and again.runs.size() == 1,
+		"re-loading a migrated save is idempotent")
+
+	# The whole point: the modes are independent.
+	again.mode = SaveService.MODE_RUSH
+	_check(again.hi_score == 0, "a fresh mode starts with no best of its own")
+	again.record(90000, 0, {"kills": 210, "heat_peak": 3.0})
+	_check(again.hi_score == 90000, "a rush run records against the rush bucket")
+	again.mode = SaveService.MODE_NORMAL
+	_check(again.hi_score == 4200, "and leaves the normal best untouched")
+
+	# A rush run has no wave, and the recap must not invent one.
+	again.mode = SaveService.MODE_RUSH
+	again.record(50000, 0, {"kills": 120})
+	_check(not again.runs[0].has("wave"), "a rush run records no wave number")
+	_check(again.recent_line().find("w0") == -1, "the rush recap never prints a wave")
+	_check(again.recent_line().find("kills") != -1, "the rush recap prints kills instead")
+
+	# A corrupt file still starts clean rather than crashing.
+	var bad := FileAccess.open(p, FileAccess.WRITE)
+	bad.store_string("not json at all {{{")
+	bad.close()
+	var broken := SaveService.new()
+	root.add_child(broken)
+	broken.path = p
+	broken.load_state()
+	_check(broken.hi_score == 0, "a corrupt save starts clean instead of crashing")
+
+	DirAccess.remove_absolute(abs_p)
+
+## Campaign levels keep a high-water mark per level, not a run list — a
+## different shape from a mode bucket, reserved in v2 so adding the campaign
+## later cannot cost a v3 migration (design/CAMPAIGN_LEVELS.md §4).
+func _test_level_records(root: Node3D) -> void:
+	var p := "user://_smoke_levels.json"
+	var sv := SaveService.new()
+	root.add_child(sv)
+	sv.path = p
+
+	_check(sv.level_best("l01").is_empty(), "an unplayed level has no record")
+	_check(sv.record_level("l01", 1200, "B"), "a first attempt sets the level record")
+	_check(not sv.record_level("l01", 900, "C"), "a worse attempt does not replace it")
+	_check(int(sv.level_best("l01")["best_score"]) == 1200, "the better score is kept")
+	_check(sv.record_level("l01", 3000, "S", ["untouched"]), "a better attempt improves it")
+	_check(sv.level_best("l01")["grade"] == "S", "the grade travels with the score")
+	_check(sv.level_best("l02").is_empty(), "levels are recorded independently")
+
+	# Levels persist alongside the mode buckets rather than replacing them.
+	sv.record(700, 4)
+	var reloaded := SaveService.new()
+	root.add_child(reloaded)
+	reloaded.path = p
+	reloaded.load_state()
+	_check(int(reloaded.level_best("l01")["best_score"]) == 3000,
+		"level records survive a reload alongside run history")
+
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(p))

@@ -34,7 +34,7 @@ func init() -> void:
 	# Taller drill dome — TUNING.blob.shapes.WEEVA {x:0.98, y:1.02, z:0.98}.
 	base_shape = Vector3(0.98, 1.02, 0.98)
 	mesh.position.y = radius * base_shape.y
-	_spiral_angle = randf() * TAU
+	_spiral_angle = rng.randf() * TAU
 
 func update(delta: float) -> void:
 	_update_common(delta)

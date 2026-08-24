@@ -112,6 +112,11 @@ func spawn_dir(x: float, z: float, dx: float, dz: float, is_player: bool, color 
 	b.is_player = is_player
 	b.fat = fat
 	b.lifetime = 4.0
+	# COSMETIC — the shimmer phase changes nothing about where this bullet goes,
+	# so it draws from the GLOBAL rng and deliberately not from the director's
+	# gameplay generator. Sharing that stream would make wave composition depend
+	# on how much the player shot, and two players on one seed would diverge from
+	# the trigger (design/DETERMINISM_AND_SEEDS.md §2). Do not "tidy" this.
 	b.phase = randf() * TAU
 	b.color = color if color != null else (Color(0.4, 1.0, 0.8) if is_player else Color(1.0, 0.33, 0.2))
 	b.base_scale = 3.0 if fat else (1.3 if is_player else 1.6)
