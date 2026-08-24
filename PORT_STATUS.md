@@ -52,7 +52,7 @@ target is `PORT_BRIEF.md`.
   leaves the machine — no leaderboard, no network call. The daily seed is still
   open.
 
-**Enemies** (6 of ~40 in the live roster — `js/tuning.js` names all 40)
+**Enemies** (8 of ~40 in the live roster — `js/tuning.js` names all 40)
 - GLOBBO — chaser blob. Two behaviours stack: the lunging speed-pulse
   `speed × (max(0,sin(t·3+φ))² · 2.6 + 0.4)` (`TOKO_DROP_PORT_BRIEF.md`
   Part 2 / tuning.js line 43) **and** the stalk→crouch→leap pounce state
@@ -82,6 +82,28 @@ target is `PORT_BRIEF.md`.
   `0.38` rad past the last. A telegraph on that cadence would be permanently
   lit and would say nothing. Weaves while slowly closing (`enemy.js` line
   1958). Stats from `enemy.js` line 489.
+
+- SLUDGE_CUBE — slow MASS cube that lays a **poison patch every 0.5s**. The
+  patch lives 8s (`TUNING.fx.poisonLife`), so a dead SLUDGE is still shaping
+  where you can stand long after it is gone. Stats from `enemy.js` line 494.
+- SPLITTA — dying is a SPAWN: three GLOBBOs, per `enemy.js`'s `_childType` /
+  `_childCount` (*"always splits into 3 small blobs (v99)"*). It visibly
+  **carries** two child domes before it dies (`TOKO_DROP_PORT_BRIEF.md`
+  Part 2), so the rule is learnable by looking rather than by dying to it.
+  Children join the LIVE list, so a wave is not clear until they are dealt
+  with too. Stats from `enemy.js` line 490.
+
+**Motion trails and ground**
+- **Per-species motion trails** (`scripts/trail_pool.gd`) — pooled ghost
+  spheres shrinking to nothing over 0.45s, one MultiMesh for the whole swarm.
+  Cadence and size per species from `enemy.js`'s `TRAIL_CFG`; a species absent
+  from that table leaves none. Ghosts spawn **one body-radius behind** the
+  mover along its velocity (main.js v100) — at the body's own position they
+  are hidden inside it. This is most of why the browser swarm reads as
+  *flowing* rather than as independently teleporting dots.
+- **Poison field** (`scripts/poison_field.gd`) — SLUDGE's patches as a
+  MultiMesh of floor discs, with one shared damage tick so standing in three
+  overlapping patches is a bad place to stand rather than instant death.
 
 **Ranged combat**
 - Enemy-fired bullets through the same `BulletPool`, and enemy-bullet-vs-
@@ -175,12 +197,11 @@ target is `PORT_BRIEF.md`.
 Gameplay breadth first (each item is small and mostly mechanical), then the
 visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
 
-1. **More enemy types.** Wave 3 next: SLUDGE_CUBE (slow MASS + poison trail)
-   and SPLITTA, which needs child-spawning-on-death machinery that
-   REDD_CUBE and PURP_CUBE then reuse. TORO is the big one — wheel body +
-   exact telegraph, `TOKO_DROP_PORT_BRIEF.md` Part 4 — and BAMBU needs the
-   landing-ring lob (Part 5), the one genuinely new gameplay affordance in
-   that document.
+1. **More enemy types.** The child-spawning machinery SPLITTA needed is now
+   shared, so REDD_CUBE and PURP_CUBE (wave 4/5, both splitters) are cheap.
+   TORO is the big one — wheel body + exact telegraph,
+   `TOKO_DROP_PORT_BRIEF.md` Part 4 — and BAMBU needs the landing-ring lob
+   (Part 5), the one genuinely new gameplay affordance in that document.
 2. **Kill particles.** The pop and the revenge volley are in; the *debris*
    is not — `TUNING.fx.killDroplets` 22 / `killChunks` 5, plus the splat
    decal they leave. Worth doing as `GPUParticles3D` straight away rather
