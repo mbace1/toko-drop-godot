@@ -12,6 +12,9 @@ build/
 *.apk
 *.aab
 
+# Capture output from tools/capture.gd — look at them, don't commit them
+_shots/
+
 # Editor / OS cruft
 .DS_Store
 Thumbs.db

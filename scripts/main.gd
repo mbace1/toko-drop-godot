@@ -96,10 +96,57 @@ func _setup_world() -> void:
 	floor_inst.material_override = fmat
 	add_child(floor_inst)
 
+	_add_arena_edge()
+
+## The playfield needs a BOUNDARY you can see. Without one the floor read as a
+## grey trapezoid cut out of the void, and the wall you are actually clamped
+## against (player.gd / enemy.gd clamp to half_x/half_z) was invisible — so the
+## arena had an edge in the simulation and none on screen.
+##
+## Four thin emissive rails on the clamp line, dim enough not to compete with
+## the bodies but bright enough to catch the glow pass.
+func _add_arena_edge() -> void:
+	var rail_mat := StandardMaterial3D.new()
+	rail_mat.albedo_color = Color(0.10, 0.13, 0.20)
+	rail_mat.emission_enabled = true
+	rail_mat.emission = Color(0.20, 0.45, 0.65)
+	rail_mat.emission_energy_multiplier = 0.9
+	rail_mat.roughness = 0.4
+
+	var h := 0.16
+	var t := 0.10
+	for i in 4:
+		var horizontal := i < 2
+		var bm := BoxMesh.new()
+		if horizontal:
+			bm.size = Vector3(HALF_X * 2.0 + t * 2.0, h, t)
+		else:
+			bm.size = Vector3(t, h, HALF_Z * 2.0 + t * 2.0)
+		var mi := MeshInstance3D.new()
+		mi.mesh = bm
+		mi.material_override = rail_mat
+		match i:
+			0: mi.position = Vector3(0.0, h * 0.5, -HALF_Z - t * 0.5)
+			1: mi.position = Vector3(0.0, h * 0.5, HALF_Z + t * 0.5)
+			2: mi.position = Vector3(-HALF_X - t * 0.5, h * 0.5, 0.0)
+			3: mi.position = Vector3(HALF_X + t * 0.5, h * 0.5, 0.0)
+		add_child(mi)
+
 func _setup_camera() -> void:
+	# Framing is computed from the arena rather than hand-tuned, so changing
+	# HALF_X/HALF_Z cannot silently push the playfield off-screen again. The
+	# first render had the arena as a trapezoid clipped at the bottom with the
+	# void showing past its far edge.
+	#
+	# Godot's `fov` is VERTICAL (keep_aspect defaults to KEEP_HEIGHT), so the
+	# binding constraint on a wide screen is the arena's depth. Pull back far
+	# enough that the tilted 2*HALF_Z of floor plus a margin fits inside it.
 	camera = Camera3D.new()
-	camera.position = Vector3(0.0, 14.0, 9.0)
-	camera.fov = 50.0
+	camera.fov = 55.0
+	var want := maxf(HALF_X, HALF_Z) * 2.0 * 1.12          # arena + a little headroom
+	var dist := (want * 0.5) / tan(deg_to_rad(camera.fov * 0.5))
+	var pitch := deg_to_rad(58.0)                          # steep enough to read the floor
+	camera.position = Vector3(0.0, sin(pitch) * dist, cos(pitch) * dist)
 	add_child(camera)
 	camera.look_at(Vector3.ZERO, Vector3.UP)
 	camera.current = true
@@ -116,8 +163,15 @@ func _setup_hud() -> void:
 	margin.add_theme_constant_override("margin_bottom", 12)
 	hud.add_child(margin)
 
+	# A MarginContainer stretches its child to fill, and an HBoxContainer then
+	# centres its labels VERTICALLY — which put the whole stat row across the
+	# middle of the screen, with WAVE printed on top of the player. The column
+	# pins the row to the top and lets an empty Control eat the rest.
+	var col := VBoxContainer.new()
+	margin.add_child(col)
+
 	var top := HBoxContainer.new()
-	margin.add_child(top)
+	col.add_child(top)
 
 	_hp_label = _make_label(22)
 	top.add_child(_hp_label)
@@ -135,6 +189,10 @@ func _setup_hud() -> void:
 
 	_score_label = _make_label(22)
 	top.add_child(_score_label)
+
+	var below := Control.new()
+	below.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(below)
 
 	_msg_label = _make_label(28)
 	_msg_label.set_anchors_preset(Control.PRESET_CENTER)

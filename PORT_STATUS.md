@@ -90,6 +90,17 @@ target is `PORT_BRIEF.md`.
 **Testing**
 - `tests/smoke.gd` — 55 checks, bare `SceneTree`, no GPU. Run before every
   commit touching `scripts/`.
+- `tools/capture.gd` — screenshots the REAL game on a GPU. This is the other
+  half of the gate and it is not optional: the source repo's own recorded
+  diagnosis is that its games stall at prototype feel because "the smoke
+  gates certify *works* and prototype-feel lives entirely in the part they
+  cannot see". **Look at the output after any change to how the game looks.**
+
+  The first time this port was ever rendered — after three commits, all green
+  — it had the whole stat row printed across the middle of the screen with
+  WAVE on top of the player, an arena clipped at the bottom with the void
+  showing past its far edge, and no visible boundary at all on the line
+  bodies are actually clamped against. Every one of those passed 55 checks.
 
 ## Not ported yet — in priority order
 
@@ -127,6 +138,28 @@ visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
    (`PORT_BRIEF.md` §6).
 11. Screen-space refraction in `gel.gdshader` itself (currently approximated
     with plain alpha blending — see the shader's own header comment).
+
+## What the first render showed (2026-08-24)
+
+Fixed in the same pass: the HUD layout bug, camera framing (now derived from
+`HALF_X`/`HALF_Z` so resizing the arena cannot silently push it off-screen
+again), and an emissive rail on the clamp line so the arena has a visible
+edge.
+
+Still open, in the order they hurt:
+
+1. **The gel does not read as gel.** Every body is a matte plastic ball with
+   a bloom halo — no translucency, no interior, no wet rim. This is item 5
+   below (true SSS) and it is now confirmed as the single biggest gap between
+   this port and `PORT_BRIEF.md`'s stated goal ("cross the line from 'nice
+   gel material' to *alive jelly creatures*").
+2. **The player has no identity.** It is a white sphere, roughly the visual
+   weight of its own bullets, and hard to tell from a GLOBBO at a glance. The
+   browser build gives it Kirby-style black oval eyes with white reflection
+   dots that track the aim direction (`js/player.js` `_eyeL`/`_eyeR`) — cheap
+   to port and it is most of what makes the hero read as the hero.
+3. **The floor is a featureless slab.** Nothing to read swarm flow against —
+   `PORT_BRIEF.md` §6's arena pass.
 
 ## Known gaps / deliberate simplifications
 
