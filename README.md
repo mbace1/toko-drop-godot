@@ -19,8 +19,8 @@ Playable vertical slice: twin-stick movement, dash with i-frames, shooting
 both ways, four enemy types (GLOBBO pouncer, YELA_CUBE flopper, and the
 ranged SPITTOR and FANNER), a budget-based wave director with a shooter cap,
 death pops with **revenge volleys** (corpses bite back, in their own species'
-attack language and their own palette), HP/wave/score HUD, one shared gel
-shader. Full detail and the ordered list of
+attack language and their own palette), HP/wave/score HUD, and one shared gel
+shader doing real subsurface scattering. Full detail and the ordered list of
 what's next: `PORT_STATUS.md`.
 
 ## Running it
@@ -35,6 +35,21 @@ godot --path . scenes/main.tscn
 **Controls** — desktop: WASD move, hold left mouse + aim with the mouse to
 shoot, Space to dash, Esc to pause. Gamepad: left stick move, right stick
 aim/auto-fire, A to dash, Start to pause. Touch controls are not ported yet.
+
+## Looking at it
+
+```
+godot --path . tools/capture.gd -- <out_dir> [frames_between_shots]
+```
+
+Screenshots the real game on a GPU. **This is half the gate, not a nicety.**
+The source repo's own recorded diagnosis is that its games stall at prototype
+feel because "the smoke gates certify *works* and prototype-feel lives
+entirely in the part they cannot see" — and the first time this port was ever
+rendered, after three commits and 55 green checks, the HUD was printed across
+the middle of the screen, the arena was clipped, and the boundary bodies are
+clamped against was invisible. Run it after anything that changes how the
+game looks, and *look at the output*.
 
 ## Testing
 
@@ -73,6 +88,7 @@ scripts/
   wave_director.gd        budget-based wave composition, shooter cap,
                           corpse pops and revenge volleys
 tests/smoke.gd         headless gate — see "Testing" above
+tools/capture.gd      screenshots the real game — see "Looking at it" above
 PORT_BRIEF.md         inherited visual/material brief (Godot-side canon for shaders/lighting)
 PORT_STATUS.md        living doc: what's ported, what's next, in priority order
 ```

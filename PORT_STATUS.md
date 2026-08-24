@@ -79,13 +79,32 @@ target is `PORT_BRIEF.md`.
 
 **Material**
 - One shared `shaders/gel.gdshader`: vertex ripple + hit shockwave, Fresnel
-  rim glow, CPU-driven spring squash. Per-instance uniforms via
+  rim glow, clearcoat, CPU-driven spring squash. Per-instance uniforms via
   `set_shader_parameter`, same "one shader drives every body" shape as the
   browser's `makeSatinMat`. This is **PORT_BRIEF.md §1's step 1** ("author
   one `shader_type spatial` gel shader… so a single material drives all
   enemies via per-instance uniforms").
-- `WorldEnvironment`: glow, SSAO, SSR, ACES tonemap — **PORT_BRIEF.md §6**,
-  "biggest single jump, near-free".
+- **True subsurface scattering — PORT_BRIEF.md §2a**, the "gummy-bear read".
+  `SSS_STRENGTH` + `SSS_TRANSMITTANCE_*` + `BACKLIGHT`, with thickness taken
+  analytically from the silhouette (`1 - |N·V|`, so thin edges glow brightest)
+  rather than from a shipped texture. Three things had to move together for it
+  to read at all, and each is load-bearing:
+  1. **The material is OPAQUE.** Godot's SSS is a screen-space pass over
+     opaque geometry, so an alpha-blended body gets none of it. Fades now use
+     `ALPHA_HASH_SCALE` (hashed alpha, still in the opaque pass).
+  2. **Bodies sit at alpha 1.0 at rest.** Any lower and the hash dithers them
+     into visible static. Alpha is only for bodies on their way out.
+  3. **There is a back light.** Transmittance is light passing *through* a
+     body — with only a key light overhead it scatters into nothing. The
+     camera is on +Z, so a second directional fires from the far side.
+- IBL from a `ProceduralSkyMaterial` (ambient + reflections), while the
+  visible background stays the browser's near-black void. PORT_BRIEF.md §0
+  notes the source needs IBL "for transmission + clearcoat"; with a flat
+  ambient colour a clearcoat has nothing to reflect, which was most of why
+  the first render came out as matte plastic.
+- `WorldEnvironment`: glow (bloom floor dropped to 0.05 so the HDR threshold
+  actually decides what blooms), SSAO, SSR, ACES tonemap — **PORT_BRIEF.md
+  §6**, "biggest single jump, near-free".
 
 **Testing**
 - `tests/smoke.gd` — 55 checks, bare `SceneTree`, no GPU. Run before every
@@ -124,19 +143,15 @@ visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
    stubbed out — only SINGLE exists here.
 4. **Touch controls.** `input_manager.gd` has no touch path; the browser's
    dual virtual-stick scheme (`js/input.js`) is the reference.
-5. **True SSS + thickness map** (`PORT_BRIEF.md` §2a) — replace
-   `gel.gdshader`'s ALBEDO/ALPHA approximation with `StandardMaterial3D`'s
-   `subsurf_scatter_*` + a thickness texture. This is the single biggest
-   remaining visual gap: bodies currently look like tinted glass, not gel.
-6. **Verlet tentacles** on one hero enemy (`PORT_BRIEF.md` §2b) — the
+5. **Verlet tentacles** on one hero enemy (`PORT_BRIEF.md` §2b) — the
    landmark "alive" feature the whole brief is written around.
-7. **GPU drip particles + dew normal map** (`PORT_BRIEF.md` §3).
-8. **Trails** — `TubeTrail3D` / `Decal` (`PORT_BRIEF.md` §4).
-9. **Death FX (visual half)** — `SoftBody3D` split + `RigidBody3D` gel chunks
+6. **GPU drip particles + dew normal map** (`PORT_BRIEF.md` §3).
+7. **Trails** — `TubeTrail3D` / `Decal` (`PORT_BRIEF.md` §4).
+8. **Death FX (visual half)** — `SoftBody3D` split + `RigidBody3D` gel chunks
    (`PORT_BRIEF.md` §5).
-10. **Compositor passes** — chromatic aberration, heat shimmer
+9. **Compositor passes** — chromatic aberration, heat shimmer
    (`PORT_BRIEF.md` §6).
-11. Screen-space refraction in `gel.gdshader` itself (currently approximated
+10. Screen-space refraction in `gel.gdshader` itself (currently approximated
     with plain alpha blending — see the shader's own header comment).
 
 ## What the first render showed (2026-08-24)
@@ -146,19 +161,22 @@ Fixed in the same pass: the HUD layout bug, camera framing (now derived from
 again), and an emissive rail on the clamp line so the arena has a visible
 edge.
 
+~~1. **The gel does not read as gel.**~~ **Done** — see Material above. Bodies
+   now have a translucent interior, a wet highlight and real cast shadows.
+   Two things only a render could have caught, both fixed in the same pass:
+   the hashed alpha turned every body to TV static at the default 0.9 alpha,
+   and the player's *smooth* mercy-flicker ramp through that hash read as
+   broken graphics rather than i-frames (it is a square 12Hz mesh blink now,
+   which is what the source does too).
+
 Still open, in the order they hurt:
 
-1. **The gel does not read as gel.** Every body is a matte plastic ball with
-   a bloom halo — no translucency, no interior, no wet rim. This is item 5
-   below (true SSS) and it is now confirmed as the single biggest gap between
-   this port and `PORT_BRIEF.md`'s stated goal ("cross the line from 'nice
-   gel material' to *alive jelly creatures*").
-2. **The player has no identity.** It is a white sphere, roughly the visual
+1. **The player has no identity.** It is a white sphere, roughly the visual
    weight of its own bullets, and hard to tell from a GLOBBO at a glance. The
    browser build gives it Kirby-style black oval eyes with white reflection
    dots that track the aim direction (`js/player.js` `_eyeL`/`_eyeR`) — cheap
    to port and it is most of what makes the hero read as the hero.
-3. **The floor is a featureless slab.** Nothing to read swarm flow against —
+2. **The floor is a featureless slab.** Nothing to read swarm flow against —
    `PORT_BRIEF.md` §6's arena pass.
 
 ## Known gaps / deliberate simplifications

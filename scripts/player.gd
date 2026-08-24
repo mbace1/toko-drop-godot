@@ -21,6 +21,15 @@ const GEL_SHADER := preload("res://shaders/gel.gdshader")
 const REST_RIM := Color(0.6, 0.85, 1.0)
 const HIT_RIM := Color(1.0, 0.15, 0.0)
 
+## Invulnerability blinks are SQUARE, and they toggle the mesh rather than
+## ramping alpha. The gel material is opaque with hashed alpha (so that SSS
+## works at all — see gel.gdshader's header), and a smooth alpha ramp through
+## a hash dithers the body into TV static, which reads as broken graphics
+## rather than as i-frames. The source blinks square too (`VIS.hz` in
+## player.js). 12Hz is the arcade-standard mercy flicker.
+const MERCY_BLINK_HZ := 12.0
+const DASH_BLINK_HZ := 22.0
+
 var hp := MAX_HP
 var max_hp := MAX_HP
 var alive := false
@@ -61,11 +70,15 @@ func build() -> void:
 	mesh.mesh = sm
 	mat = ShaderMaterial.new()
 	mat.shader = GEL_SHADER
-	mat.set_shader_parameter("gel_color", Color(1.0, 1.0, 1.0))
+	# Barely-cool white rather than pure white: at 1,1,1 the SSS and backlight
+	# stack into a blown-out disc with no form at all, and the hero read as a
+	# hole in the screen. The tint gives the scattering something to be.
+	mat.set_shader_parameter("gel_color", Color(0.82, 0.91, 1.0))
 	mat.set_shader_parameter("rim_color", REST_RIM)
 	mat.set_shader_parameter("wobble_amp", 1.0)
-	mat.set_shader_parameter("alpha_amt", 0.96)
-	mat.set_shader_parameter("emission_intensity", 0.05)
+	mat.set_shader_parameter("alpha_amt", 1.0)
+	mat.set_shader_parameter("emission_intensity", 0.03)
+	mat.set_shader_parameter("backlight_amt", 0.28)
 	mesh.material_override = mat
 	add_child(mesh)
 	reset()
@@ -83,7 +96,7 @@ func reset() -> void:
 	_sqv = 0.0
 	position = Vector3(0.0, RADIUS, 0.0)
 	mat.set_shader_parameter("rim_color", REST_RIM)
-	mat.set_shader_parameter("alpha_amt", 0.96)
+	_show()
 	visible = true
 
 func hit() -> void:
@@ -124,21 +137,20 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 		_dash_time -= delta
 		position.x += _dash_dir.x * DASH_SPEED * delta
 		position.z += _dash_dir.y * DASH_SPEED * delta
-		var blink := 0.35 + 0.65 * absf(sin(_dash_time * 55.0))
-		mat.set_shader_parameter("alpha_amt", blink)
+		_blink(_dash_time, DASH_BLINK_HZ)
 		if _dash_time <= 0.0:
 			_dash_cd = DASH_CD
 			if _mercy_t <= 0.0:
-				mat.set_shader_parameter("alpha_amt", 0.96)
+				_show()
 	else:
 		position.x += move.x * SPEED * delta
 		position.z += move.y * SPEED * delta
 
 	if _mercy_t > 0.0:
 		_mercy_t -= delta
-		mat.set_shader_parameter("alpha_amt", 0.3 + 0.7 * absf(sin(_mercy_t * 12.0)))
+		_blink(_mercy_t, MERCY_BLINK_HZ)
 		if _mercy_t <= 0.0:
-			mat.set_shader_parameter("alpha_amt", 0.96)
+			_show()
 			mat.set_shader_parameter("rim_color", REST_RIM)
 
 	var hx := half_x - RADIUS
@@ -163,6 +175,14 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 		_fire_t = FIRE_RATE
 
 	mat.set_shader_parameter("wobble_time", Time.get_ticks_msec() / 1000.0)
+
+## Square on/off blink driven off the remaining timer, so it always ends ON.
+func _blink(t_left: float, hz: float) -> void:
+	mesh.visible = int(t_left * hz) % 2 == 0
+
+func _show() -> void:
+	mesh.visible = true
+	mat.set_shader_parameter("alpha_amt", 1.0)
 
 func die() -> void:
 	alive = false

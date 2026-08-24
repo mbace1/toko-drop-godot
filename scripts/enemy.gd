@@ -48,7 +48,11 @@ var revenge_dialect := Revenge.RING
 
 var _dying := false
 var _death_t := 0.0
-var _base_alpha := 0.9
+## FULLY opaque at rest. Translucency is SSS's job now, not alpha's — and
+## since the gel uses hashed alpha to stay in the opaque pass, any value below
+## 1.0 dithers pixels away and speckles the body with visible static. Alpha is
+## only for bodies on their way OUT (the death pop, the i-frame flicker).
+var _base_alpha := 1.0
 var _t := 0.0                # free-running clock, also drives the gel ripple
 var _fire_t := 0.0           # counts UP toward fire_interval (enemy.js `_t`)
 var _telegraph_t := 0.0      # counts DOWN through the wind-up

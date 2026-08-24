@@ -63,28 +63,61 @@ func _ready() -> void:
 func _setup_world() -> void:
 	var env_node := WorldEnvironment.new()
 	var env := Environment.new()
+
+	# The visible background stays the browser build's near-black void, but the
+	# LIGHTING now comes off a sky. PORT_BRIEF.md §0 notes the source lights its
+	# gel with IBL ("RoomEnvironment baked through PMREMGenerator (needed for
+	# transmission + clearcoat)") — with a flat ambient colour there is nothing
+	# for a clearcoat to reflect, which is most of why the first render came out
+	# as matte plastic balls. background_mode and the light sources are separate
+	# settings, so the void can stay black while the sky does the lighting.
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.10, 0.13, 0.24)
+	sky_mat.sky_horizon_color = Color(0.22, 0.26, 0.36)
+	sky_mat.ground_bottom_color = Color(0.04, 0.04, 0.07)
+	sky_mat.ground_horizon_color = Color(0.14, 0.15, 0.22)
+	sky_mat.sun_angle_max = 30.0
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	env.sky = sky
+
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.03, 0.03, 0.08)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.2, 0.22, 0.3)
-	env.ambient_light_energy = 0.45
+	env.background_color = Color(0.02, 0.02, 0.05)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 0.7
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+
 	env.glow_enabled = true
 	env.glow_intensity = 0.8
 	env.glow_strength = 1.0
-	env.glow_bloom = 0.2
-	env.glow_hdr_threshold = 0.9
+	env.glow_bloom = 0.05          # let the HDR threshold decide, not a floor
+	env.glow_hdr_threshold = 0.9   # "only the hottest highlights bloom"
 	env.ssao_enabled = true
+	env.ssao_intensity = 1.4
 	env.ssr_enabled = true
+	env.ssr_max_steps = 32
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 1.15
 	env_node.environment = env
 	add_child(env_node)
 
+	# Key light — the source's single directional at intensity 1.3.
 	var sun := DirectionalLight3D.new()
 	sun.light_energy = 1.3
 	sun.rotation_degrees = Vector3(-55.0, -35.0, 0.0)
 	sun.shadow_enabled = true
 	add_child(sun)
+
+	# Back light. SSS TRANSMITTANCE is light passing THROUGH a body, so it can
+	# only read when something is lit from behind relative to the camera — with
+	# only a key light overhead the gel scatters into nothing and stays opaque.
+	# The camera sits on +Z, so this fires from the far side of the arena back
+	# toward it, and every body gets a translucent edge as it crosses.
+	var back := DirectionalLight3D.new()
+	back.light_energy = 1.5
+	back.light_color = Color(0.72, 0.84, 1.0)
+	back.rotation_degrees = Vector3(-18.0, 180.0, 0.0)
+	add_child(back)
 
 	var floor_inst := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
