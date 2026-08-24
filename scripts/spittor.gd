@@ -29,6 +29,8 @@ func init() -> void:
 	setup(Color(1.0, 0.333, 0.2), 0.9, 1.6, 3, false)
 	bullet_color = Color(1.0, 0.467, 0.333)
 	fire_interval = 2.2
+	trail_interval = 0.11   # enemy.js TRAIL_CFG (mostly stationary, so sparse)
+	trail_size = 0.40
 	revenge_dialect = Revenge.AIMED   # TUNING.revenge.byType: SPITTOR -> AIMED
 	# Longer in Z — the snout (TUNING.blob.shapes.SPITTOR {x:1.02,y:0.78,z:1.26}).
 	base_shape = Vector3(1.02, 0.78, 1.26)

@@ -31,6 +31,14 @@ var radius := 0.5
 var speed := 2.5
 var color := Color(0.0, 0.8, 0.67)
 
+## Per-species motion-trail signature, from enemy.js's TRAIL_CFG (v36):
+## interval is the cadence, size multiplies the body radius. Dangerous or fast
+## species leave bolder streaks; a species absent from that table leaves none,
+## which is why `trail_interval` defaults to 0.
+var trail_interval := 0.0
+var trail_size := 0.45
+
+var trails: TrailPool       # set by WaveDirector; may be null
 var target: Node3D          # the player — chasers steer toward this
 var bullets: BulletPool     # set by WaveDirector; null for melee-only types
 var half_x := 9.0
@@ -57,6 +65,9 @@ var _death_t := 0.0
 ## 1.0 dithers pixels away and speckles the body with visible static. Alpha is
 ## only for bodies on their way OUT (the death pop, the i-frame flicker).
 var _base_alpha := 1.0
+var _trail_t := 0.0
+var _vel := Vector2.ZERO     # measured, not declared — every species moves itself
+var _prev_pos := Vector2.ZERO
 var _t := 0.0                # free-running clock, also drives the gel ripple
 var _fire_t := 0.0           # counts UP toward fire_interval (enemy.js `_t`)
 var _telegraph_t := 0.0      # counts DOWN through the wind-up
@@ -171,6 +182,7 @@ func revenge_color() -> Color:
 ## telegraph inflate) to mesh.scale.
 func _update_common(delta: float) -> void:
 	_t += delta
+	_emit_trail(delta)
 	if _hit_wobble > 0.0:
 		_hit_wobble = maxf(0.0, _hit_wobble - HIT_WOBBLE_DECAY * delta)
 
@@ -185,6 +197,32 @@ func _update_common(delta: float) -> void:
 
 	mat.set_shader_parameter("wobble_time", _t)
 	mat.set_shader_parameter("hit_wobble", _hit_wobble)
+
+## Measures this body's own velocity and drops a ghost behind it on the
+## species' cadence. Velocity is measured rather than declared because every
+## species moves itself differently (flops, pounces, spirals) and none of them
+## report a velocity.
+##
+## The ghost spawns ONE BODY-RADIUS BEHIND the mover (main.js v100) — at the
+## body's own position it is simply hidden inside it.
+func _emit_trail(delta: float) -> void:
+	var here := Vector2(position.x, position.z)
+	if delta > 0.0:
+		_vel = (here - _prev_pos) / delta
+	_prev_pos = here
+
+	if trails == null or trail_interval <= 0.0 or not alive:
+		return
+	_trail_t -= delta
+	if _trail_t > 0.0:
+		return
+	_trail_t = trail_interval
+	var speed_now := _vel.length()
+	if speed_now < 0.05:
+		return                      # a body standing still leaves no streak
+	var back := _vel / speed_now * radius * 1.1
+	trails.spawn(position.x - back.x, radius * 0.9, position.z - back.y,
+		color, radius * trail_size)
 
 ## Shared "hold your ground at arm's length" motion for the HOLDER archetype
 ## (TUNING.movement.roles.HOLDER). Closes when further than want+band, backs

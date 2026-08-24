@@ -19,6 +19,9 @@ func _init() -> void:
 	_test_fanner_fans(root)
 	_test_orange_cube(root)
 	_test_weeva(root)
+	_test_trails(root)
+	_test_poison(root)
+	_test_splitta(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -236,6 +239,125 @@ func _test_weeva(root: Node3D) -> void:
 		if absf(a - angles[0]) > 0.01:
 			all_same = false
 	_check(not all_same, "successive WEEVA shots rotate \u2014 it is a spiral, not a line")
+
+func _test_trails(root: Node3D) -> void:
+	var tp := TrailPool.new()
+	root.add_child(tp)
+	tp.build()
+
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(9.0, 0.0, 0.0)
+
+	var e: Globbo = _place(root, Globbo.new(), Vector3.ZERO, target, null)
+	e.trails = tp
+	_check(e.trail_interval > 0.0, "GLOBBO carries a TRAIL_CFG signature")
+
+	# A body that MOVES leaves ghosts; the first frame cannot, because velocity
+	# is measured from the previous position and there is not one yet.
+	for i in 60:
+		e.update(1.0 / 60.0)
+	tp.update(0.0)
+	_check(tp._mm.multimesh.visible_instance_count > 0,
+		"a moving body lays down motion trails (%d live)" % tp._mm.multimesh.visible_instance_count)
+
+	# Ghosts spawn BEHIND the mover, never inside it (main.js v100).
+	var behind := true
+	for i in tp._live:
+		if tp._life[i] <= 0.0:
+			continue
+		var d := Vector2(tp._x[i] - e.position.x, tp._z[i] - e.position.z).length()
+		if d < 0.01:
+			behind = false
+	_check(behind, "ghosts sit behind the body, not inside it")
+
+	# And they expire.
+	for i in 60:
+		tp.update(1.0 / 60.0)
+	_check(tp._mm.multimesh.visible_instance_count == 0, "trails expire after their life")
+
+	# A species absent from TRAIL_CFG leaves nothing at all.
+	var tp2 := TrailPool.new()
+	root.add_child(tp2)
+	tp2.build()
+	var c: SludgeCube = _place(root, SludgeCube.new(), Vector3.ZERO, target, null)
+	c.trails = tp2
+	for i in 90:
+		c.update(1.0 / 60.0)
+	tp2.update(0.0)
+	_check(tp2._mm.multimesh.visible_instance_count == 0,
+		"a species with no TRAIL_CFG entry leaves no streak")
+
+func _test_poison(root: Node3D) -> void:
+	var pf := PoisonField.new()
+	root.add_child(pf)
+	pf.build()
+
+	_check(not pf.damages_at(0.0, 0.0), "clean floor does not hurt")
+	pf.add(0.0, 0.0, 1.2)
+	_check(pf.damages_at(0.0, 0.0), "standing in a patch hurts")
+	_check(not pf.damages_at(0.0, 0.0), "but only on its own tick, not every frame")
+	_check(not pf.damages_at(6.0, 6.0), "and only where the patch actually is")
+
+	# The patch OUTLIVES the body: 8s is most of the point of the species.
+	_check(is_equal_approx(PoisonField.LIFE, 8.0), "a patch lasts TUNING.fx.poisonLife")
+	for i in 60 * 9:
+		pf.update(1.0 / 60.0)
+	pf._tick_t = 0.0
+	_check(not pf.damages_at(0.0, 0.0), "and it does eventually expire")
+
+	# SLUDGE lays patches as it goes.
+	var pf2 := PoisonField.new()
+	root.add_child(pf2)
+	pf2.build()
+	var c: SludgeCube = _place(root, SludgeCube.new(), Vector3.ZERO, null, null)
+	c.poison = pf2
+	for i in 120:
+		c.update(1.0 / 60.0)
+	pf2.update(0.0)
+	_check(pf2._mm.multimesh.visible_instance_count > 0,
+		"SLUDGE_CUBE lays poison as it moves (%d patches)" % pf2._mm.multimesh.visible_instance_count)
+
+func _test_splitta(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	var enemies_root := Node3D.new()
+	root.add_child(enemies_root)
+
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+	wd.half_x = 19.0
+	wd.half_z = 11.0
+	wd.target = target
+	wd.enemies_root = enemies_root
+	wd.wave = 1
+
+	var sp: Splitta = _place(root, Splitta.new(), Vector3(4.0, 0.0, 2.0), target, null)
+	_check(sp.hp == 5, "SPLITTA spawns at enemy.js's config hp:5")
+	_check(sp.mesh.get_child_count() >= 2,
+		"it visibly CARRIES its children before it splits")
+
+	wd.enemies.append(sp)
+	while sp.alive:
+		sp.take_hit(sp.hp)
+	_check(sp.wants_children, "dying flags it to split")
+
+	wd.update(1.0 / 60.0)
+	_check(wd.enemies.size() == Splitta.CHILD_COUNT,
+		"it splits into %d children (got %d)" % [Splitta.CHILD_COUNT, wd.enemies.size()])
+	var all_globbo := true
+	for c in wd.enemies:
+		if not (c is Globbo):
+			all_globbo = false
+	_check(all_globbo, "and the children are GLOBBOs, per enemy.js _childType")
+	_check(not sp.wants_children, "the flag is consumed, so it cannot split twice")
+
+	# Children land inside the arena, not through the wall.
+	var inside := true
+	for c in wd.enemies:
+		if absf(c.position.x) > wd.half_x or absf(c.position.z) > wd.half_z:
+			inside = false
+	_check(inside, "children land inside the arena")
 
 func _test_audio_kit(root: Node3D) -> void:
 	var kit := AudioKit.new()

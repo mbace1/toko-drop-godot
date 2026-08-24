@@ -39,6 +39,8 @@ var _leap_dir := Vector2.ZERO
 
 func init() -> void:
 	setup(Color(0.0, 0.8, 0.667), 0.55, 2.8, 1, false)
+	trail_interval = 0.08   # enemy.js TRAIL_CFG
+	trail_size = 0.45
 	_phase = randf() * TAU
 	_pounce_t = 1.6 + randf() * 1.4
 

@@ -34,6 +34,8 @@ func init() -> void:
 	# Taller drill dome — TUNING.blob.shapes.WEEVA {x:0.98, y:1.02, z:0.98}.
 	base_shape = Vector3(0.98, 1.02, 0.98)
 	mesh.position.y = radius * base_shape.y
+	trail_interval = 0.06   # enemy.js TRAIL_CFG
+	trail_size = 0.55
 	_spiral_angle = randf() * TAU
 
 func update(delta: float) -> void:

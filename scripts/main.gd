@@ -51,6 +51,8 @@ var _menu_row := 0        # which mode row the selector is on; -1 = none
 
 var player: Player
 var bullets: BulletPool
+var trails: TrailPool
+var poison: PoisonField
 var waves: WaveDirector
 var input_mgr: InputManager
 var camera: Camera3D
@@ -79,6 +81,14 @@ func _ready() -> void:
 	add_child(bullets)
 	bullets.build()
 
+	trails = TrailPool.new()
+	add_child(trails)
+	trails.build()
+
+	poison = PoisonField.new()
+	add_child(poison)
+	poison.build()
+
 	var enemies_root := Node3D.new()
 	enemies_root.name = "Enemies"
 	add_child(enemies_root)
@@ -89,6 +99,8 @@ func _ready() -> void:
 	waves.half_z = HALF_Z
 	waves.target = player
 	waves.bullets = bullets
+	waves.trails = trails
+	waves.poison = poison
 	waves.enemies_root = enemies_root
 	waves.wave_cleared.connect(_on_wave_cleared)
 
@@ -367,6 +379,12 @@ func _process_playing(delta: float) -> void:
 
 	player.update(delta, move, aim, bullets, HALF_X, HALF_Z)
 	bullets.update(delta, maxf(HALF_X, HALF_Z))
+	trails.update(delta)
+	poison.update(delta)
+	# Standing in sludge costs you, long after the body that laid it died.
+	if player.alive and not player.invincible \
+			and poison.damages_at(player.position.x, player.position.z):
+		_damage_player()
 	waves.update(delta)
 
 	# Player bullets vs. enemies.
@@ -475,6 +493,8 @@ func _start_game() -> void:
 	player.reset()
 	waves.clear()
 	bullets.clear()
+	trails.clear()
+	poison.clear()
 	waves.start_wave()
 	_msg_label.hide()
 

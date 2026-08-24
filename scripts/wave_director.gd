@@ -32,6 +32,8 @@ const POOL := {
 	"FANNER":      [1, 2, true],
 	"ORANGE_CUBE": [2, 2, true],
 	"WEEVA":       [2, 3, true],
+	"SLUDGE_CUBE": [3, 2, false],
+	"SPLITTA":     [3, 3, false],
 }
 
 # tuning.js waves.scale.budget
@@ -75,6 +77,8 @@ var half_x := 9.0
 var half_z := 9.0
 var target: Node3D
 var bullets: BulletPool
+var trails: TrailPool
+var poison: PoisonField
 var enemies_root: Node3D
 var enemies: Array[Enemy] = []
 ## Bodies mid-death-pop. They are out of `enemies` (so they cannot be shot
@@ -157,6 +161,9 @@ func _spawn(picks: Array[String]) -> void:
 		e.half_z = half_z
 		e.target = target
 		e.bullets = bullets
+		e.trails = trails
+		if e is SludgeCube:
+			(e as SludgeCube).poison = poison
 		e.init()
 		enemies.append(e)
 
@@ -168,6 +175,8 @@ func _make(name: String) -> Enemy:
 		"FANNER":      return Fanner.new()
 		"ORANGE_CUBE": return OrangeCube.new()
 		"WEEVA":       return Weeva.new()
+		"SLUDGE_CUBE": return SludgeCube.new()
+		"SPLITTA":     return Splitta.new()
 	push_error("WaveDirector: unknown enemy '%s'" % name)
 	return Globbo.new()
 
@@ -178,10 +187,13 @@ func update(delta: float) -> void:
 			enemies.remove_at(i)
 			continue
 		if not e.alive:
-			# Just died: fire its revenge, then move it to the corpse list so
-			# the pop plays out without blocking the wave clear.
+			# Just died: fire its revenge, hand over any children it was
+			# carrying, then move it to the corpse list so the pop plays out
+			# without blocking the wave clear.
 			enemies.remove_at(i)
 			_fire_revenge(e)
+			if e is Splitta and (e as Splitta).wants_children:
+				_split(e as Splitta)
 			corpses.append(e)
 			continue
 		e.update(delta)
@@ -197,6 +209,25 @@ func update(delta: float) -> void:
 
 	if enemies.is_empty() and wave > 0:
 		wave_cleared.emit(wave)
+
+## SPLITTA's death is a spawn. The children are added to the LIVE list, so a
+## wave is not clear until they are dealt with too — which is the whole reason
+## the species is worth 3 budget rather than 1.
+func _split(parent: Splitta) -> void:
+	parent.wants_children = false
+	for p in parent.child_positions():
+		var c := Globbo.new()
+		enemies_root.add_child(c)
+		c.position = Vector3(
+			clampf(p.x, -half_x + 1.0, half_x - 1.0), 0.0,
+			clampf(p.z, -half_z + 1.0, half_z - 1.0))
+		c.half_x = half_x
+		c.half_z = half_z
+		c.target = target
+		c.bullets = bullets
+		c.trails = trails
+		c.init()
+		enemies.append(c)
 
 ## CLOSE COMBAT: the dead shoot back (main.js onKill(), v187/v220). The volley
 ## SPEAKS THE SPECIES' LANGUAGE — a gunner's corpse spits a slow aimed burst,
