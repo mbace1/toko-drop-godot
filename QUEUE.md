@@ -81,9 +81,9 @@ not drift; the code lands wherever it belongs.
 - repo: both
 - size: S
 - blocked-by: repo access
-- design: design/RUSH_MODE.md § Parity risk
-- gate: an answer written into design/RUSH_MODE.md, with a `tuning.js` line
-  reference if the mode exists
+- design: design/PARITY_RECON.md (the executable checklist), design/RUSH_MODE.md § Parity risk
+- gate: every question in PARITY_RECON.md answered or explicitly marked
+  "searched for X, not found", each with a `file:line`
 
 `CLAUDE.md` makes the browser build the source of truth for numbers, and every
 constant in the Rush design currently has no cross-reference because the source
@@ -91,8 +91,14 @@ tree could not be read when it was written. If a rush mode exists upstream, the
 design becomes a port and its constants get replaced wholesale. If it does not,
 Rush is this port's first gameplay-level divergence and has to be recorded as
 one — and probably proposed upstream. **Every item below inherits this block
-for its tuning constants**; the structural work (Q-002, Q-006, Q-007) does not
-depend on it and can start.
+for its tuning constants**; the structural work (Q-002, Q-006, Q-007, Q-011,
+Q-012) does not depend on it and can start.
+
+`PARITY_RECON.md` widens this into one trip that also answers the daily seed's
+reference implementation (Q-013), the open HUD layout divergence (Q-015), the
+kill-particle numbers (Q-016) and the full ~40-type roster table — the cost is
+mostly in attaching the repo and paging in the tuning tables, and that is paid
+once whether one question is answered or six.
 
 ---
 
@@ -232,6 +238,108 @@ minutes. Neither is testable headless; both need the real game running.
 The two builds diverging in *modes* is a far bigger split than diverging in
 materials, and the port has so far recorded every divergence deliberately. This
 item exists so that record keeps holding.
+
+### Q-011 — Move the bullet shimmer draw off the gameplay random stream
+
+- status: Queued
+- repo: toko-drop-godot
+- size: S
+- blocked-by: —
+- design: design/DETERMINISM_AND_SEEDS.md §2, §5
+- gate: `tests/smoke.gd` green; no behaviour change to assert yet, by design
+
+`bullet_pool.gd:115` draws a bullet's cosmetic shimmer phase from the same
+global RNG as `wave_director.gd`'s spawn picker. Nothing is broken today
+because nothing is seeded — but the moment a seed exists, **firing one extra
+shot shifts every subsequent wave composition**, and two players on the same
+daily seed diverge from the trigger. Two lines now; a bug report about scores
+that do not reproduce later. Do it early, independent of everything else.
+
+### Q-012 — A gameplay RNG, and the cosmetic-vs-gameplay stream rule
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-011
+- design: design/DETERMINISM_AND_SEEDS.md §4
+- gate: a smoke check asserting the same seed yields the same wave composition
+  twice; the rule written into `CLAUDE.md` alongside the existing architecture
+  rules
+
+One `RandomNumberGenerator` owned by `WaveDirector` and handed to enemies
+through the same explicit `_spawn()` hand-off that already sets `target` /
+`bullets` / `half_*`. The rule that keeps it working — draws that affect *what
+happens* use the gameplay stream, draws that affect only *how it looks or
+sounds* must not — has to be written down, or the first particle system
+reintroduces Q-011's bug. `audio_kit.gd` already owns a private RNG and is the
+pattern to copy. Worth landing even if the daily seed is never built: it also
+lets the smoke gate assert on specific compositions instead of only on
+aggregate budget properties.
+
+### Q-013 — Daily seed: derivation and entry
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-012, Q-001 (PARITY_RECON.md Q2 — the browser build already
+  shipped this, so match it rather than inventing a scheme)
+- design: design/DETERMINISM_AND_SEEDS.md §4, §6
+- gate: same seed ⇒ same swarm, asserted headless; the seed recorded with every
+  run so a good run can be identified afterwards
+
+The last open piece of `save_service.gd`'s Phase 4 note. Promises *the same
+swarm*, not the same game — say so plainly in the UI, since full deterministic
+replay is deliberately out of scope (§3 explains what it would cost).
+
+### Q-014 — Split-on-death machinery, and SPLITTA
+
+- status: Queued
+- repo: toko-drop-godot
+- size: L
+- blocked-by: —
+- design: design/SPLIT_ENEMIES.md
+- gate: the six checks in §4 — above all, that a wave holding only a splitter
+  does not emit `wave_cleared` when it dies
+
+First item on `PORT_STATUS.md`'s backlog, and independent of Rush, so it can
+run in parallel by different hands. Designed once because REDD_CUBE and
+PURP_CUBE reuse it. The interesting part is not the spawn — it is that a death
+here already pops for 0.28s, fires a revenge volley, awards score and can clear
+a wave, and splitting has to answer for all four. Two notes land back on Rush:
+recompute standing pressure rather than decrementing it, and decide
+deliberately whether children may exceed the body cap.
+
+### Q-015 — Settle the HUD layout divergence before Rush occupies it
+
+- status: Queued
+- repo: toko-drop-godot
+- size: S
+- blocked-by: Q-001 (PARITY_RECON.md Q3)
+- design: design/RUSH_MODE.md §5
+- gate: capture run at two viewport sizes
+
+`PORT_STATUS.md` records the browser build stacking WAVE + a progress bar
+top-left with HP pips beneath, against this port's single top row — "still
+different, still open". Rush wants a clock in exactly that real estate, so the
+divergence is about to be settled by default unless somebody settles it on
+purpose. The browser's wave-progress bar is the same shape as Rush's drain bar,
+which may make this cheaper than it looks.
+
+### Q-016 — Kill particles
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-012 (must draw from the cosmetic stream, not the gameplay one)
+- design: — (numbers from PARITY_RECON.md Q4)
+- gate: capture run; `TUNING.fx.killDroplets` 22 / `killChunks` 5 confirmed
+  against the source
+
+`PORT_STATUS.md` item 2: the pop and the revenge volley are in, the debris is
+not. Listed here mainly because it is the **next thing that would have
+reintroduced Q-011's bug** — a particle system reaching for `randf()` is the
+obvious way to pollute the gameplay stream, and now there is a rule that says
+not to. Worth doing as `GPUParticles3D` directly, per `PORT_BRIEF.md` §3/§5.
 
 ---
 
