@@ -104,21 +104,6 @@ once whether one question is answered or six.
 
 ## Queued
 
-### Q-002 — Extract wave composition from `start_wave()` into a reusable picker
-
-- status: Queued
-- repo: toko-drop-godot
-- size: S
-- blocked-by: —
-- design: design/RUSH_MODE.md §3.2
-- gate: `tests/smoke.gd` green with the existing wave-budget checks unchanged
-
-`WaveDirector.start_wave()` currently interleaves "decide what to spawn" with
-"spend a whole wave at once". Rush needs the first half on a per-tick cadence.
-Split out the affordability loop so both cadences call one picker — forking it
-would mean two copies of a ported table drifting apart, which is the exact
-failure `CLAUDE.md`'s porting discipline exists to prevent. Pure refactor: no
-behaviour change, no new numbers, so it is safe to land ahead of Q-001.
 
 ### Q-003 — Rush director: virtual wave, standing pressure, gated refill
 
@@ -166,23 +151,6 @@ Replaces Normal's per-clear bonus, which Rush cannot have. Open question 2 in
 the design doc (does a hit break the chain?) is still unsettled and is cheap to
 flip after the fact — do not let it hold the item.
 
-### Q-006 — Save schema v2: per-mode bests, with a v1 migration
-
-- status: Queued
-- repo: toko-drop-godot
-- size: M
-- blocked-by: —
-- design: design/RUSH_MODE.md §7, design/CAMPAIGN_LEVELS.md §4 (reserve the
-  per-level record shape now — it is a map of level id → best score/grade, not
-  the `{score, wave}` run list, and adding it later means a v3 migration)
-- gate: smoke checks for the migration (v1 file in, v2 out, nothing lost) and
-  for round-tripping v2 — both against a scratch `path`, never the real save
-
-The stored shape is mode-blind and unversioned, so the first Rush run would
-overwrite the Normal best with a number from a different game. Needs doing
-before any Rush run can be recorded, and it is independent of Q-001, so it can
-go early. `save_service.gd` already carries the warning that a test writing to
-the real save eats the player's hi-score; honour it.
 
 ### Q-007 — Mode selection on the menu and death screen, touch-first
 
@@ -243,42 +211,6 @@ The two builds diverging in *modes* is a far bigger split than diverging in
 materials, and the port has so far recorded every divergence deliberately. This
 item exists so that record keeps holding.
 
-### Q-011 — Move the bullet shimmer draw off the gameplay random stream
-
-- status: Queued
-- repo: toko-drop-godot
-- size: S
-- blocked-by: —
-- design: design/DETERMINISM_AND_SEEDS.md §2, §5
-- gate: `tests/smoke.gd` green; no behaviour change to assert yet, by design
-
-`bullet_pool.gd:115` draws a bullet's cosmetic shimmer phase from the same
-global RNG as `wave_director.gd`'s spawn picker. Nothing is broken today
-because nothing is seeded — but the moment a seed exists, **firing one extra
-shot shifts every subsequent wave composition**, and two players on the same
-daily seed diverge from the trigger. Two lines now; a bug report about scores
-that do not reproduce later. Do it early, independent of everything else.
-
-### Q-012 — A gameplay RNG, and the cosmetic-vs-gameplay stream rule
-
-- status: Queued
-- repo: toko-drop-godot
-- size: M
-- blocked-by: Q-011
-- design: design/DETERMINISM_AND_SEEDS.md §4
-- gate: a smoke check asserting the same seed yields the same wave composition
-  twice; the rule written into `CLAUDE.md` alongside the existing architecture
-  rules
-
-One `RandomNumberGenerator` owned by `WaveDirector` and handed to enemies
-through the same explicit `_spawn()` hand-off that already sets `target` /
-`bullets` / `half_*`. The rule that keeps it working — draws that affect *what
-happens* use the gameplay stream, draws that affect only *how it looks or
-sounds* must not — has to be written down, or the first particle system
-reintroduces Q-011's bug. `audio_kit.gd` already owns a private RNG and is the
-pattern to copy. Worth landing even if the daily seed is never built: it also
-lets the smoke gate assert on specific compositions instead of only on
-aggregate budget properties.
 
 ### Q-013 — Daily seed: derivation and entry
 
@@ -486,8 +418,84 @@ itself unbuilt — sequence it against that honestly.
 
 ## Landed
 
-*(nothing yet — the first entry here will be a block moved up from Queued with
-its SHA appended to the status line)*
+### Q-002 — Extract wave composition from `start_wave()` into a reusable picker
+
+- status: **Landed** in `e6bf70a`
+- repo: toko-drop-godot
+- size: S
+- blocked-by: —
+- design: design/RUSH_MODE.md §3.2
+- gate: `tests/smoke.gd` green with the existing wave-budget checks unchanged
+
+`WaveDirector.start_wave()` currently interleaves "decide what to spawn" with
+"spend a whole wave at once". Rush needs the first half on a per-tick cadence.
+Split out the affordability loop so both cadences call one picker — forking it
+would mean two copies of a ported table drifting apart, which is the exact
+failure `CLAUDE.md`'s porting discipline exists to prevent. Pure refactor: no
+behaviour change, no new numbers, so it is safe to land ahead of Q-001.
+
+### Q-006 — Save schema v2: per-mode bests, with a v1 migration
+
+- status: **Landed** in `e6bf70a`
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: design/RUSH_MODE.md §7, design/CAMPAIGN_LEVELS.md §4 (reserve the
+  per-level record shape now — it is a map of level id → best score/grade, not
+  the `{score, wave}` run list, and adding it later means a v3 migration)
+- gate: smoke checks for the migration (v1 file in, v2 out, nothing lost) and
+  for round-tripping v2 — both against a scratch `path`, never the real save
+
+The stored shape is mode-blind and unversioned, so the first Rush run would
+overwrite the Normal best with a number from a different game. Needs doing
+before any Rush run can be recorded, and it is independent of Q-001, so it can
+go early. `save_service.gd` already carries the warning that a test writing to
+the real save eats the player's hi-score; honour it.
+
+### Q-011 — Move the bullet shimmer draw off the gameplay random stream
+
+- status: **Landed** in `e6bf70a`
+- repo: toko-drop-godot
+- size: S
+- blocked-by: —
+- design: design/DETERMINISM_AND_SEEDS.md §2, §5
+- gate: `tests/smoke.gd` green; no behaviour change to assert yet, by design
+
+`bullet_pool.gd:115` draws a bullet's cosmetic shimmer phase from the same
+global RNG as `wave_director.gd`'s spawn picker. Nothing is broken today
+because nothing is seeded — but the moment a seed exists, **firing one extra
+shot shifts every subsequent wave composition**, and two players on the same
+daily seed diverge from the trigger. Two lines now; a bug report about scores
+that do not reproduce later. Do it early, independent of everything else.
+
+**Landed differently than specified**, recorded here rather than by rewriting
+the block above. The fix was not to move the shimmer draw — it was to move
+*gameplay* off the global stream (Q-012), which left the shimmer's global draw
+correct by construction. So the only change at this call site is a comment
+recording why it must stay where it is. The bug this item describes is real and
+is now closed; the remedy was the inverse of the one written down.
+
+### Q-012 — A gameplay RNG, and the cosmetic-vs-gameplay stream rule
+
+- status: **Landed** in `e6bf70a`
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-011
+- design: design/DETERMINISM_AND_SEEDS.md §4
+- gate: a smoke check asserting the same seed yields the same wave composition
+  twice; the rule written into `CLAUDE.md` alongside the existing architecture
+  rules
+
+One `RandomNumberGenerator` owned by `WaveDirector` and handed to enemies
+through the same explicit `_spawn()` hand-off that already sets `target` /
+`bullets` / `half_*`. The rule that keeps it working — draws that affect *what
+happens* use the gameplay stream, draws that affect only *how it looks or
+sounds* must not — has to be written down, or the first particle system
+reintroduces Q-011's bug. `audio_kit.gd` already owns a private RNG and is the
+pattern to copy. Worth landing even if the daily seed is never built: it also
+lets the smoke gate assert on specific compositions instead of only on
+aggregate budget properties.
+
 
 ---
 
