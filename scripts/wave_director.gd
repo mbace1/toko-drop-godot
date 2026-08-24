@@ -127,17 +127,20 @@ func _eligible_for(w: int) -> Array[String]:
 			out.append(name)
 	return out
 
-## Places the wave on a ring at 0.6× the arena half-size, evenly spaced with a
-## little jitter, matching main.js's "spawns fresh enemies at 0.6 × HALF
-## radius" — far enough out that nothing materialises on top of the player.
+## Places the wave on an ELLIPSE at 0.6× the arena half-extents, evenly spaced
+## with a little jitter — main.js's "spawns fresh enemies at 0.6 × HALF radius",
+## per axis. The arena is 38 x 22, so a circle of the smaller half-extent would
+## bunch every wave into a narrow band down the middle and leave the wide ends
+## of the room empty.
 func _spawn(picks: Array[String]) -> void:
-	var r := 0.6 * minf(half_x, half_z)
+	var rx := 0.6 * half_x
+	var rz := 0.6 * half_z
 	var n := picks.size()
 	for i in n:
 		var a := (float(i) / float(maxi(n, 1))) * TAU + randf() * 0.4 - 0.2
 		var e := _make(picks[i])
 		enemies_root.add_child(e)
-		e.position = Vector3(cos(a) * r, 0.0, sin(a) * r)
+		e.position = Vector3(cos(a) * rx, 0.0, sin(a) * rz)
 		e.half_x = half_x
 		e.half_z = half_z
 		e.target = target

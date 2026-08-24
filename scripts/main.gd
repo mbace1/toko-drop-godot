@@ -8,8 +8,22 @@
 ## port grows.
 extends Node3D
 
-const HALF_X := 9.0
-const HALF_Z := 9.0
+## The arena is the source's LANDSCAPE preset, not a square
+## (main.js ARENA_PRESETS.landscape: halfX 19, halfZ 11). Getting this wrong
+## was the single biggest structural difference from the browser build: a
+## square 18x18 made every body look huge, left no room to run, and framed
+## nothing like the real game. 38 x 22 is a WIDE room you cross.
+const HALF_X := 19.0
+const HALF_Z := 11.0
+
+## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
+## cells square on a non-square arena.
+const GRID_CELL := 1.286
+
+## main.js: scene.background 0x0d0d1a, fog 0x0d0d1a from 42 to 80.
+const VOID_COLOR := Color(0.051, 0.051, 0.102)
+
+const FLOOR_SHADER := preload("res://shaders/floor_grid.gdshader")
 
 enum State { MENU, PLAYING, PAUSED, DEAD }
 
@@ -22,6 +36,7 @@ var waves: WaveDirector
 var input_mgr: InputManager
 var camera: Camera3D
 
+var _floor_mat: ShaderMaterial
 var hud: CanvasLayer
 var _hp_label: Label
 var _wave_label: Label
@@ -82,7 +97,15 @@ func _setup_world() -> void:
 	env.sky = sky
 
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.02, 0.02, 0.05)
+	env.background_color = VOID_COLOR
+	# main.js: THREE.Fog(0x0d0d1a, 42, 80) — the far corners of a 38-unit-wide
+	# arena sit in it, which is what stops the floor reading as a flat cut-out.
+	env.fog_enabled = true
+	env.fog_mode = Environment.FOG_MODE_DEPTH
+	env.fog_light_color = VOID_COLOR
+	env.fog_depth_begin = 42.0
+	env.fog_depth_end = 80.0
+	env.fog_density = 1.0
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = 0.7
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
@@ -123,10 +146,11 @@ func _setup_world() -> void:
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(HALF_X * 2.0, HALF_Z * 2.0)
 	floor_inst.mesh = pm
-	var fmat := StandardMaterial3D.new()
-	fmat.albedo_color = Color(0.07, 0.07, 0.11)
-	fmat.roughness = 0.85
-	floor_inst.material_override = fmat
+	_floor_mat = ShaderMaterial.new()
+	_floor_mat.shader = FLOOR_SHADER
+	_floor_mat.set_shader_parameter("u_grid_x", (HALF_X * 2.0) / GRID_CELL)
+	_floor_mat.set_shader_parameter("u_grid_z", (HALF_Z * 2.0) / GRID_CELL)
+	floor_inst.material_override = _floor_mat
 	add_child(floor_inst)
 
 	_add_arena_edge()
@@ -140,10 +164,11 @@ func _setup_world() -> void:
 ## the bodies but bright enough to catch the glow pass.
 func _add_arena_edge() -> void:
 	var rail_mat := StandardMaterial3D.new()
-	rail_mat.albedo_color = Color(0.10, 0.13, 0.20)
+	# main.js `border` is LineSegments in 0x5555cc — a cool violet-blue.
+	rail_mat.albedo_color = Color(0.10, 0.11, 0.22)
 	rail_mat.emission_enabled = true
-	rail_mat.emission = Color(0.20, 0.45, 0.65)
-	rail_mat.emission_energy_multiplier = 0.9
+	rail_mat.emission = Color(0.333, 0.333, 0.80)
+	rail_mat.emission_energy_multiplier = 1.5
 	rail_mat.roughness = 0.4
 
 	var h := 0.16
@@ -166,22 +191,17 @@ func _add_arena_edge() -> void:
 		add_child(mi)
 
 func _setup_camera() -> void:
-	# Framing is computed from the arena rather than hand-tuned, so changing
-	# HALF_X/HALF_Z cannot silently push the playfield off-screen again. The
-	# first render had the arena as a trapezoid clipped at the bottom with the
-	# void showing past its far edge.
-	#
-	# Godot's `fov` is VERTICAL (keep_aspect defaults to KEEP_HEIGHT), so the
-	# binding constraint on a wide screen is the arena's depth. Pull back far
-	# enough that the tilted 2*HALF_Z of floor plus a margin fits inside it.
+	# The source's landscape camera, verbatim (main.js ARENA_PRESETS.landscape):
+	# camRest [0, 20.5, 13.5], camLook [0, 0, 2.5], PerspectiveCamera fov 60.
+	# Looking slightly PAST the centre (+2.5 z) is what tips the far half of
+	# the arena up into the frame and gives the browser build its wide, shallow
+	# read. The earlier derived framing was a reasonable guess and looked
+	# nothing like the game.
 	camera = Camera3D.new()
-	camera.fov = 55.0
-	var want := maxf(HALF_X, HALF_Z) * 2.0 * 1.12          # arena + a little headroom
-	var dist := (want * 0.5) / tan(deg_to_rad(camera.fov * 0.5))
-	var pitch := deg_to_rad(58.0)                          # steep enough to read the floor
-	camera.position = Vector3(0.0, sin(pitch) * dist, cos(pitch) * dist)
+	camera.fov = 60.0
+	camera.position = Vector3(0.0, 20.5, 13.5)
 	add_child(camera)
-	camera.look_at(Vector3.ZERO, Vector3.UP)
+	camera.look_at(Vector3(0.0, 0.0, 2.5), Vector3.UP)
 	camera.current = true
 
 func _setup_hud() -> void:
@@ -242,6 +262,10 @@ func _make_label(font_size: int) -> Label:
 	return l
 
 func _process(delta: float) -> void:
+	# The floor pulses on its own clock even on the menu — a still first screen
+	# reads as a broken page.
+	_floor_mat.set_shader_parameter("u_time", Time.get_ticks_msec() / 1000.0)
+
 	if input_mgr.pause_pressed():
 		if state == State.PLAYING:
 			state = State.PAUSED

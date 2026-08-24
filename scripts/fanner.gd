@@ -38,8 +38,11 @@ func init() -> void:
 	revenge_dialect = Revenge.FAN     # TUNING.revenge.byType: FANNER -> FAN
 	_strafe_dir = 1.0 if randf() < 0.5 else -1.0
 	_strafe_timer = 2.5 + randf()
-	# Wide flat pancake — TUNING.blob.shapes.FANNER.
-	mesh.scale = Vector3(1.30, 0.66, 1.08)
+	# Wide flat pancake — TUNING.blob.shapes.FANNER {x:1.30, y:0.66, z:1.08}.
+	# base_shape composes with the spring squash in _update_common(), so it
+	# survives every frame instead of being stomped and re-applied.
+	base_shape = Vector3(1.30, 0.66, 1.08)
+	mesh.position.y = radius * base_shape.y
 
 func update(delta: float) -> void:
 	_update_common(delta)
@@ -53,11 +56,9 @@ func update(delta: float) -> void:
 
 	_hold_at_range(delta, HOLD_RANGE, HOLD_BAND, _strafe_dir)
 
-	# Rocks as it circles. _update_common owns mesh.scale, so the rock goes on
-	# the rotation and the pancake proportions are re-applied on top of the
-	# spring squash rather than fighting it.
+	# Rocks as it circles (TOKO_DROP_PORT_BRIEF Part 2: "rocks rotation.z =
+	# sin(t*7)*0.10 while strafing"). Scale is base_shape's job now.
 	mesh.rotation.z = sin(_t * ROCK_HZ) * ROCK_AMP
-	mesh.scale *= Vector3(1.30, 0.66, 1.08)
 
 	if _tick_fire(delta, WINDUP):
 		_sqv -= 0.8                      # squash on fire

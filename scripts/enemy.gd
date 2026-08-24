@@ -46,6 +46,10 @@ var mat: ShaderMaterial
 ## Set by subclasses in init(); the fallback is RING (TUNING.revenge.fallback).
 var revenge_dialect := Revenge.RING
 
+## Per-species silhouette scale (TUNING.blob.shape / .shapes), applied on top
+## of the spring squash every frame by _update_common().
+var base_shape := Vector3.ONE
+
 var _dying := false
 var _death_t := 0.0
 ## FULLY opaque at rest. Translucency is SSS's job now, not alpha's — and
@@ -87,6 +91,12 @@ func setup(p_color: Color, p_radius: float, p_speed: float, p_hp: int, is_cube: 
 	mesh = MeshInstance3D.new()
 	mesh.mesh = m
 	mesh.position.y = radius
+	# TUNING.blob.shape — "squat grounded baseline" {x:1.05, y:0.82, z:1.05}.
+	# The browser's blobs are flattened domes sitting ON the floor, not balls
+	# resting on one point; a plain sphere reads as a marble.
+	if not is_cube:
+		base_shape = Vector3(1.05, 0.82, 1.05)
+		mesh.position.y = radius * base_shape.y
 
 	mat = ShaderMaterial.new()
 	mat.shader = GEL_SHADER
@@ -132,7 +142,7 @@ func update_death(delta: float) -> bool:
 		return true
 	_death_t -= delta
 	var t := 1.0 - maxf(_death_t, 0.0) / DEATH_TIME
-	mesh.scale = Vector3.ONE * (1.0 + t * DEATH_GROWTH)
+	mesh.scale = base_shape * (1.0 + t * DEATH_GROWTH)
 	mat.set_shader_parameter("alpha_amt", (1.0 - t) * (1.0 - t) * _base_alpha)
 	# The pre-death thrash: strongest at onset, fading as it bursts.
 	mat.set_shader_parameter("hit_wobble", maxf(0.0, _death_t / DEATH_TIME))
@@ -171,7 +181,7 @@ func _update_common(delta: float) -> void:
 	# it composes with breathe/squash instead of stomping them (enemy.js
 	# applies it inside the blob scale block for the same reason).
 	var infl := 1.0 + _inflate
-	mesh.scale = Vector3(sxz * infl, _sq * infl, sxz * infl)
+	mesh.scale = Vector3(sxz * infl, _sq * infl, sxz * infl) * base_shape
 
 	mat.set_shader_parameter("wobble_time", _t)
 	mat.set_shader_parameter("hit_wobble", _hit_wobble)

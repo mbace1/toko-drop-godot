@@ -279,8 +279,8 @@ func _test_wave_clears_and_advances(root: Node3D) -> void:
 
 	var wd := WaveDirector.new()
 	root.add_child(wd)
-	wd.half_x = 9.0
-	wd.half_z = 9.0
+	wd.half_x = 19.0   # the real landscape arena, so the ellipse is exercised
+	wd.half_z = 11.0
 	wd.target = target
 	wd.bullets = bullets
 	wd.enemies_root = enemies_root
@@ -301,12 +301,15 @@ func _test_wave_clears_and_advances(root: Node3D) -> void:
 			shooters += 1
 	_check(shooters <= wd.shooter_cap_for(1), "wave 1 respects the shooter cap (%d)" % shooters)
 
-	var spawn_r := 0.6 * 9.0
+	# Spawns sit on an ELLIPSE at 0.6x each half-extent, so on the real 38x22
+	# arena a wave uses the whole room instead of a narrow central band.
 	var all_on_ring := true
 	for e in wd.enemies:
-		if absf(Vector2(e.position.x, e.position.z).length() - spawn_r) > 0.01:
+		var nx := e.position.x / (0.6 * wd.half_x)
+		var nz := e.position.z / (0.6 * wd.half_z)
+		if absf(sqrt(nx * nx + nz * nz) - 1.0) > 0.01:
 			all_on_ring = false
-	_check(all_on_ring, "every body spawns on the 0.6x half-arena ring, never on the player")
+	_check(all_on_ring, "every body spawns on the 0.6x half-arena ellipse, never on the player")
 
 	for en in wd.enemies.duplicate():
 		while en.alive:

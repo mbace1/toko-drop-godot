@@ -154,6 +154,49 @@ visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
 10. Screen-space refraction in `gel.gdshader` itself (currently approximated
     with plain alpha blending — see the shader's own header comment).
 
+## Side-by-side against the shipped browser build (2026-08-24)
+
+The browser game was captured running (Playwright + a local server over the
+real `toko-drop/` tree, scratch harness kept outside both repos) and compared
+frame to frame against `tools/capture.gd` output. What that found, and what
+was fixed in the same pass:
+
+| | browser build | this port, before | now |
+|---|---|---|---|
+| Arena | **38 × 22**, wide landscape room | 18 × 18 square | 38 × 22 |
+| Camera | `[0, 20.5, 13.5]` → `[0, 0, 2.5]`, fov 60 | derived guess, fov 55 | the source's, verbatim |
+| Floor | pulsing cyan/violet neon **grid** | featureless grey slab | ported shader, same math |
+| Border | `0x5555cc` violet | ad-hoc blue | `0x5555cc` |
+| Fog | `0x0d0d1a`, 42→80 | none | ported |
+| Blobs | squat grounded **domes** | round balls | `TUNING.blob.shape` per species |
+| Player | Kirby eyes tracking aim | featureless white ball | eyes, on the surface |
+
+**The arena was the big one.** A square 18 × 18 made every body look huge,
+left no room to run, and framed nothing like the real game — the browser build
+is a *wide room you cross*. Almost every other "this feels off" symptom was
+downstream of it: bullets looked oversized because the arena was half the size
+it should be, and waves bunched into the middle because they spawned on a
+circle of the smaller half-extent (they use an ellipse now, one radius per
+axis, or the wide ends of the room stay empty).
+
+Two deliberate DIVERGENCES from the source, both recorded because they are
+choices rather than drift:
+
+1. **The floor grid is emissive-on-lit, not `MeshBasicMaterial` unlit.** The
+   lines glow and bloom identically, but the plane still receives the cast
+   shadows this port has, and a body's contact shadow is most of how you read
+   where it actually is on the plane.
+2. **The eyes sit ON the body surface, not inside it.** The browser can embed
+   them at 0.4 of a 0.5 radius because its player is transmissive gel; this
+   port's gel is opaque, which is what buys it real SSS, so embedded eyes
+   render as nothing at all (the first attempt was a blank white ball).
+
+Still different, and still open: the browser's per-species **motion trails**
+(the streak marks the swarm leaves on the floor — `TRAIL_CFG` in `enemy.js`,
+and item 7 below), and its HUD layout (WAVE plus a wave-progress bar top-left
+with HP pips beneath it, score top-right; this port runs HP / WAVE / SCORE
+across one top row).
+
 ## What the first render showed (2026-08-24)
 
 Fixed in the same pass: the HUD layout bug, camera framing (now derived from
@@ -171,13 +214,10 @@ edge.
 
 Still open, in the order they hurt:
 
-1. **The player has no identity.** It is a white sphere, roughly the visual
-   weight of its own bullets, and hard to tell from a GLOBBO at a glance. The
-   browser build gives it Kirby-style black oval eyes with white reflection
-   dots that track the aim direction (`js/player.js` `_eyeL`/`_eyeR`) — cheap
-   to port and it is most of what makes the hero read as the hero.
-2. **The floor is a featureless slab.** Nothing to read swarm flow against —
-   `PORT_BRIEF.md` §6's arena pass.
+~~1. **The player has no identity.**~~ **Done** — eyes ported, see above.
+
+~~2. **The floor is a featureless slab.**~~ **Done** — the browser's neon grid
+   is ported, which was `PORT_BRIEF.md` §6's arena pass in its shipped form.
 
 ## Known gaps / deliberate simplifications
 

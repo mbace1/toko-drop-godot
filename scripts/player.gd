@@ -30,6 +30,16 @@ const HIT_RIM := Color(1.0, 0.15, 0.0)
 const MERCY_BLINK_HZ := 12.0
 const DASH_BLINK_HZ := 22.0
 
+# js/player.js sits the eyes at ed 0.4 forward / es 0.14 lateral / +0.16 up —
+# INSIDE a radius-0.5 body, which works there because the browser's player is a
+# transmissive gel you can see into. This port's gel is opaque (that is what
+# buys it real SSS — see gel.gdshader), so embedded eyes are simply invisible;
+# the first attempt rendered a blank white ball. They are placed ON the surface
+# here instead: an angle up from the aim vector, and an angle either side of it.
+const EYE_TILT := 0.42     # radians above the aim vector — into the camera
+const EYE_SPREAD := 0.34   # radians either side
+const EYE_SURFACE := 0.97  # fraction of RADIUS, so the eye breaks the surface
+
 var hp := MAX_HP
 var max_hp := MAX_HP
 var alive := false
@@ -46,6 +56,8 @@ var _sqv := 0.0
 
 var mesh: MeshInstance3D
 var mat: ShaderMaterial
+var _eye_l: Node3D
+var _eye_r: Node3D
 var _built := false
 
 var invincible: bool:
@@ -81,7 +93,75 @@ func build() -> void:
 	mat.set_shader_parameter("backlight_amt", 0.28)
 	mesh.material_override = mat
 	add_child(mesh)
+	_build_eyes()
 	reset()
+
+## Kirby-style eyes, from js/player.js. They are the hero's whole identity —
+## without them the player is a pale sphere with the visual weight of its own
+## bullets, which is exactly how the first renders read. Numbers are the
+## source's: SphereGeometry(0.13) scaled (0.55, 1.15, 0.4) in near-black, each
+## carrying a small white reflection dot, sat EYE_FWD along the aim vector and
+## EYE_SEP either side of it.
+##
+## Children of the Player node rather than of `mesh`, so the spring squash
+## never stretches them.
+func _build_eyes() -> void:
+	_eye_l = _make_eye()
+	_eye_r = _make_eye()
+	add_child(_eye_l)
+	add_child(_eye_r)
+
+func _make_eye() -> Node3D:
+	var holder := Node3D.new()
+
+	var sm := SphereMesh.new()
+	sm.radius = 0.13
+	sm.height = 0.26
+	sm.radial_segments = 10
+	sm.rings = 6
+	var eye := MeshInstance3D.new()
+	eye.mesh = sm
+	eye.scale = Vector3(0.55, 1.15, 0.4)
+	var em := StandardMaterial3D.new()
+	em.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	em.albedo_color = Color(0.067, 0.067, 0.067)
+	eye.material_override = em
+	eye.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(eye)
+
+	var rm := SphereMesh.new()
+	rm.radius = 0.042
+	rm.height = 0.084
+	rm.radial_segments = 6
+	rm.rings = 4
+	var refl := MeshInstance3D.new()
+	refl.mesh = rm
+	refl.position = Vector3(0.04, 0.05, -0.025)
+	var rmat := StandardMaterial3D.new()
+	rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rmat.albedo_color = Color.WHITE
+	refl.material_override = rmat
+	refl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(refl)
+
+	return holder
+
+## Sits the eyes on the front of the body along the current aim, so the hero
+## visibly LOOKS where it is shooting.
+func _place_eyes() -> void:
+	var fwd := Vector3(_last_aim.x, 0.0, _last_aim.y).normalized()
+	var perp := Vector3(-fwd.z, 0.0, fwd.x)
+	# Tilt the look direction up out of the floor plane so the eyes face the
+	# camera rather than the far wall, then swing one each way around it.
+	var look := (fwd * cos(EYE_TILT) + Vector3.UP * sin(EYE_TILT)).normalized()
+	var r := RADIUS * EYE_SURFACE
+	var ang := atan2(fwd.x, fwd.z)
+	for pair in [[_eye_l, 1.0], [_eye_r, -1.0]]:
+		var node: Node3D = pair[0]
+		var side: float = pair[1]
+		var dir := (look * cos(EYE_SPREAD) + perp * (side * sin(EYE_SPREAD))).normalized()
+		node.position = dir * r
+		node.rotation.y = ang
 
 func reset() -> void:
 	hp = MAX_HP
@@ -163,6 +243,7 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 	_sq = clampf(_sq + _sqv, 0.55, 1.55)
 	var sxz := 1.0 / sqrt(maxf(_sq, 0.1))
 	mesh.scale = Vector3(sxz, _sq, sxz)
+	_place_eyes()
 
 	var aim_valid: bool = aim["valid"]
 	if aim_valid and _fire_t <= 0.0:
@@ -177,13 +258,20 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 	mat.set_shader_parameter("wobble_time", Time.get_ticks_msec() / 1000.0)
 
 ## Square on/off blink driven off the remaining timer, so it always ends ON.
+## The eyes blink WITH the body — a pair of eyes hanging in the air over a
+## vanished hero looks like a bug, not like invulnerability.
 func _blink(t_left: float, hz: float) -> void:
-	mesh.visible = int(t_left * hz) % 2 == 0
+	var on := int(t_left * hz) % 2 == 0
+	mesh.visible = on
+	_eye_l.visible = on
+	_eye_r.visible = on
 
 func _show() -> void:
 	mesh.visible = true
+	_eye_l.visible = true
+	_eye_r.visible = true
 	mat.set_shader_parameter("alpha_amt", 1.0)
 
 func die() -> void:
 	alive = false
-	visible = false
+	visible = false   # the eyes are children, so they go with it
