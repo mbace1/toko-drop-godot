@@ -330,6 +330,14 @@ func _process(delta: float) -> void:
 			_process_playing(delta)
 		State.MENU, State.DEAD:
 			# Up/down walks the mode rows; anything else starts the run.
+			# Left/right picks the Rush ability, so the choice is made before
+			# the run rather than mid-fight.
+			if MODE_ROWS[_menu_row]["mode"] == Mode.RUSH \
+					and (Input.is_action_just_pressed("move_left") \
+					or Input.is_action_just_pressed("move_right")):
+				rush.cycle_ability(1 if Input.is_action_just_pressed("move_right") else -1)
+				_msg_label.text = _menu_text()
+				return
 			if Input.is_action_just_pressed("move_down"):
 				_menu_row = mini(_menu_row + 1, MODE_ROWS.size() - 1)
 				_msg_label.text = _menu_text()
@@ -372,39 +380,13 @@ func _process_playing(delta: float) -> void:
 			var dz := b.z - e.position.z
 			var r := e.radius + 0.15
 			if dx * dx + dz * dz < r * r:
+				# QUANTUM SHIELD turns incoming fire into outgoing fire. It is
+				# the one ability that pays you for standing and shooting.
+				if mode == Mode.RUSH and rush.reflecting():
+					bullets.spawn_dir(b.x, b.z, -b.vx, -b.vz, true)
+					b.alive = false
+					continue
 				b.alive = false
-				var was_max := e.max_hp
-				if e.take_hit(1):
-					audio.play_varied("kill")
-					score += 100 * was_max   # tougher bodies are worth more
-				else:
-					audio.play_varied("hit")
-
-	# Rush: boosting THROUGH a body kills it and chains the multiplier,
-	# instead of costing a life. This one branch is the whole mode.
-	if mode == Mode.RUSH and rush.boosting and player.alive:
-		for e in waves.enemies:
-			if not is_instance_valid(e) or not e.alive:
-				continue
-			var bdx := e.position.x - player.position.x
-			var bdz := e.position.z - player.position.z
-			var br := e.radius + Player.RADIUS
-			if bdx * bdx + bdz * bdz < br * br:
-				var bmax := e.max_hp
-				if e.take_hit(99):
-					rush.add_boost_kill()
-					score += rush.award(100 * bmax)
-					audio.play_varied("kill")
-
-	# Enemy contact vs. player.
-	if player.alive and not player.invincible:
-		for e in waves.enemies:
-			if not is_instance_valid(e) or not e.alive:
-				continue
-			var dx := e.position.x - player.position.x
-			var dz := e.position.z - player.position.z
-			var r := e.radius + Player.RADIUS
-			if dx * dx + dz * dz < r * r:
 				_damage_player()
 				break
 
@@ -445,6 +427,7 @@ func _damage_player() -> void:
 func _process_rush(delta: float, firing: bool) -> void:
 	input_mgr.poll_edges()
 	rush.update(delta, input_mgr.boost_held(), firing)
+	waves.level_override = rush.level
 
 	player.rush_shotgun = true
 	player.rush_speed_mult = rush.speed_mult()
@@ -453,28 +436,39 @@ func _process_rush(delta: float, firing: bool) -> void:
 	player.rush_invuln = rush.invulnerable(firing)
 
 	if input_mgr.ability_pressed():
-		var r := rush.fire_ability()
-		if r > 0.0:
-			audio.play("dead")
-			for e in waves.enemies:
-				if not is_instance_valid(e) or not e.alive:
-					continue
-				var ax := e.position.x - player.position.x
-				var az := e.position.z - player.position.z
-				if ax * ax + az * az < r * r:
-					var m := e.max_hp
-					if e.take_hit(99):
-						rush.add_boost_kill()
-						score += rush.award(100 * m)
+		_fire_ability()
 
 	if rush.note_score(score):
 		audio.play("wave")
+
+## Fires the selected ability. "burst" kinds damage everything in a radius;
+## "buff" kinds just start a window that other systems read (OVERCHARGE is
+## read by RushRules itself, QUANTUM SHIELD by the bullet loop below).
+func _fire_ability() -> void:
+	var r := rush.fire_ability()
+	if r < 0.0:
+		return                     # not charged, or not hot enough
+	if r == 0.0:
+		audio.play("wave")         # a buff started
+		return
+	audio.play("dead")
+	for e in waves.enemies:
+		if not is_instance_valid(e) or not e.alive:
+			continue
+		var dx := e.position.x - player.position.x
+		var dz := e.position.z - player.position.z
+		if dx * dx + dz * dz < r * r:
+			var m := e.max_hp
+			if e.take_hit(99):
+				rush.add_boost_kill()
+				score += rush.award(100 * m)
 
 func _start_game() -> void:
 	state = State.PLAYING
 	score = 0
 	input_mgr.reset()
 	input_mgr.set_rush(mode == Mode.RUSH)
+	waves.level_override = 0
 	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
 	rush.reset()
 	player.rush_shotgun = mode == Mode.RUSH
@@ -513,6 +507,12 @@ func _on_player_dead() -> void:
 
 func _show_menu() -> void:
 	state = State.MENU
+	# Park the caret on the first PLAYABLE row rather than on a "SOON" one, so
+	# pressing start does what the highlighted line says it will.
+	for r in MODE_ROWS.size():
+		if MODE_ROWS[r]["ready"]:
+			_menu_row = r
+			break
 	_msg_label.text = _menu_text()
 	_msg_label.show()
 
@@ -529,8 +529,14 @@ func _menu_text() -> String:
 			state_txt = "SOON"
 		out.append("%s  %s: %s" % [caret, row["label"], state_txt])
 		out.append("     %s" % row["note"])
+		if row["mode"] == Mode.RUSH:
+			# The < > only appear on the SELECTED row: arrows you cannot press
+			# yet read as a control that is broken.
+			var pick := "< %s >" if i == _menu_row else "  %s  "
+			out.append("     " + (pick % rush.ability_name()) + "  " + rush.ability_blurb())
 	out.append("")
-	out.append("touch \u2014 left thumb moves, right thumb aims, release to dash")
+	out.append("touch — left thumb moves, right thumb aims and fires")
+	out.append("rush — hold BOOST to kill on contact; firing drops your shield")
 	out.append("keys \u2014 WASD move, hold LMB to aim and fire, SPACE dash")
 	out.append("pad \u2014 sticks move and aim, A dash, Start pause")
 	out.append("")
@@ -560,7 +566,7 @@ func _update_hud() -> void:
 		# second FULL bar; a middle dot leaves the empty run obviously empty.
 		var bar := "█".repeat(pips) + "·".repeat(10 - pips)
 		var heat_txt := "OVERHEAT" if rush.overheated_now else "HEAT " + bar
-		var ab := "   HEAT EXCHANGE READY" if rush.ability_ready() else ""
+		var ab := "   " + rush.ability_name() + " READY" if rush.ability_ready() else ""
 		_rush_label.text = "%s    x%d%s" % [heat_txt, rush.multiplier, ab]
 	else:
 		_hp_label.text = "HP " + "●".repeat(maxi(player.hp, 0)) + "○".repeat(maxi(player.max_hp - player.hp, 0))

@@ -67,6 +67,10 @@ const REV_RING_BIG_RADIUS := 0.75
 const REV_POOL_GUARD := 240
 
 var wave := 0
+## Rush Mode drives difficulty from its own LEVEL rather than from how many
+## waves have been cleared, so that levelling down actually makes the next
+## wave easier. 0 = off (classic uses `wave`).
+var level_override := 0
 var half_x := 9.0
 var half_z := 9.0
 var target: Node3D
@@ -93,14 +97,20 @@ func shooter_cap_for(w: int) -> int:
 func body_cap_for(w: int) -> int:
 	return mini(BODY_CAP_MAX, BODY_CAP_BASE + BODY_CAP_PER * w)
 
+## The number difficulty is read from: the Rush level when one is set,
+## otherwise the wave count.
+func difficulty() -> int:
+	return level_override if level_override > 0 else wave
+
 func start_wave() -> void:
 	wave += 1
-	var budget := budget_for(wave)
-	var shooters_left := shooter_cap_for(wave)
-	var bodies_left := body_cap_for(wave)
+	var d := difficulty()
+	var budget := budget_for(d)
+	var shooters_left := shooter_cap_for(d)
+	var bodies_left := body_cap_for(d)
 
 	var picks: Array[String] = []
-	var eligible := _eligible_for(wave)
+	var eligible := _eligible_for(d)
 	# Spend the budget. Bail out when nothing affordable is left rather than
 	# looping forever on an unspendable remainder.
 	while budget > 0.0 and bodies_left > 0:

@@ -350,22 +350,78 @@ func _test_rush_rules(root: Node3D) -> void:
 		r.update(1.0, false, false)
 	_check(r.level == 2, "surviving the clock levels you up")
 
-	# --- Heat Exchange: spends the heat you built --------------------------
+	# --- the four abilities, each bending the triangle differently ---------
 	r.reset()
-	_check(not r.ability_ready(), "the ability is not ready from cold")
-	r.ability_charge = RushRules.ABILITY_CHARGE_SEC
+	r.ability = RushRules.Ability.HEAT_EXCHANGE
+	_check(not r.ability_ready(), "an ability is not ready from cold")
+	_check(r.fire_ability() < 0.0, "firing it unready reports failure")
+
+	r.ability_charge = r.charge_time()
+	_check(not r.ability_ready(), "HEAT EXCHANGE also needs HEAT, not just charge")
 	r.heat = 0.8
 	_check(r.ability_ready(), "charged and hot, it is ready")
 	var rad := r.fire_ability()
-	_check(rad > RushRules.ABILITY_RADIUS_BASE, "its radius scales with the heat spent")
+	_check(rad > 2.6, "its radius scales with the heat spent (%.1f)" % rad)
 	_check(is_equal_approx(r.heat, 0.0), "and it dumps the heat")
+	_check(not r.boost_blocked, "which also clears an overheat lock")
 	_check(not r.ability_ready(), "it needs recharging afterwards")
+
+	# HYPER BOMB is the panic button: wide, and it costs no heat at all.
+	r.reset()
+	r.ability = RushRules.Ability.HYPER_BOMB
+	r.ability_charge = r.charge_time()
+	_check(r.ability_ready(), "HYPER BOMB is ready with no heat at all")
+	r.heat = 0.6
+	var bomb := r.fire_ability()
+	_check(bomb > rad, "HYPER BOMB clears wider than HEAT EXCHANGE")
+	_check(is_equal_approx(r.heat, 0.6), "and it does NOT spend your heat")
+
+	# OVERCHARGE: boosting stops costing anything, and the chain climbs double.
+	r.reset()
+	r.ability = RushRules.Ability.OVERCHARGE
+	r.ability_charge = r.charge_time()
+	_check(is_equal_approx(r.fire_ability(), 0.0), "a buff ability returns no radius")
+	_check(r.buff_active() and r.overcharged(), "OVERCHARGE starts a window")
+	var h_before := r.heat
+	for i in 30:
+		r.update(1.0 / 60.0, true, true)
+	_check(is_equal_approx(r.heat, h_before), "boosting is FREE while overcharged")
+	r.add_boost_kill()
+	_check(r.multiplier == 3, "and the chain climbs double (+2)")
+	for i in 500:
+		r.update(1.0 / 60.0, false, false)
+	_check(not r.buff_active(), "the window closes on its own")
+
+	# QUANTUM SHIELD: the reflect window. main.gd reads reflecting().
+	r.reset()
+	r.ability = RushRules.Ability.QUANTUM_SHIELD
+	r.ability_charge = r.charge_time()
+	r.fire_ability()
+	_check(r.reflecting(), "QUANTUM SHIELD starts a reflect window")
+	_check(not r.overcharged(), "and is not confused with OVERCHARGE")
+
+	# Cycling wraps, so a single input can walk the whole list.
+	r.ability = RushRules.Ability.HEAT_EXCHANGE
+	r.cycle_ability(-1)
+	_check(r.ability == RushRules.Ability.QUANTUM_SHIELD, "ability selection wraps")
+	r.cycle_ability(1)
+	_check(r.ability == RushRules.Ability.HEAT_EXCHANGE, "and wraps back")
 
 	# --- extra lives -------------------------------------------------------
 	r.reset()
 	_check(not r.note_score(10), "a small score earns nothing")
 	_check(r.note_score(RushRules.EXTRA_LIFE_EVERY), "crossing the threshold grants a life")
 	_check(r.lives == RushRules.LIVES_START + 1, "and the life is real")
+
+	# --- Rush levels drive the wave director ------------------------------
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+	wd.wave = 9
+	_check(wd.difficulty() == 9, "with no override the director reads its wave count")
+	wd.level_override = 3
+	_check(wd.difficulty() == 3, "a Rush level overrides it")
+	_check(wd.budget_for(wd.difficulty()) < wd.budget_for(9),
+		"so levelling DOWN really does make the next wave easier")
 
 func _test_wave_budget(root: Node3D) -> void:
 	var wd := WaveDirector.new()

@@ -116,7 +116,9 @@ target is `PORT_BRIEF.md`.
   contact and builds a chain — but **firing cancels the shield**, and boosting
   heats you until it locks out. The weapon is a shotgun. Lives, not HP.
   Difficulty levels run 60s/90s/longer and move DOWN when you lose a life.
-  Heat Exchange dumps stored heat as a burn.
+  Four selectable abilities (Heat Exchange, Hyper Bomb, Overcharge, Quantum
+  Shield), and levels drive the wave director's composition so levelling down
+  really is easier.
 - Built from research into Blade Rush (Noba, 2025) — its Steam patch notes
   state the intent outright: *"prioritising boosting over shooting"*, and
   *"boost invulnerability ends... from disabling it by shooting"*.
@@ -154,7 +156,7 @@ target is `PORT_BRIEF.md`.
   §6**, "biggest single jump, near-free".
 
 **Testing**
-- `tests/smoke.gd` — 109 checks, bare `SceneTree`, no GPU. Run before every
+- `tests/smoke.gd` — 127 checks, bare `SceneTree`, no GPU. Run before every
   commit touching `scripts/`.
 - `tools/capture.gd` — screenshots the REAL game on a GPU. This is the other
   half of the gate and it is not optional: the source repo's own recorded

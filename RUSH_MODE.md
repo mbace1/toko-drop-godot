@@ -163,9 +163,22 @@ Three more things the notes revealed:
   mercy window, so one frame can never cost two.
 - **Levels** — 60s, 90s, then +30s each. Losing a life **levels you down**,
   per the researched up/down behaviour.
-- **Heat Exchange** — charges over 12s; needs heat >= 0.25. Dumps all stored
-  heat as a burn whose radius scales with the heat spent, and clears the
-  overheat lock. Running hot becomes a choice rather than only a risk.
+- **Four abilities**, one chosen before the run (left/right on the RUSH row).
+  Each bends the boost/shoot/heat triangle a different way, which is the whole
+  point — picking one should change how you play, not just what you press:
+
+  | ability | charge | what it does |
+  |---|---|---|
+  | **HEAT EXCHANGE** | 12s + heat | dumps stored heat as a burn scaled by it, and clears the overheat lock. Rewards running hot. |
+  | **HYPER BOMB** | 18s | a wide clear (8.5u) that costs no heat at all. The panic button. |
+  | **OVERCHARGE** | 20s | 6s where boosting and firing are FREE (no heat) and the chain climbs **double**. Rewards already being safe. |
+  | **QUANTUM SHIELD** | 16s | 5s where enemy fire is **reflected back as yours**. The only one that pays you for standing and shooting. |
+
+- **Levels drive composition, not just a clock.** `WaveDirector.level_override`
+  makes the Rush level the number the budget, shooter cap and eligible-type
+  tables are read from — so levelling *down* after losing a life genuinely
+  makes the next wave easier, which is what makes a two-way difficulty mean
+  anything.
 - **Touch** — both schemes, live-switchable from a corner target:
   **RIM** (push the move stick past 86% of its travel) and **ZONE** (a pad in
   the left margin). Ability pad on the right, mirroring it.
@@ -185,8 +198,8 @@ Three more things the notes revealed:
    classic does?
 4. **Boost has no cost besides heat.** Blade Rush's boost may also be limited
    by a separate meter — the achievements do not say.
-5. **The other three abilities** (Hyper Bomb, Overcharge, Quantum Shielding)
-   are unbuilt, as is any way to *choose* one.
+5. **Abilities are unlocked in Blade Rush**, not available from the start.
+   Everything here is unlocked from the first run.
 6. **Mutators, Boss Rush, Onslaught, events, ranks** — all seen in the
    research, none in scope yet.
 7. **Name** — still "Rush Mode", which is Blade Rush's own mode name.
