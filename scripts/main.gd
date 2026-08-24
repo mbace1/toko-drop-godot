@@ -35,6 +35,9 @@ var bullets: BulletPool
 var waves: WaveDirector
 var input_mgr: InputManager
 var camera: Camera3D
+var audio: AudioKit
+var save: SaveService
+var sticks: TouchSticks
 
 var _floor_mat: ShaderMaterial
 var hud: CanvasLayer
@@ -71,6 +74,15 @@ func _ready() -> void:
 	input_mgr = InputManager.new()
 	input_mgr.camera = camera
 	add_child(input_mgr)
+
+	audio = AudioKit.new()
+	add_child(audio)
+	audio.build()
+	player.on_shoot = func(): audio.play_varied("fire")
+
+	save = SaveService.new()
+	add_child(save)
+	save.load_state()
 
 	_setup_hud()
 	_show_menu()
@@ -255,6 +267,10 @@ func _setup_hud() -> void:
 	_msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud.add_child(_msg_label)
 
+	sticks = TouchSticks.new()
+	sticks.input_mgr = input_mgr
+	hud.add_child(sticks)
+
 func _make_label(font_size: int) -> Label:
 	var l := Label.new()
 	l.add_theme_font_size_override("font_size", font_size)
@@ -279,7 +295,10 @@ func _process(delta: float) -> void:
 		State.PLAYING:
 			_process_playing(delta)
 		State.MENU, State.DEAD:
-			if input_mgr.dash_pressed() or Input.is_action_just_pressed("fire"):
+			# A touch anywhere starts a run: on a phone there is no FIRE key, and
+			# the dash edge only fires on RELEASE of the aim stick.
+			if input_mgr.dash_pressed() or Input.is_action_just_pressed("fire") \
+					or input_mgr.left.active or input_mgr.right.active:
 				_start_game()
 
 	_update_hud()
@@ -289,7 +308,10 @@ func _process_playing(delta: float) -> void:
 	var aim := input_mgr.get_aim_dir(player.position)
 
 	if input_mgr.dash_pressed():
+		var was_ready := player.can_dash()
 		player.dash(aim)
+		if was_ready:
+			audio.play("dash")
 
 	player.update(delta, move, aim, bullets, HALF_X, HALF_Z)
 	bullets.update(delta, maxf(HALF_X, HALF_Z))
@@ -309,7 +331,10 @@ func _process_playing(delta: float) -> void:
 				b.alive = false
 				var was_max := e.max_hp
 				if e.take_hit(1):
+					audio.play_varied("kill")
 					score += 100 * was_max   # tougher bodies are worth more
+				else:
+					audio.play_varied("hit")
 
 	# Enemy contact vs. player.
 	if player.alive and not player.invincible:
@@ -321,6 +346,7 @@ func _process_playing(delta: float) -> void:
 			var r := e.radius + Player.RADIUS
 			if dx * dx + dz * dz < r * r:
 				player.hit()
+				audio.play("player")
 				break
 
 	# Enemy bullets vs. player. Checked after contact so a single frame can
@@ -336,6 +362,7 @@ func _process_playing(delta: float) -> void:
 			if dx * dx + dz * dz < r * r:
 				b.alive = false
 				player.hit()
+				audio.play("player")
 				break
 
 	if not player.alive:
@@ -344,24 +371,49 @@ func _process_playing(delta: float) -> void:
 func _start_game() -> void:
 	state = State.PLAYING
 	score = 0
+	input_mgr.reset()
+	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
 	player.reset()
 	waves.clear()
 	bullets.clear()
 	waves.start_wave()
 	_msg_label.hide()
 
+## Capture-only: fast-forward the director so tools/capture.gd can photograph
+## later waves. Never called by the game itself.
+func _capture_seek_wave(n: int) -> void:
+	waves.clear()
+	waves.wave = maxi(n - 1, 0)
+	waves.start_wave()
+
 func _on_wave_cleared(n: int) -> void:
 	score += 50 * n
+	audio.play("wave")
 	waves.start_wave()
 
 func _on_player_dead() -> void:
 	state = State.DEAD
-	_msg_label.text = "YOU DIED\n\nscore %d — wave %d\n\npress FIRE or DASH to retry" % [score, waves.wave]
+	audio.play("dead")
+	input_mgr.reset()   # a finger still down must not steer the next run
+	var best := save.record(score, waves.wave)
+	var out := ["YOU DIED", "", "score %d — wave %d" % [score, waves.wave]]
+	out.append("NEW BEST!" if best else "best %d" % save.hi_score)
+	var recent := save.recent_line()
+	if recent != "":
+		out.append(recent)
+	out.append("")
+	out.append("tap, or press FIRE / DASH, to retry")
+	_msg_label.text = "\n".join(out)
 	_msg_label.show()
 
 func _show_menu() -> void:
 	state = State.MENU
-	_msg_label.text = "TOKO DROP\n\nWASD / left stick — move\nhold FIRE (LMB) + aim with mouse, or right stick — shoot\nSPACE / A — dash (i-frames)\nESC / Start — pause\n\npress FIRE or DASH to start"
+	_msg_label.text = "TOKO DROP\n\ntwin-stick swarm survival\n\n" \
+		+ "touch — left thumb moves, right thumb aims, release to dash\n" \
+		+ "keys — WASD move, hold LMB to aim and fire, SPACE dash, ESC pause\n" \
+		+ "pad — sticks move and aim, A dash, Start pause\n\n" \
+		+ ("best %d\n\n" % save.hi_score if save.hi_score > 0 else "") \
+		+ "tap, or press FIRE / DASH, to start"
 	_msg_label.show()
 
 func _update_hud() -> void:
@@ -369,4 +421,5 @@ func _update_hud() -> void:
 		return
 	_hp_label.text = "HP " + "●".repeat(maxi(player.hp, 0)) + "○".repeat(maxi(player.max_hp - player.hp, 0))
 	_wave_label.text = "WAVE %d" % waves.wave
-	_score_label.text = "SCORE %d" % score
+	_score_label.text = ("SCORE %d" % score) if save.hi_score <= 0 \
+		else ("SCORE %d   BEST %d" % [score, save.hi_score])

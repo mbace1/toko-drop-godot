@@ -56,6 +56,10 @@ var _sqv := 0.0
 
 var mesh: MeshInstance3D
 var mat: ShaderMaterial
+## Fired on every shot, so main.gd can hang the gun sound off it without the
+## player knowing an audio kit exists (js/player.js has the same hook).
+var on_shoot: Callable = Callable()
+
 var _eye_l: Node3D
 var _eye_r: Node3D
 var _built := false
@@ -191,6 +195,12 @@ func hit() -> void:
 	_dash_time = 0.0
 	_sqv -= 0.9
 
+## True when a dash would actually happen. main.gd asks BEFORE calling dash()
+## so it only plays the sound on a real dash, never on a press swallowed by the
+## cooldown — a whoosh with no movement reads as an input that was dropped.
+func can_dash() -> bool:
+	return alive and _dash_time <= 0.0 and _dash_cd <= 0.0
+
 func dash(aim: Dictionary) -> void:
 	if _dash_time > 0.0 or _dash_cd > 0.0:
 		return
@@ -253,6 +263,8 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 		var ox: float = position.x + ax * (RADIUS + 0.3)
 		var oz: float = position.z + az * (RADIUS + 0.3)
 		bullets.spawn_dir(ox, oz, ax, az, true)
+		if on_shoot.is_valid():
+			on_shoot.call()
 		_fire_t = FIRE_RATE
 
 	mat.set_shader_parameter("wobble_time", Time.get_ticks_msec() / 1000.0)

@@ -29,7 +29,30 @@ target is `PORT_BRIEF.md`.
 - Game states (menu/playing/paused/dead), collision loop, HP/wave/score
   HUD — `scripts/main.gd`.
 
-**Enemies** (4 of ~40 in the live roster — `js/tuning.js` names all 40)
+**Input, sound and meta**
+- **Touch — the browser's dual virtual sticks** (`scripts/input_manager.gd` +
+  `touch_sticks.gd`). The screen splits down the middle; a finger on the left
+  half plants a move stick where it landed, a finger on the right plants an aim
+  stick that auto-fires, and RELEASING the aim stick is the dash. Nothing is a
+  fixed button, so a stick is always under the thumb that reached for it.
+  TOKO_DROP_ROADMAP.md §Guiding constraints: *"Mobile touch is first-class.
+  Every feature ships with a touch answer."* — the port was breaking that rule
+  outright until now.
+- **Audio, synthesised at load** (`scripts/audio_kit.gd`). Eight voices, each
+  an oscillator sweep under an exponential envelope baked into an
+  `AudioStreamWAV` at startup. `js/audio.js` is all-synth WebAudio with no
+  sample files, and the house rule across this codebase is that sound is
+  generated, never sampled — so there is nothing to license and no binary in
+  the repo. The gun sits at 0.10 gain deliberately: at ~11 shots a second it
+  becomes the mix otherwise.
+- **Hi-score and run history** (`scripts/save_service.gd`), the local-bests
+  half of TOKO_DROP_ROADMAP.md Phase 4. `user://` stands in for localStorage;
+  last 10 runs newest-first, and the death screen's "recent" line skips index 0
+  because that is the run you are already reading the big number for. Nothing
+  leaves the machine — no leaderboard, no network call. The daily seed is still
+  open.
+
+**Enemies** (6 of ~40 in the live roster — `js/tuning.js` names all 40)
 - GLOBBO — chaser blob. Two behaviours stack: the lunging speed-pulse
   `speed × (max(0,sin(t·3+φ))² · 2.6 + 0.4)` (`TOKO_DROP_PORT_BRIEF.md`
   Part 2 / tuning.js line 43) **and** the stalk→crouch→leap pounce state
@@ -49,6 +72,16 @@ target is `PORT_BRIEF.md`.
   direction every 2.5–3.5s; rocks as it circles. Fires 6 shots across 0.6π,
   but **every third volley** is a wide 9 across 0.95π — "a heavier beat"
   (`enemy.js` line 2590). `scripts/fanner.gd`. Stats from `enemy.js` line 488.
+
+- ORANGE_CUBE — flops toward you on the cube's eight-way grid, then throws a
+  **wall**: six shots side by side, all travelling the same snapped compass
+  direction, so you go around it rather than between the shots (`enemy.js`
+  line 2046). Stats from `enemy.js` line 493.
+- WEEVA — a drifting spiral turret, and the first ported enemy with **no
+  wind-up**: `fireInterval` 0.16 is a STREAM, not a volley, each shot rotated
+  `0.38` rad past the last. A telegraph on that cadence would be permanently
+  lit and would say nothing. Weaves while slowly closing (`enemy.js` line
+  1958). Stats from `enemy.js` line 489.
 
 **Ranged combat**
 - Enemy-fired bullets through the same `BulletPool`, and enemy-bullet-vs-
@@ -107,7 +140,7 @@ target is `PORT_BRIEF.md`.
   §6**, "biggest single jump, near-free".
 
 **Testing**
-- `tests/smoke.gd` — 55 checks, bare `SceneTree`, no GPU. Run before every
+- `tests/smoke.gd` — 78 checks, bare `SceneTree`, no GPU. Run before every
   commit touching `scripts/`.
 - `tools/capture.gd` — screenshots the REAL game on a GPU. This is the other
   half of the gate and it is not optional: the source repo's own recorded
@@ -126,14 +159,12 @@ target is `PORT_BRIEF.md`.
 Gameplay breadth first (each item is small and mostly mechanical), then the
 visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
 
-1. **More enemy types.** The shooter scaffolding now exists, so the next ones
-   are mostly table work: ORANGE_CUBE (cube + the 8-way-snapped "bullet wall"
-   of `enemy.js` line 2046), WEEVA (drifting spiral turret, fireInterval 0.16
-   — a stream, not a volley), SLUDGE_CUBE and SPLITTA (the latter needs
-   child-spawning on death, which is new machinery). TORO is the big one —
-   wheel body + exact telegraph, `TOKO_DROP_PORT_BRIEF.md` Part 4 — and
-   BAMBU needs the landing-ring lob (Part 5), the one genuinely new
-   gameplay affordance in that document.
+1. **More enemy types.** Wave 3 next: SLUDGE_CUBE (slow MASS + poison trail)
+   and SPLITTA, which needs child-spawning-on-death machinery that
+   REDD_CUBE and PURP_CUBE then reuse. TORO is the big one — wheel body +
+   exact telegraph, `TOKO_DROP_PORT_BRIEF.md` Part 4 — and BAMBU needs the
+   landing-ring lob (Part 5), the one genuinely new gameplay affordance in
+   that document.
 2. **Kill particles.** The pop and the revenge volley are in; the *debris*
    is not — `TUNING.fx.killDroplets` 22 / `killChunks` 5, plus the splat
    decal they leave. Worth doing as `GPUParticles3D` straight away rather

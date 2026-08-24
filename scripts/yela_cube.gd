@@ -35,11 +35,17 @@ func update(delta: float) -> void:
 			_flop_t = 0.0
 			_state = FlopState.FLOP
 
-func _pick_dir() -> void:
+## Which way the next flop goes. YELA picks at random, half the time on a
+## diagonal ("YELA 50% diagonals", TOKO_DROP_PORT_BRIEF Part 3); subclasses
+## override to flop with intent — see orange_cube.gd.
+func _choose_angle() -> float:
 	var diag := randf() < 0.5
 	var angles := [PI / 4.0, 3.0 * PI / 4.0, -PI / 4.0, -3.0 * PI / 4.0] if diag \
 		else [0.0, PI / 2.0, PI, -PI / 2.0]
-	var a: float = angles[randi() % angles.size()]
+	return angles[randi() % angles.size()]
+
+func _pick_dir() -> void:
+	var a := _choose_angle()
 	_dir = Vector2(cos(a), sin(a))
 	var l := radius
 	var cycle := (2.0 * l) / maxf(speed, 0.1)

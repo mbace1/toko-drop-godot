@@ -33,6 +33,10 @@ func _init() -> void:
 	# Drop straight into a run rather than sitting on the menu — the menu is
 	# not the thing being judged.
 	_main.call_deferred("_start_game")
+	# Jump the director forward so wave-2+ types appear in the shots.
+	var w := int(OS.get_cmdline_user_args()[2]) if OS.get_cmdline_user_args().size() > 2 else 0
+	if w > 0:
+		_main.call_deferred("_capture_seek_wave", w)
 
 func _process(_delta: float) -> bool:
 	_frame += 1

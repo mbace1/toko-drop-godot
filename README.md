@@ -15,12 +15,13 @@ repo's own Godot dispatch brief and stays canon for material/shader work).
 
 ## Status
 
-Playable vertical slice: twin-stick movement, dash with i-frames, shooting
-both ways, four enemy types (GLOBBO pouncer, YELA_CUBE flopper, and the
-ranged SPITTOR and FANNER), a budget-based wave director with a shooter cap,
-death pops with **revenge volleys** (corpses bite back, in their own species'
-attack language and their own palette), HP/wave/score HUD, and one shared gel
-shader doing real subsurface scattering. Full detail and the ordered list of
+Playable vertical slice: twin-stick movement on **touch, keyboard+mouse or
+gamepad**, dash with i-frames, shooting both ways, six enemy types (GLOBBO
+pouncer, YELA_CUBE flopper, and the ranged SPITTOR, FANNER, ORANGE_CUBE and
+WEEVA), a budget-based wave director with a shooter cap, death pops with
+**revenge volleys** (corpses bite back, in their own species' attack language
+and their own palette), a synthesised sound kit, saved hi-score and run
+history, and one shared gel shader doing real subsurface scattering. Full detail and the ordered list of
 what's next: `PORT_STATUS.md`.
 
 ## Running it
@@ -32,9 +33,15 @@ command line:
 godot --path . scenes/main.tscn
 ```
 
-**Controls** — desktop: WASD move, hold left mouse + aim with the mouse to
-shoot, Space to dash, Esc to pause. Gamepad: left stick move, right stick
-aim/auto-fire, A to dash, Start to pause. Touch controls are not ported yet.
+**Controls**
+
+- **Touch** — left thumb anywhere on the left half moves; right thumb anywhere
+  on the right half aims and auto-fires; **releasing the aim stick dashes**. A
+  tap on the top-centre strip pauses.
+- **Keyboard + mouse** — WASD move, hold LMB to aim and fire, Space dash, Esc
+  pause.
+- **Gamepad** — left stick move, right stick aim/auto-fire, A dash, Start
+  pause.
 
 ## Looking at it
 
@@ -60,8 +67,8 @@ godot --headless --script tests/smoke.gd
 A bare-`SceneTree` gate (no GPU, no wall-clock dependence) exercising player
 movement/firing/damage/i-frames, all four enemy types (including SPITTOR's
 wind-up tell and FANNER's every-third-wide volley beat), the wave budget
-curve, the death pop and every revenge dialect, and the spawn/clear cycle —
-55 checks. Run it before every commit that
+curve, the death pop and every revenge dialect, the spawn/clear cycle, the
+synthesised audio kit and the save service — 78 checks. Run it before every commit that
 touches `scripts/`.
 
 ## Layout
@@ -85,6 +92,11 @@ scripts/
   yela_cube.gd            YELA_CUBE — edge-pivot flop instead of sliding
   spittor.gd              SPITTOR — holds range, swells, spits a ring of 8
   fanner.gd               FANNER — circles and fans, every 3rd volley wider
+  orange_cube.gd          ORANGE_CUBE — flops with intent, throws bullet walls
+  weeva.gd                WEEVA — drifting spiral turret, a stream not a volley
+  audio_kit.gd            eight voices, synthesised at load (no sample files)
+  save_service.gd         hi-score + last 10 runs, in user://
+  touch_sticks.gd         draws the two virtual sticks
   wave_director.gd        budget-based wave composition, shooter cap,
                           corpse pops and revenge volleys
 tests/smoke.gd         headless gate — see "Testing" above

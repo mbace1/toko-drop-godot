@@ -17,6 +17,10 @@ func _init() -> void:
 	_test_yela_cube_flops(root)
 	_test_spittor_holds_range_and_spits(root)
 	_test_fanner_fans(root)
+	_test_orange_cube(root)
+	_test_weeva(root)
+	_test_audio_kit(root)
+	_test_save_service(root)
 	_test_wave_budget(root)
 	_test_death_pop(root)
 	_test_revenge(root)
@@ -174,6 +178,110 @@ func _test_fanner_fans(root: Node3D) -> void:
 			only_expected = false
 	_check(only_expected, "every FANNER volley is 6 or 9 shots (got %s)" % str(counts))
 	_check(counts.has(9), "FANNER's every-third volley is the wide 9-shot one")
+
+func _test_orange_cube(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(6.0, 0.0, 0.0)
+	var bullets := _make_pool(root)
+
+	var e: OrangeCube = _place(root, OrangeCube.new(), Vector3.ZERO, target, bullets)
+	_check(e.hp == 4, "ORANGE_CUBE spawns at enemy.js's config hp:4")
+
+	var fired := 0
+	for i in 400:
+		e.update(1.0 / 60.0)
+		if bullets.active.size() > fired:
+			fired = bullets.active.size()
+			break
+	_check(fired == OrangeCube.TOTAL_SHOTS,
+		"ORANGE_CUBE throws a wall of %d at once (got %d)" % [OrangeCube.TOTAL_SHOTS, fired])
+
+	# Every shot in a wall travels the SAME way \u2014 that is what makes it a wall
+	# and not a spray, and the direction is snapped to one of eight.
+	var v0 := Vector2(bullets.active[0].vx, bullets.active[0].vz).normalized()
+	var parallel := true
+	for b in bullets.active:
+		if Vector2(b.vx, b.vz).normalized().distance_to(v0) > 0.001:
+			parallel = false
+	_check(parallel, "every shot in the wall travels the same direction")
+
+	var snapped := false
+	for d in OrangeCube.DIRS8:
+		if d.normalized().distance_to(v0) < 0.01:
+			snapped = true
+	_check(snapped, "the wall is snapped to one of the eight compass directions")
+
+func _test_weeva(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	var bullets := _make_pool(root)
+
+	var e: Weeva = _place(root, Weeva.new(), Vector3(5.0, 0.0, 0.0), target, bullets)
+	_check(e.hp == 3, "WEEVA spawns at enemy.js's config hp:3")
+	_check(is_equal_approx(e.fire_interval, 0.16), "WEEVA streams on a 0.16s interval")
+
+	# A STREAM, not a volley: many single shots, each rotated past the last.
+	for i in 120:
+		e.update(1.0 / 60.0)
+	_check(bullets.active.size() > 6,
+		"WEEVA lays down a continuous stream (%d shots in 2s)" % bullets.active.size())
+
+	var angles: Array[float] = []
+	for b in bullets.active:
+		angles.append(Vector2(b.vx, b.vz).angle())
+	var all_same := true
+	for a in angles:
+		if absf(a - angles[0]) > 0.01:
+			all_same = false
+	_check(not all_same, "successive WEEVA shots rotate \u2014 it is a spiral, not a line")
+
+func _test_audio_kit(root: Node3D) -> void:
+	var kit := AudioKit.new()
+	root.add_child(kit)
+	kit.build()
+	# Synthesised at load: no sample files anywhere, per the house rule that
+	# sound is generated rather than sampled.
+	for name in ["fire", "hit", "kill", "player", "dash", "wave", "dead"]:
+		if not kit._clips.has(name):
+			_check(false, "audio kit is missing the '%s' voice" % name)
+			return
+	var clip: AudioStreamWAV = kit._clips["fire"]
+	_check(clip.data.size() > 0, "voices are real generated PCM, not empty stubs")
+	_check(not kit.enabled, "the kit disables itself headless (no output device)")
+	kit.play("fire")   # a no-op here, and must stay silent rather than erroring
+	_check(true, "playing a voice headless neither crashes nor logs")
+
+func _test_save_service(root: Node3D) -> void:
+	var sv := SaveService.new()
+	root.add_child(sv)
+	# Point at a scratch file: record() persists, so running the gate against
+	# the default path would overwrite the player's real hi-score.
+	sv.path = "user://_smoke_save.json"
+	sv.hi_score = 0
+	sv.runs = []
+
+	_check(sv.record(500, 3), "a first run is a new best")
+	_check(sv.hi_score == 500, "the best is stored")
+	_check(not sv.record(200, 2), "a worse run is not a new best")
+	_check(sv.hi_score == 500, "and does not lower the best")
+	_check(sv.record(900, 5), "a better run beats it")
+	_check(sv.hi_score == 900, "and raises the best")
+	_check(sv.runs.size() == 3, "every run is kept in history")
+	_check(int(sv.runs[0]["score"]) == 900, "history is newest-first")
+
+	for i in 20:
+		sv.record(i, 1)
+	_check(sv.runs.size() == SaveService.HISTORY_MAX,
+		"history is capped at %d" % SaveService.HISTORY_MAX)
+	_check(sv.hi_score == 900, "the cap never discards the best")
+
+	# The recent line skips index 0 \u2014 the run you are already looking at.
+	_check(not sv.recent_line().begins_with("recent: %d" % int(sv.runs[0]["score"])),
+		"the recent line does not repeat the run just finished")
+
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(sv.path))
+	_check(true, "the gate cleans up its scratch save")
 
 func _test_wave_budget(root: Node3D) -> void:
 	var wd := WaveDirector.new()

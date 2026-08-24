@@ -17,7 +17,7 @@
 ##    ~wave 12 (tuning.js line 200). Without this cap a budget spend happily
 ##    fills the arena with artillery and the wave becomes unreadable.
 ##
-## Only 4 of the roster's ~40 types are ported so far — see PORT_STATUS.md.
+## Only 6 of the roster's ~40 types are ported so far — see PORT_STATUS.md.
 class_name WaveDirector
 extends Node3D
 
@@ -26,10 +26,12 @@ signal wave_cleared(n: int)
 
 # name -> [min_wave, cost, is_shooter]
 const POOL := {
-	"GLOBBO":    [1, 1, false],
-	"YELA_CUBE": [1, 1, false],
-	"SPITTOR":   [1, 2, true],
-	"FANNER":    [1, 2, true],
+	"GLOBBO":      [1, 1, false],
+	"YELA_CUBE":   [1, 1, false],
+	"SPITTOR":     [1, 2, true],
+	"FANNER":      [1, 2, true],
+	"ORANGE_CUBE": [2, 2, true],
+	"WEEVA":       [2, 3, true],
 }
 
 # tuning.js waves.scale.budget
@@ -150,10 +152,12 @@ func _spawn(picks: Array[String]) -> void:
 
 func _make(name: String) -> Enemy:
 	match name:
-		"GLOBBO":    return Globbo.new()
-		"YELA_CUBE": return YelaCube.new()
-		"SPITTOR":   return Spittor.new()
-		"FANNER":    return Fanner.new()
+		"GLOBBO":      return Globbo.new()
+		"YELA_CUBE":   return YelaCube.new()
+		"SPITTOR":     return Spittor.new()
+		"FANNER":      return Fanner.new()
+		"ORANGE_CUBE": return OrangeCube.new()
+		"WEEVA":       return Weeva.new()
 	push_error("WaveDirector: unknown enemy '%s'" % name)
 	return Globbo.new()
 
