@@ -29,9 +29,20 @@ func _init() -> void:
 	_test_death_pop(root)
 	_test_revenge(root)
 	_test_wave_clears_and_advances(root)
+	# The scene test needs a REAL frame: main.tscn's _ready() does not run
+	# until the tree processes one, and add_child() does not flush it here.
+	# So the component tests finish in _init and _process picks up from there.
 
+var _frames := 0
+
+func _process(_delta: float) -> bool:
+	_frames += 1
+	if _frames < 2:
+		return false
+	_test_collisions()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
+	return true
 
 func _check(cond: bool, label: String) -> void:
 	print(("  ok  " if cond else "FAIL ") + label)
@@ -728,3 +739,70 @@ func _test_wave_clears_and_advances(root: Node3D) -> void:
 	wd.start_wave()
 	_check(wd.wave == 2, "the next wave starts")
 	_check(wd.enemies.size() > 0, "wave 2 spawns bodies (%d)" % wd.enemies.size())
+
+
+## Drives main.gd's own collision methods against a real scene. Everything
+## above tests components in isolation; this is the only thing that tests the
+## wiring, and the wiring is where the worst bug so far lived.
+func _test_collisions() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+	main.bullets.clear()
+	main.score = 0
+
+	# Park an enemy and put a PLAYER bullet on top of it.
+	var e := Globbo.new()
+	main.waves.enemies_root.add_child(e)
+	e.position = Vector3(3.0, 0.0, 0.0)
+	e.half_x = 19.0
+	e.half_z = 11.0
+	e.target = main.player
+	e.init()
+	main.waves.enemies.append(e)
+
+	var hp_before: int = main.player.hp
+	main.bullets.spawn_dir(3.0, 0.0, 1.0, 0.0, true)
+	main._collide_player_bullets()
+
+	_check(main.player.hp == hp_before,
+		"a PLAYER bullet hitting an enemy does not damage the player")
+	_check(not e.alive, "it kills the enemy (GLOBBO is hp 1)")
+	_check(main.score > 0, "and scores (%d)" % main.score)
+
+	# An ENEMY bullet on the player does damage it.
+	main.player.reset()
+	main.bullets.clear()
+	main.bullets.spawn_dir(main.player.position.x, main.player.position.z,
+		1.0, 0.0, false)
+	main._collide_enemy_bullets()
+	_check(main.player.hp == Player.MAX_HP - 1, "an ENEMY bullet costs the player HP")
+
+	# Contact damage, and the Rush boost branch that replaces it.
+	main.player.reset()
+	main.waves.enemies.clear()
+	var e2 := Globbo.new()
+	main.waves.enemies_root.add_child(e2)
+	e2.position = main.player.position
+	e2.half_x = 19.0
+	e2.half_z = 11.0
+	e2.target = main.player
+	e2.init()
+	main.waves.enemies.append(e2)
+
+	main._collide_contact()
+	_check(main.player.hp == Player.MAX_HP - 1, "a body touching you costs HP in Normal")
+	_check(e2.alive, "and the body survives")
+
+	main.mode = main.Mode.RUSH
+	main.rush.reset()
+	main.rush.boosting = true
+	main.player.reset()
+	main._collide_contact()
+	_check(not e2.alive, "in Rush, BOOSTING through a body kills it instead")
+	_check(main.player.hp == Player.MAX_HP, "and costs the player nothing")
+	_check(main.rush.multiplier > 1, "and chains the multiplier")
+
+	main.queue_free()

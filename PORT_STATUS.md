@@ -148,6 +148,16 @@ target is `PORT_BRIEF.md`.
   new materials. Rush state rides on the gel shader's existing per-instance
   rim colour.
 
+**Game feel**
+- **Debris** (`scripts/debris_pool.gd`) — ballistic gel lumps with a floor
+  bounce, at `TUNING.fx` counts: 8 droplets on a hit, 22 droplets + 5 bigger
+  chunks on a kill. Lit rather than unlit, because unlit spheres of a flat
+  colour read as confetti instead of as bits of the same gel.
+- **Camera shake** — main.js's trauma model: events add trauma, it decays at
+  ~2.8/s, and the offset is trauma SQUARED. The squaring is what stops a
+  stream of small hits reading as constant judder while a kill still lands.
+  Taking damage shakes hardest — it is the one event you must not miss.
+
 **Material**
 - One shared `shaders/gel.gdshader`: vertex ripple + hit shockwave, Fresnel
   rim glow, clearcoat, CPU-driven spring squash. Per-instance uniforms via
@@ -180,6 +190,12 @@ target is `PORT_BRIEF.md`.
 **Testing**
 - `tests/smoke.gd` — 127 checks, bare `SceneTree`, no GPU. Run before every
   commit touching `scripts/`.
+- **`main.gd`'s collision resolution is now covered.** `_collide_player_bullets`
+  / `_collide_enemy_bullets` / `_collide_contact` are methods the gate drives
+  directly. They used to be inline loops reachable only through
+  `_process_playing()`, which needs live input — which is exactly how a bug
+  that made PLAYER BULLETS DAMAGE THE PLAYER shipped past a green 155-check
+  suite. If a system is only reachable through input, the gate cannot see it.
 - `tools/capture.gd` — screenshots the REAL game on a GPU. This is the other
   half of the gate and it is not optional: the source repo's own recorded
   diagnosis is that its games stall at prototype feel because "the smoke

@@ -53,6 +53,12 @@ var player: Player
 var bullets: BulletPool
 var trails: TrailPool
 var poison: PoisonField
+var debris: DebrisPool
+## Camera shake as main.js does it: a TRAUMA value events add to, decaying on
+## its own, with the offset driven by trauma SQUARED. Squaring is what stops a
+## stream of small hits reading as a constant judder while a kill still lands.
+var _trauma := 0.0
+var _cam_rest := Vector3.ZERO
 var waves: WaveDirector
 var input_mgr: InputManager
 var camera: Camera3D
@@ -88,6 +94,10 @@ func _ready() -> void:
 	poison = PoisonField.new()
 	add_child(poison)
 	poison.build()
+
+	debris = DebrisPool.new()
+	add_child(debris)
+	debris.build()
 
 	var enemies_root := Node3D.new()
 	enemies_root.name = "Enemies"
@@ -253,6 +263,7 @@ func _setup_camera() -> void:
 	add_child(camera)
 	camera.look_at(Vector3(0.0, 0.0, 2.5), Vector3.UP)
 	camera.current = true
+	_cam_rest = camera.position
 
 func _setup_hud() -> void:
 	hud = CanvasLayer.new()
@@ -362,6 +373,7 @@ func _process(delta: float) -> void:
 				mode = row["mode"] if row["ready"] else Mode.CLASSIC
 				_start_game()
 
+	_update_shake(delta)
 	_update_hud()
 
 func _process_playing(delta: float) -> void:
@@ -381,13 +393,28 @@ func _process_playing(delta: float) -> void:
 	bullets.update(delta, maxf(HALF_X, HALF_Z))
 	trails.update(delta)
 	poison.update(delta)
+	debris.update(delta)
 	# Standing in sludge costs you, long after the body that laid it died.
 	if player.alive and not player.invincible \
 			and poison.damages_at(player.position.x, player.position.z):
 		_damage_player()
 	waves.update(delta)
 
-	# Player bullets vs. enemies.
+	_collide_player_bullets()
+	_collide_enemy_bullets()
+	_collide_contact()
+
+	if not player.alive:
+		_on_player_dead()
+
+## One damage path for both rulesets. Rush spends a LIFE and drops the
+## chain; classic spends HP. Both take the mercy window, so a single frame
+## can never cost two.
+## Player shots vs. enemy bodies. A method, not an inline loop, so the gate
+## can drive it: these were only reachable through _process_playing() (which
+## needs live input), and that is exactly how a bug that made player bullets
+## damage the PLAYER shipped past a green suite.
+func _collide_player_bullets() -> void:
 	for e in waves.enemies:
 		if not is_instance_valid(e) or not e.alive:
 			continue
@@ -397,39 +424,81 @@ func _process_playing(delta: float) -> void:
 			var dx := b.x - e.position.x
 			var dz := b.z - e.position.z
 			var r := e.radius + 0.15
-			if dx * dx + dz * dz < r * r:
-				# QUANTUM SHIELD turns incoming fire into outgoing fire. It is
-				# the one ability that pays you for standing and shooting.
-				if mode == Mode.RUSH and rush.reflecting():
-					bullets.spawn_dir(b.x, b.z, -b.vx, -b.vz, true)
-					b.alive = false
-					continue
-				b.alive = false
-				_damage_player()
-				break
-
-	# Enemy bullets vs. player. Checked after contact so a single frame can
-	# never cost two HP — player.hit() is a no-op while mercy i-frames run,
-	# which the first hit of the frame has already started.
-	if player.alive and not player.invincible:
-		for b in bullets.active:
-			if not b.alive or b.is_player:
+			if dx * dx + dz * dz >= r * r:
 				continue
-			var dx := b.x - player.position.x
-			var dz := b.z - player.position.z
-			var r := Player.RADIUS + 0.15
-			if dx * dx + dz * dz < r * r:
-				b.alive = false
-				_damage_player()
+			b.alive = false
+			var was_max := e.max_hp
+			if e.take_hit(1):
+				var gain := 100 * was_max
+				score += rush.award(gain) if mode == Mode.RUSH else gain
+				audio.play_varied("kill")
+				# TUNING.fx: killDroplets 22 / killChunks 5.
+				debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.26)
+				debris.burst(e.position.x, e.position.z, 5, e.color, e.radius * 0.5, 4.0, 7.0)
+				add_shake(0.12)
+			else:
+				audio.play_varied("hit")
+				# TUNING.fx.hitDroplets 8 — a hit SPITS, a kill bursts.
+				debris.burst(b.x, b.z, 8, e.color, e.radius * 0.15, 3.4, 3.0)
 				break
 
-	if not player.alive:
-		_on_player_dead()
+## Enemy shots vs. the player. QUANTUM SHIELD belongs HERE — it turns
+## incoming fire into outgoing fire, and is the one ability that pays you
+## for standing and shooting.
+func _collide_enemy_bullets() -> void:
+	if not player.alive or player.invincible:
+		return
+	for b in bullets.active:
+		if not b.alive or b.is_player:
+			continue
+		var dx := b.x - player.position.x
+		var dz := b.z - player.position.z
+		var r := Player.RADIUS + 0.15
+		if dx * dx + dz * dz >= r * r:
+			continue
+		if mode == Mode.RUSH and rush.reflecting():
+			bullets.spawn_dir(b.x, b.z, -b.vx, -b.vz, true)
+			b.alive = false
+			continue
+		b.alive = false
+		_damage_player()
+		return
 
-## One damage path for both rulesets. Rush spends a LIFE and drops the
-## chain; classic spends HP. Both take the mercy window, so a single frame
-## can never cost two.
+## Bodies touching the player. In Rush a BOOSTING player kills instead of
+## being hurt, which is the whole mode; that branch runs first.
+func _collide_contact() -> void:
+	if not player.alive:
+		return
+	if mode == Mode.RUSH and rush.boosting:
+		for e in waves.enemies:
+			if not is_instance_valid(e) or not e.alive:
+				continue
+			var bdx := e.position.x - player.position.x
+			var bdz := e.position.z - player.position.z
+			var br := e.radius + Player.RADIUS
+			if bdx * bdx + bdz * bdz < br * br:
+				var bmax := e.max_hp
+				if e.take_hit(99):
+					rush.add_boost_kill()
+					score += rush.award(100 * bmax)
+					audio.play_varied("kill")
+					debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.30)
+					add_shake(0.16)
+		return
+	if player.invincible:
+		return
+	for e in waves.enemies:
+		if not is_instance_valid(e) or not e.alive:
+			continue
+		var dx := e.position.x - player.position.x
+		var dz := e.position.z - player.position.z
+		var r := e.radius + Player.RADIUS
+		if dx * dx + dz * dz < r * r:
+			_damage_player()
+			return
+
 func _damage_player() -> void:
+	add_shake(0.45)   # the one event you must never miss
 	if mode == Mode.RUSH:
 		if player.invincible:
 			return
@@ -495,6 +564,7 @@ func _start_game() -> void:
 	bullets.clear()
 	trails.clear()
 	poison.clear()
+	debris.clear()
 	waves.start_wave()
 	_msg_label.hide()
 
@@ -581,6 +651,25 @@ func _cur_mode_key() -> String:
 func _menu_mode_key() -> String:
 	var r: Dictionary = MODE_ROWS[_menu_row]
 	return SaveService.RUSH if r["mode"] == Mode.RUSH else SaveService.NORMAL
+
+## main.js: trauma decays at ~2.8/s and the offset is trauma squared.
+func _update_shake(delta: float) -> void:
+	if _trauma <= 0.0:
+		if camera.position != _cam_rest:
+			camera.position = _cam_rest
+			camera.look_at(Vector3(0.0, 0.0, 2.5), Vector3.UP)
+		return
+	_trauma = maxf(0.0, _trauma - delta * 2.8)
+	var mag := _trauma * _trauma
+	var t := Time.get_ticks_msec() / 1000.0
+	camera.position = _cam_rest + Vector3(
+		sin(t * 41.0) * mag * 1.8,
+		sin(t * 37.0) * mag * 1.2,
+		sin(t * 43.0) * mag * 1.2)
+	camera.look_at(Vector3(0.0, 0.0, 2.5), Vector3.UP)
+
+func add_shake(amount: float) -> void:
+	_trauma = minf(1.0, _trauma + amount)
 
 func _update_hud() -> void:
 	if player == null:
