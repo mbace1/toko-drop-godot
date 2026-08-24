@@ -94,7 +94,8 @@ type — reusing the exact affordability loop `start_wave()` already runs.
 
 Worked example at virtual wave 5 (elapsed 60s): `budget_for(5)` ≈ 11.8, so
 target ≈ 6.5 — three to six standing bodies against a body cap of 9. At virtual
-wave 15 (elapsed 180s): `budget_for(15)` = 24.2, target ≈ 13.3, body cap 14.
+wave 15 (elapsed 180s): `budget_for(15)` = 25.2 (`5 + 1.8×9`, then `+0.8×5`
+past the knee), target ≈ 13.9, body cap 14.
 The caps stay the real ceiling late, which is the behaviour we want: the shooter
 cap is what keeps a screen readable, and it should not stop mattering just
 because the mode changed.
@@ -105,6 +106,15 @@ Never refill instantly. `RUSH_SPAWN_GAP 0.35s` (PROPOSED) minimum between
 spawns, so clearing four bodies with one good dash-and-sweep still *feels* like
 it bought something — the arena visibly empties for about a second before it
 closes again.
+
+**The gap governs telegraph *starts*, and telegraphs may overlap.** If the
+director instead waits for one body to finish spawning before beginning the
+next tell, the cycle is `0.35 + 0.45 = 0.8s` — a hard supply ceiling of 1.25
+bodies per second, which is below the rate an average player already kills at,
+and an arena that takes six seconds to fill from empty. Several tells in flight
+at once puts the ceiling at `1 / 0.35` ≈ 2.86 bodies/s after a 0.45s latency,
+which is where it belongs. Worked through in
+[`RUSH_TIERS_AND_LEVELS.md`](RUSH_TIERS_AND_LEVELS.md) §5.
 
 ### 3.4 Where they arrive, and the tell
 

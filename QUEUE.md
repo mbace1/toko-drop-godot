@@ -341,6 +341,38 @@ reintroduced Q-011's bug** — a particle system reaching for `randf()` is the
 obvious way to pollute the gameplay stream, and now there is a rule that says
 not to. Worth doing as `GPUParticles3D` directly, per `PORT_BRIEF.md` §3/§5.
 
+### Q-017 — Par curve, live tier, and the final grade
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-005 (heat feeds the score the tiers grade)
+- design: design/RUSH_TIERS_AND_LEVELS.md §3, §4
+- gate: smoke checks for par interpolation between checkpoints, for each tier
+  boundary landing on the right letter, and for the rule that dying before 3:00
+  yields no grade
+
+The thresholds are derived from the species table and four reference kill
+rates, not chosen by feel — keep them derived. If they turn out wrong, change
+the reference rates and recompute; do not hand-edit the table, or the next
+person cannot tell which numbers mean anything. Below C shows no letter.
+
+### Q-018 — Legs, checkpoints, goals and the star
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-017
+- design: design/RUSH_TIERS_AND_LEVELS.md §2
+- gate: smoke checks that each leg goal is tracked independently and that a
+  stamp taken at a checkpoint is never revised; capture run for the summary
+
+Three 60s legs, each stamping the tier you stood at, each with one goal that is
+achievable in that leg and awkward in the others (UNTOUCHED, UNBROKEN, STILL
+STANDING). All three earns a ★ beside the grade — not a tier bump, because
+score buys letters and goals buy the star, and collapsing the two axes is what
+this item exists to avoid.
+
 ---
 
 ## Landed

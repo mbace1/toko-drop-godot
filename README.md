@@ -106,6 +106,7 @@ PORT_STATUS.md        living doc: what's ported, what's next, in priority order
 QUEUE.md              the cross-repo work queue — see "Planning" below
 design/               high-level design docs, ahead of implementation
   RUSH_MODE.md              Rush mode (proposal, nothing implemented)
+  RUSH_TIERS_AND_LEVELS.md   legs, per-leg goals, S/A/B/C thresholds
   RUSH_MODE_ACCEPTANCE.md    what "done" means per Rush item, as smoke checks
   PARITY_RECON.md            one trip into the source repo, as a checklist
   DETERMINISM_AND_SEEDS.md   seeded runs — decide before Rush ships
