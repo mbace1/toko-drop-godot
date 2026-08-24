@@ -27,8 +27,27 @@ const FLOOR_SHADER := preload("res://shaders/floor_grid.gdshader")
 
 enum State { MENU, PLAYING, PAUSED, DEAD }
 
+## The front-page mode list, in the browser build's order: ROGUELIKE MODE
+## first, RUSH MODE directly under it (owner direction, 2026-08-24).
+##
+## RUSH is designed in RUSH_MODE.md and NOT implemented yet — its §5 questions
+## are open, and guessing at heat/boost rules before they are answered is how a
+## mode ends up with a ruleset nobody chose. Selecting it today starts an
+## ordinary run with `mode` set, so the plumbing is real and the rules land in
+## one place when they are decided.
+enum Mode { CLASSIC, ROGUELIKE, RUSH }
+
+const MODE_ROWS := [
+	{"mode": Mode.ROGUELIKE, "label": "ROGUELIKE MODE",
+	 "note": "no upgrades — pure arcade survival", "ready": false},
+	{"mode": Mode.RUSH, "label": "RUSH MODE",
+	 "note": "heat, boost and level tiers — in design", "ready": false},
+]
+
 var state := State.MENU
 var score := 0
+var mode := Mode.CLASSIC
+var _menu_row := 0        # which mode row the selector is on; -1 = none
 
 var player: Player
 var bullets: BulletPool
@@ -408,16 +427,43 @@ func _on_player_dead() -> void:
 
 func _show_menu() -> void:
 	state = State.MENU
-	_msg_label.text = "TOKO DROP\n\ntwin-stick swarm survival\n\n" \
-		+ "touch — left thumb moves, right thumb aims, release to dash\n" \
-		+ "keys — WASD move, hold LMB to aim and fire, SPACE dash, ESC pause\n" \
-		+ "pad — sticks move and aim, A dash, Start pause\n\n" \
-		+ ("best %d\n\n" % save.hi_score if save.hi_score > 0 else "") \
-		+ "tap, or press FIRE / DASH, to start"
+	_msg_label.text = _menu_text()
 	_msg_label.show()
+
+## The title screen, built as text so it reflows on a phone without a layout
+## pass. The selected mode row is marked with a caret, the same way the
+## browser hub marks its selection.
+func _menu_text() -> String:
+	var out := ["TOKO DROP", "", "twin-stick swarm survival", ""]
+	for i in MODE_ROWS.size():
+		var row: Dictionary = MODE_ROWS[i]
+		var caret := ">" if i == _menu_row else " "
+		var state_txt := "ON" if mode == row["mode"] else "OFF"
+		if not row["ready"]:
+			state_txt = "SOON"
+		out.append("%s  %s: %s" % [caret, row["label"], state_txt])
+		out.append("     %s" % row["note"])
+	out.append("")
+	out.append("touch \u2014 left thumb moves, right thumb aims, release to dash")
+	out.append("keys \u2014 WASD move, hold LMB to aim and fire, SPACE dash")
+	out.append("pad \u2014 sticks move and aim, A dash, Start pause")
+	out.append("")
+	if save.hi_score > 0:
+		out.append("best %d" % save.hi_score)
+		out.append("")
+	out.append("tap, or press FIRE / DASH, to start")
+	return "\n".join(out)
 
 func _update_hud() -> void:
 	if player == null:
+		return
+	# The stat row belongs to a RUN. On the title screen it was reporting
+	# "WAVE 0" over the mode list, which reads as a game already in progress.
+	var in_run := state == State.PLAYING or state == State.PAUSED or state == State.DEAD
+	_hp_label.visible = in_run
+	_wave_label.visible = in_run
+	_score_label.visible = in_run
+	if not in_run:
 		return
 	_hp_label.text = "HP " + "●".repeat(maxi(player.hp, 0)) + "○".repeat(maxi(player.max_hp - player.hp, 0))
 	_wave_label.text = "WAVE %d" % waves.wave

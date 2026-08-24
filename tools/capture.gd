@@ -32,6 +32,9 @@ func _init() -> void:
 	get_root().add_child(_main)
 	# Drop straight into a run rather than sitting on the menu — the menu is
 	# not the thing being judged.
+	# arg[3] == "menu" photographs the title screen instead of a run.
+	if OS.get_cmdline_user_args().size() > 3 and OS.get_cmdline_user_args()[3] == "menu":
+		return
 	_main.call_deferred("_start_game")
 	# Jump the director forward so wave-2+ types appear in the shots.
 	var w := int(OS.get_cmdline_user_args()[2]) if OS.get_cmdline_user_args().size() > 2 else 0
