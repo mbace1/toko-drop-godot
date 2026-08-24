@@ -156,6 +156,11 @@ target is `PORT_BRIEF.md`.
 
 ## Not ported yet — in priority order
 
+Work that is *designed but not started* — including anything that lands in the
+browser repo rather than here — is tracked in `QUEUE.md` with its own IDs; the
+first entries there are the Rush mode proposal in `design/RUSH_MODE.md`. This
+list stays the port's own ordered backlog.
+
 Gameplay breadth first (each item is small and mostly mechanical), then the
 visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
 

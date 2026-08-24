@@ -103,7 +103,23 @@ tests/smoke.gd         headless gate — see "Testing" above
 tools/capture.gd      screenshots the real game — see "Looking at it" above
 PORT_BRIEF.md         inherited visual/material brief (Godot-side canon for shaders/lighting)
 PORT_STATUS.md        living doc: what's ported, what's next, in priority order
+QUEUE.md              the cross-repo work queue — see "Planning" below
+design/               high-level design docs, ahead of implementation
+  RUSH_MODE.md         Rush mode (proposal, nothing implemented)
 ```
+
+## Planning
+
+Design that spans both repos is written here first, then queued:
+`design/` holds the high-level docs, and `QUEUE.md` is the ordered list of what
+those docs turned into, with a `repo:` field per item saying where each piece
+actually lands. `QUEUE.md`'s own header explains the conventions that keep it
+merge-friendly (stable `Q-NNN` IDs, one block per item, status changes touching
+a single line, landings recorded with their SHA).
+
+`PORT_STATUS.md` is unaffected by this and stays what it has always been: the
+description of what the port *is* today, updated in the same commit as any
+`scripts/`/`shaders/` change.
 
 ## Design note: no `_ready()`-timing surprises
 
