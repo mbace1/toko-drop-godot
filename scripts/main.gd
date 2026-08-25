@@ -23,6 +23,9 @@ var half_x := HALF_X
 var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
+## Shown in the corner, the way the browser prints v221.
+const VERSION := "0.9"
+
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
 
@@ -83,6 +86,12 @@ var sticks: TouchSticks
 var rush: RushRules
 var _rush_label: Label
 var _wave_bar: ProgressBar
+var _corner_l: Label
+var _corner_r: Label
+var _death_wash: ColorRect
+## Wall-clock length of the current run. The browser treats time survived as
+## a headline stat on the death screen; this port had no notion of it.
+var _run_t := 0.0
 var _floor_mat: ShaderMaterial
 var _floor_inst: MeshInstance3D
 var _rails: Array[MeshInstance3D] = []
@@ -326,6 +335,14 @@ func _setup_hud() -> void:
 	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hud.add_child(_score_label)
 
+	# Death wash. The browser floods the whole screen red on death and it is
+	# most of why dying LANDS; a text swap alone reads as a menu appearing.
+	_death_wash = ColorRect.new()
+	_death_wash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_death_wash.color = Color(0.55, 0.02, 0.05, 0.0)
+	_death_wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(_death_wash)
+
 	_msg_label = _make_label(28)
 	_msg_label.set_anchors_preset(Control.PRESET_CENTER)
 	_msg_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -333,6 +350,24 @@ func _setup_hud() -> void:
 	_msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud.add_child(_msg_label)
+
+	# The corners the browser build uses: version and frame rate bottom-left,
+	# the run seed bottom-right.
+	_corner_l = _make_label(13)
+	_corner_l.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35, 0.55))
+	_corner_l.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_corner_l.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_corner_l.position = Vector2(16, -30)
+	hud.add_child(_corner_l)
+
+	_corner_r = _make_label(13)
+	_corner_r.add_theme_color_override("font_color", Color(0.45, 0.85, 1.0, 0.55))
+	_corner_r.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_corner_r.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_corner_r.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_corner_r.position = Vector2(-16, -30)
+	_corner_r.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hud.add_child(_corner_r)
 
 	sticks = TouchSticks.new()
 	sticks.input_mgr = input_mgr
@@ -399,9 +434,11 @@ func _process(delta: float) -> void:
 				_start_game()
 
 	_update_shake(delta)
+	_update_wash(delta)
 	_update_hud()
 
 func _process_playing(delta: float) -> void:
+	_run_t += delta
 	var move := input_mgr.get_move_dir()
 	var aim := input_mgr.get_aim_dir(player.position)
 	var firing: bool = aim["valid"]
@@ -588,6 +625,9 @@ func _start_game() -> void:
 	state = State.PLAYING
 	score = 0
 	input_mgr.reset()
+	waves.reseed()
+	_run_t = 0.0
+	_death_wash.color.a = 0.0
 	input_mgr.set_rush(_rush_verbs())
 	waves.level_override = 0
 	save.mode = _cur_mode_key()   # every read below follows from this
@@ -725,22 +765,47 @@ func _on_player_dead() -> void:
 	state = State.DEAD
 	audio.play("dead")
 	input_mgr.reset()   # a finger still down must not steer the next run
+
+	# The browser treats TIME SURVIVED as a headline stat ("WAVE 1 - 5s - 0
+	# PTS") and keeps a best of it; this port had no notion of it at all.
+	var t := int(_run_t)
 	var mkey := _cur_mode_key()
-	var extra := {}
-	if mode == Mode.RUSH:
-		extra = {"kills": rush.kills, "heat_peak": rush.heat_peak}
 	save.mode = mkey
+	var prev_best_time := 0
+	for r in save.runs:
+		prev_best_time = maxi(prev_best_time, int(r.get("time", 0)))
+
+	var extra := {"time": t}
+	if mode == Mode.RUSH:
+		extra["kills"] = rush.kills
+		extra["heat_peak"] = rush.heat_peak
 	# record() stores `wave` only for the wave-based mode and drops it for
 	# Rush, where a wave number would be a lie (design/RUSH_MODE.md 7).
 	var best := save.record(score, waves.wave, extra)
-	var out := ["YOU DIED", "", "score %d — wave %d" % [score, waves.wave]]
-	out.append("NEW BEST!" if best else "best %d" % save.hi_score)
+
+	var out := ["YOU DIED", "",
+		"WAVE %d  ·  %ds  ·  %d PTS" % [waves.wave, t, score]]
+	# Star each record actually beaten, the way the browser marks BEST TIME
+	# and BEST WAVE separately — a run can be your longest without being your
+	# highest, and one line saying "best" hides that.
+	var stars: Array[String] = []
+	if best:
+		stars.append("★ BEST SCORE")
+	if t > prev_best_time:
+		stars.append("★ BEST TIME")
+	if stars.is_empty():
+		out.append("best %d" % save.hi_score)
+	else:
+		out.append("   ".join(stars))
 	var recent := save.recent_line()
 	if recent != "":
 		out.append(recent)
 	out.append("")
+	out.append("SEED %s" % waves.seed_text())
+	out.append("")
 	out.append("tap, or press FIRE / DASH, to retry")
-	_msg_label.text = "\n".join(out)
+	_msg_label.text = "
+".join(out)
 	_msg_label.show()
 
 func _show_menu() -> void:
@@ -824,6 +889,11 @@ func _menu_mode_key() -> String:
 	return SaveService.MODE_RUSH if r["mode"] == Mode.RUSH else SaveService.MODE_NORMAL
 
 ## main.js: trauma decays at ~2.8/s and the offset is trauma squared.
+## Fades the red flood up on death and back out when a run starts.
+func _update_wash(delta: float) -> void:
+	var want := 0.34 if state == State.DEAD else 0.0
+	_death_wash.color.a = move_toward(_death_wash.color.a, want, delta * 1.6)
+
 func _update_shake(delta: float) -> void:
 	if _trauma <= 0.0:
 		if camera.position != _cam_rest:
@@ -895,5 +965,7 @@ func _update_hud() -> void:
 		# so it shows how much of the wave is dead. Same slot, same question.
 		_wave_bar.value = _wave_progress()
 
+	_corner_l.text = "v%s   %d FPS" % [VERSION, int(Engine.get_frames_per_second())]
+	_corner_r.text = "SEED %s" % waves.seed_text()
 	_score_label.text = ("SCORE %d" % score) if save.hi_score <= 0 \
 		else ("SCORE %d   BEST %d" % [score, save.hi_score])

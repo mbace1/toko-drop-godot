@@ -88,6 +88,20 @@ const REV_POOL_GUARD := 240
 ##
 ## Left unseeded by default, so an ordinary run is as random as it ever was.
 var rng := RandomNumberGenerator.new()
+## The seed this run was composed from. Shown in the corner and on the death
+## screen, the way the browser build prints SEED — a seeded run you cannot
+## name is one you cannot ask anybody else to try.
+var run_seed := 0
+
+## Starts a fresh gameplay stream. Pass a seed to replay a run exactly.
+func reseed(seed_value: int = 0) -> void:
+	run_seed = seed_value if seed_value != 0 else (randi() & 0xFFFFFF)
+	rng.seed = run_seed
+	rng.state = run_seed
+
+## The browser prints it as six hex digits (SEED ED1E2E).
+func seed_text() -> String:
+	return "%06X" % (run_seed & 0xFFFFFF)
 
 var wave := 0
 ## Rush Mode drives difficulty from its own LEVEL rather than from how many

@@ -150,6 +150,20 @@ target is `PORT_BRIEF.md`.
   clear-based, so the same bar shows how much of the wave is dead. Same slot,
   same question, different quantity.
 
+**Run readouts — parity pass 3**
+- **Seed.** `WaveDirector.reseed()` sets an explicit, showable run seed and
+  `seed_text()` prints it as six hex digits, the way the browser prints
+  `SEED ED1E2E`. A seeded run you cannot name is one you cannot ask anyone
+  else to try.
+- **Corner readouts**: version + FPS bottom-left, seed bottom-right.
+- **Time survived** is now a first-class stat. The browser's death screen
+  reads `WAVE 1 · 5s · 0 PTS` and keeps a best of the TIME as well as the
+  score; this port had no notion of it. Records are starred separately
+  (★ BEST SCORE / ★ BEST TIME) because a run can be your longest without
+  being your highest, and one "best" line hides that.
+- **The red death wash.** The browser floods the screen red on death, and it
+  is most of why dying LANDS — a text swap alone reads as a menu appearing.
+
 **Motion trails and ground**
 - **Per-species motion trails** (`scripts/trail_pool.gd`) — pooled ghost
   spheres shrinking to nothing over 0.45s, one MultiMesh for the whole swarm.
