@@ -57,6 +57,6 @@ func update(delta: float) -> void:
 	var dz := target.position.z - position.z
 	var dist := Vector2(dx, dz).length()
 	if dist > STOP_DIST:
-		position.x += (dx / dist) * speed * delta
-		position.z += (dz / dist) * speed * delta
+		position.x += (dx / dist) * move_speed() * delta
+		position.z += (dz / dist) * move_speed() * delta
 		_clamp_to_arena()

@@ -35,6 +35,7 @@ enum Rule {
 	ARTILLERY,      # shooters only, shooter cap lifted
 	SWARM,          # melee only, body cap raised
 	GRAVEYARD,      # revenge volleys amplified — corpses are the puzzle
+	FOCUS,          # the support species arrive early — break off or drown
 }
 
 const RULE_NAME := {
@@ -45,6 +46,7 @@ const RULE_NAME := {
 	Rule.ARTILLERY: "ARTILLERY",
 	Rule.SWARM: "SWARM",
 	Rule.GRAVEYARD: "GRAVEYARD",
+	Rule.FOCUS: "FOCUS",
 }
 
 const RULE_BLURB := {
@@ -55,6 +57,7 @@ const RULE_BLURB := {
 	Rule.ARTILLERY: "shooters only — read the bullets",
 	Rule.SWARM: "bodies only, and a lot of them",
 	Rule.GRAVEYARD: "every corpse bites back, harder",
+	Rule.FOCUS: "shepherds and sirens — kill the conductor first",
 }
 
 ## Levels, in order. `tiers` is [C, B, A, S] score thresholds.
@@ -71,28 +74,67 @@ const RULE_BLURB := {
 const LEVELS := [
 	{
 		"id": "L1", "name": "FIRST LIGHT",
-		"rule": Rule.NONE, "duration": 60.0,
-		"difficulty": 2,
-		"tiers": [5600, 10050, 15650, 23100], "measured": true,
+		"rule": Rule.NONE, "duration": 60.0, "difficulty": 2,
+		"tiers": [6400, 11550, 17950, 26500], "measured": true,
 		"unlocks_ability": -1,
 	},
 	{
 		"id": "L2", "name": "COLD START",
-		"rule": Rule.BOOST_ONLY, "duration": 60.0,
-		"difficulty": 2,
-		"tiers": [3500, 6300, 9750, 14400], "measured": true,
-		# Finishing the mode's signature level is what hands you the ability
-		# that plays off it.
+		"rule": Rule.BOOST_ONLY, "duration": 60.0, "difficulty": 2,
+		"tiers": [3800, 6800, 10600, 15650], "measured": true,
+		# The mode's signature level hands you the ability that plays off it.
 		"unlocks_ability": RushRules.Ability.HYPER_BOMB,
 	},
 	{
 		"id": "L3", "name": "THE VICE",
-		"rule": Rule.CLOSE_QUARTERS, "duration": 90.0,
-		"difficulty": 3,
-		"tiers": [7700, 13850, 21550, 31800], "measured": true,
+		"rule": Rule.CLOSE_QUARTERS, "duration": 90.0, "difficulty": 3,
+		"tiers": [7650, 13750, 21400, 31600], "measured": true,
+		"unlocks_ability": -1,
+	},
+	{
+		"id": "L4", "name": "CROSSFIRE",
+		"rule": Rule.ARTILLERY, "duration": 60.0, "difficulty": 4,
+		"tiers": [4650, 8350, 13000, 19200], "measured": true,
+		"unlocks_ability": RushRules.Ability.QUANTUM_SHIELD,
+	},
+	{
+		"id": "L5", "name": "THE TIDE",
+		"rule": Rule.SWARM, "duration": 90.0, "difficulty": 4,
+		"tiers": [5550, 10000, 15550, 22950], "measured": true,
+		"unlocks_ability": -1,
+	},
+	{
+		"id": "L6", "name": "CONDUCTOR",
+		"rule": Rule.FOCUS, "duration": 90.0, "difficulty": 5,
+		"tiers": [7550, 13550, 21100, 31150], "measured": true,
 		"unlocks_ability": RushRules.Ability.OVERCHARGE,
 	},
+	{
+		"id": "L7", "name": "AFTERLIFE",
+		"rule": Rule.GRAVEYARD, "duration": 90.0, "difficulty": 5,
+		"tiers": [10050, 18100, 28150, 41550], "measured": true,
+		"unlocks_ability": -1,
+	},
+	{
+		"id": "L8", "name": "THE NARROWS",
+		"rule": Rule.CLOSE_QUARTERS, "duration": 90.0, "difficulty": 7,
+		"tiers": [13550, 24350, 37900, 55950], "measured": true,
+		"unlocks_ability": -1,
+	},
+	{
+		"id": "L9", "name": "NO SECOND CHANCE",
+		"rule": Rule.ONE_LIFE, "duration": 60.0, "difficulty": 6,
+		"tiers": [8950, 16150, 25100, 37050], "measured": true,
+		"unlocks_ability": -1,
+	},
+	{
+		"id": "L10", "name": "BARE HANDS",
+		"rule": Rule.BOOST_ONLY, "duration": 120.0, "difficulty": 8,
+		"tiers": [10300, 18550, 28900, 42650], "measured": true,
+		"unlocks_ability": -1,
+	},
 ]
+
 
 const TIER_LETTERS := ["C", "B", "A", "S"]
 

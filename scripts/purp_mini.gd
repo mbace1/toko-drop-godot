@@ -20,6 +20,6 @@ func update(delta: float) -> void:
 	var dz := target.position.z - position.z
 	var d := Vector2(dx, dz).length()
 	if d > 0.35:
-		position.x += (dx / d) * speed * delta
-		position.z += (dz / d) * speed * delta
+		position.x += (dx / d) * move_speed() * delta
+		position.z += (dz / d) * move_speed() * delta
 		_clamp_to_arena()

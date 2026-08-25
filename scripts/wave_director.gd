@@ -23,6 +23,7 @@ extends Node3D
 
 signal wave_started(n: int)
 signal wave_cleared(n: int)
+signal siren_screamed(at: Vector3)
 
 # name -> [min_wave, cost, is_shooter]
 const POOL := {
@@ -37,6 +38,10 @@ const POOL := {
 	"REDD_CUBE":   [4, 3, false],
 	"PURP_CUBE":   [5, 3, false],
 	"TORO":        [6, 5, false],
+	# The "side quest" bodies: they never attack you, they make everything
+	# else worse, and dealing with them costs you the thing you were doing.
+	"SHEPHERD":    [4, 4, false],
+	"SIREN":       [7, 5, false],
 }
 
 ## Children are spawned BY a parent's death, never drawn from the wave budget,
@@ -103,6 +108,9 @@ var poison: PoisonField
 var only_shooters := false
 var only_melee := false
 var revenge_mult := 1
+## FOCUS levels drop the support species' minWave to 1, so the level is about
+## them rather than about waiting for them.
+var force_support := false
 var enemies_root: Node3D
 var enemies: Array[Enemy] = []
 ## Bodies mid-death-pop. They are out of `enemies` (so they cannot be shot
@@ -177,7 +185,10 @@ func compose(w: int, budget: float, shooter_cap: int, body_cap: int) -> Array[St
 func _eligible_for(w: int) -> Array[String]:
 	var out: Array[String] = []
 	for name in POOL.keys():
-		if POOL[name][0] > w:
+		var min_wave: int = POOL[name][0]
+		if force_support and (name == "SHEPHERD" or name == "SIREN"):
+			min_wave = 1
+		if min_wave > w:
 			continue
 		var is_shooter: bool = POOL[name][2]
 		if only_shooters and not is_shooter:
@@ -233,6 +244,8 @@ func _make(name: String) -> Enemy:
 		"REDD_CUBE":   return ReddCube.new()
 		"PURP_CUBE":   return PurpCube.new()
 		"TORO":        return Toro.new()
+		"SHEPHERD":    return Shepherd.new()
+		"SIREN":       return Siren.new()
 		"REDD_MINI":   return ReddMini.new()
 		"PURP_MINI":   return PurpMini.new()
 	push_error("WaveDirector: unknown enemy '%s'" % name)
@@ -255,6 +268,8 @@ func update(delta: float) -> void:
 			corpses.append(e)
 			continue
 		e.update(delta)
+
+	_run_support(delta)
 
 	for i in range(corpses.size() - 1, -1, -1):
 		var c := corpses[i]
@@ -289,6 +304,39 @@ func _split(parent: Enemy) -> void:
 		c.rng = rng          # children inherit the run's gameplay stream
 		c.init()
 		enemies.append(c)
+
+## The support species act on the SWARM, not on the player, so they are run
+## here where the whole list is visible. A SIREN scream surges everything in
+## reach; a SHEPHERD drags its flock toward you every frame.
+func _run_support(delta: float) -> void:
+	if target == null:
+		return
+	for e in enemies:
+		if not is_instance_valid(e) or not e.alive:
+			continue
+		if e is Siren:
+			var s := e as Siren
+			if not s.scream_ready:
+				continue
+			s.scream_ready = false
+			for w in enemies:
+				if w == e or not is_instance_valid(w) or not w.alive:
+					continue
+				if w is Siren:
+					continue          # screamers do not surge each other
+				var dx := w.position.x - s.position.x
+				var dz := w.position.z - s.position.z
+				if dx * dx + dz * dz < Siren.SURGE_RADIUS * Siren.SURGE_RADIUS:
+					w.surge_t = Siren.SURGE_TIME
+			siren_screamed.emit(s.position)
+		elif e is Shepherd:
+			var h := e as Shepherd
+			for w in enemies:
+				if w == e or not is_instance_valid(w) or not w.alive:
+					continue
+				if w is Shepherd:
+					continue
+				h.herd(w, target.position, delta)
 
 ## CLOSE COMBAT: the dead shoot back (main.js onKill(), v187/v220). The volley
 ## SPEAKS THE SPECIES' LANGUAGE — a gunner's corpse spits a slow aimed burst,

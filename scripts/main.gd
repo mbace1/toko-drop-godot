@@ -644,6 +644,7 @@ func _start_challenge() -> void:
 	waves.only_shooters = _ch_rule == Challenges.Rule.ARTILLERY
 	waves.only_melee = _ch_rule == Challenges.Rule.SWARM
 	waves.revenge_mult = 2 if _ch_rule == Challenges.Rule.GRAVEYARD else 1
+	waves.force_support = _ch_rule == Challenges.Rule.FOCUS
 	_resize_arena()
 
 func _clear_challenge() -> void:
@@ -655,6 +656,7 @@ func _clear_challenge() -> void:
 	waves.only_shooters = false
 	waves.only_melee = false
 	waves.revenge_mult = 1
+	waves.force_support = false
 	_resize_arena()
 
 ## The floor, rails and grid all follow half_x/half_z, so CLOSE QUARTERS is
@@ -764,6 +766,11 @@ func _menu_text() -> String:
 		if not row["ready"]:
 			state_txt = "SOON"
 		out.append("%s  %s: %s" % [caret, row["label"], state_txt])
+		# Detail lines belong to the SELECTED row only. Three modes each with a
+		# note, an ability line and a level line overflowed the screen top and
+		# bottom on the web build — the title was cut off.
+		if i != _menu_row:
+			continue
 		out.append("     %s" % row["note"])
 		if row["mode"] == Mode.CHALLENGE:
 			var lv := Challenges.get_level(challenge_i)

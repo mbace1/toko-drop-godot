@@ -15,8 +15,8 @@
 ## Movement is enemy.js's WEEVA case — "drifting spiral turret: weaves while
 ## slowly closing on the player so it actually applies pressure instead of
 ## meandering in place":
-##   x += (sin(t*0.7)*0.5 + nx*0.45) * speed * dt
-##   z += (cos(t*0.5)*0.5 + nz*0.45) * speed * dt
+##   x += (sin(t*0.7)*0.5 + nx*0.45) * move_speed() * dt
+##   z += (cos(t*0.5)*0.5 + nz*0.45) * move_speed() * dt
 class_name Weeva
 extends Enemy
 
@@ -48,8 +48,8 @@ func update(delta: float) -> void:
 		var dz := target.position.z - position.z
 		var dist := Vector2(dx, dz).length()
 		if dist > 0.001:
-			position.x += (sin(_t * 0.7) * 0.5 + (dx / dist) * 0.45) * speed * delta
-			position.z += (cos(_t * 0.5) * 0.5 + (dz / dist) * 0.45) * speed * delta
+			position.x += (sin(_t * 0.7) * 0.5 + (dx / dist) * 0.45) * move_speed() * delta
+			position.z += (cos(_t * 0.5) * 0.5 + (dz / dist) * 0.45) * move_speed() * delta
 		_clamp_to_arena()
 
 	# The drill buzz: a fast scale jitter on top of the spring squash, so the

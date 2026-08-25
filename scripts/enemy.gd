@@ -86,6 +86,11 @@ var _death_t := 0.0
 ## 1.0 dithers pixels away and speckles the body with visible static. Alpha is
 ## only for bodies on their way OUT (the death pop, the i-frame flicker).
 var _base_alpha := 1.0
+## SIREN's scream sets this; while it runs the body moves at 1.6x
+## (enemy.js line 1393). Read by every species through `move_speed()`, so a
+## surge lifts the WHOLE swarm rather than one hand-picked type.
+var surge_t := 0.0
+
 var _trail_t := 0.0
 var _vel := Vector2.ZERO     # measured, not declared — every species moves itself
 var _prev_pos := Vector2.ZERO
@@ -216,8 +221,16 @@ func revenge_color() -> Color:
 ## Call from a subclass's update(delta) before its own movement. Advances the
 ## shared clock, decays hit-wobble and applies the spring squash (plus any
 ## telegraph inflate) to mesh.scale.
+## The speed a species should actually move at this frame. Every subclass uses
+## this instead of `speed` directly, which is what lets one SIREN scream make
+## the entire arena lurch forward at once.
+func move_speed() -> float:
+	return speed * (1.6 if surge_t > 0.0 else 1.0)
+
 func _update_common(delta: float) -> void:
 	_t += delta
+	if surge_t > 0.0:
+		surge_t = maxf(0.0, surge_t - delta)
 	_emit_trail(delta)
 	if _hit_wobble > 0.0:
 		_hit_wobble = maxf(0.0, _hit_wobble - HIT_WOBBLE_DECAY * delta)

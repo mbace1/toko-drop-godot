@@ -75,7 +75,7 @@ target is `PORT_BRIEF.md`.
   forking it (Rush holds a standing pressure rather than spending a whole wave
   at once). Pure refactor; the existing wave checks pass unmodified.
 
-**Enemies** (13 of ~40 in the live roster — `js/tuning.js` names all 40)
+**Enemies** (15 of ~40 in the live roster — `js/tuning.js` names all 40)
 - GLOBBO — chaser blob. Two behaviours stack: the lunging speed-pulse
   `speed × (max(0,sin(t·3+φ))² · 2.6 + 0.4)` (`TOKO_DROP_PORT_BRIEF.md`
   Part 2 / tuning.js line 43) **and** the stalk→crouch→leap pounce state
@@ -128,6 +128,16 @@ target is `PORT_BRIEF.md`.
   the arrowhead **tip sits exactly on the impact point** — you are told where
   it will stop, not merely which way it is going. Spins about its axle at
   `v / radius` while dashing, so it visibly rolls.
+
+- **SIREN / SHEPHERD — the "side quest" bodies.** Owner direction: not bosses,
+  but enemies that pull focus off the primary goal. Neither touches you.
+  SIREN inhales for 0.8s then SCREAMS, surging every body within 7u to 1.6x
+  for three seconds (`tuning.js`: *"screamer — surges the pack, kill it
+  first"*). SHEPHERD never closes; it holds 9u, circles, and drags its whole
+  flock toward you (*"the threat is what it does to the OTHERS"*). Both are
+  fragile and both are running away, so chasing one costs you what you were
+  doing — and not chasing it costs more. `move_speed()` on the base class is
+  what lets one scream lift the entire arena.
 
 **HUD**
 - **Parity with the browser build's layout** (`js/main.js` drawHud): `WAVE N`
@@ -211,7 +221,8 @@ target is `PORT_BRIEF.md`.
   Deflector / King; ours is BOOST ONLY / CLOSE QUARTERS / ONE LIFE /
   ARTILLERY / SWARM / GRAVEYARD, each bending a system the game already has,
   so a level is data and an archetype is a parameter.
-- **Timed** — the first three run a fixed clock and the score at the buzzer is
+- **Ten levels**, covering all seven rule archetypes, all measured.
+- **Timed** — every level runs a fixed clock and the score at the buzzer is
   the grade. **Tier C or better opens the next level**, so a player merely
   finishing keeps moving and the higher letters are for those who want them.
 - **Abilities unlock over the campaign** (GW3's drones do the same): only

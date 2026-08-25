@@ -64,8 +64,8 @@ func update(delta: float) -> void:
 			if dist > STOP_DIST:
 				var s := maxf(0.0, sin(_t * LUNGE_HZ + _phase))
 				var lunge := s * s * LUNGE_GAIN + LUNGE_FLOOR
-				position.x += nx * speed * lunge * delta
-				position.z += nz * speed * lunge * delta
+				position.x += nx * move_speed() * lunge * delta
+				position.z += nz * move_speed() * lunge * delta
 			if _pounce_t <= 0.0 and dist < POUNCE_RANGE:
 				_state = Pounce.CROUCH
 				_pounce_t = CROUCH_TIME
@@ -77,8 +77,8 @@ func update(delta: float) -> void:
 				_pounce_t = LEAP_TIME
 				_sqv += 0.7                   # stretch on launch
 		Pounce.LEAP:
-			position.x += _leap_dir.x * speed * LEAP_SPEED_MULT * delta
-			position.z += _leap_dir.y * speed * LEAP_SPEED_MULT * delta
+			position.x += _leap_dir.x * move_speed() * LEAP_SPEED_MULT * delta
+			position.z += _leap_dir.y * move_speed() * LEAP_SPEED_MULT * delta
 			if _pounce_t <= 0.0:
 				_state = Pounce.STALK
 				_pounce_t = 1.6 + rng.randf() * 1.4

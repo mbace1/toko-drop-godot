@@ -10,7 +10,10 @@ config_version=5
 config/name="Toko Drop"
 config/description="Twin-stick swarm survival. The swarm reads your gun, corpses bite back. Godot 4 port of the Three.js browser game."
 run/main_scene="res://scenes/main.tscn"
-config/features=PackedStringArray("4.3", "Forward Plus")
+; "Forward Plus" is deliberately NOT listed as a required feature: it would
+; make the project unexportable to Web, which has no Vulkan. The renderer is
+; chosen per platform under [rendering] instead.
+config/features=PackedStringArray("4.3")
 config/icon="res://icon.svg"
 
 [display]
@@ -68,5 +71,10 @@ fire={
 [rendering]
 
 renderer/rendering_method="forward_plus"
+; Browsers have no Vulkan, so the web build runs Compatibility (WebGL2). It
+; loses real subsurface scattering — SSS is a Forward+ screen-space pass — so
+; the gel reads flatter there. The web build exists to be PLAYED (tier
+; thresholds, feel); the desktop build is what the look is judged on.
+renderer/rendering_method.web="gl_compatibility"
 textures/canvas_textures/default_texture_filter=1
 environment/defaults/default_clear_color=Color(0.03, 0.03, 0.08, 1)
