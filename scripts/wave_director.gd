@@ -84,6 +84,29 @@ const REV_RING_BIG_RADIUS := 0.75
 ## cannot exhaust the pool and leave the living unable to shoot.
 const REV_POOL_GUARD := 240
 
+# ── Wave kinds and variants (tuning.js waves.rhythm / .variants) ────────────
+## Without these, wave 12 is wave 4 with more bodies. The rhythm is what gives
+## a run a SHAPE: a breather, then a swarm, then a spike.
+const RHYTHM := {"boss_every": 8, "spike_every": 4, "swarm_every": 3, "swarm_from": 3}
+## Budget multiplier per kind.
+const KIND_BUDGET := {
+	"boss": 2.0, "spike": 1.4, "swarm": 1.25, "prize": 0.8,
+	"breather": 0.6, "normal": 1.0,
+}
+## Draw tables. Repetition IS the weighting, exactly as in the source.
+const VARIANTS_NORMAL := ["normal", "normal", "normal", "elite", "elitelite", "twin", "group"]
+const VARIANTS_SWARM := ["group", "group", "twin", "normal"]
+const AFFIXES := ["volatile", "swift", "anchored"]
+
+const ELITE_COST := 1.6
+const ELITELITE_COST := 1.25
+const TWIN_COST := 1.6
+const GROUP_BASE := 3
+const GROUP_RAND := 2
+## Swarm waves draw only bodies this cheap — a swarm of expensive things is
+## not a swarm, it is a boss fight with extra steps.
+const SWARM_COST_MAX := 2
+
 ## The run's GAMEPLAY random stream. Every draw that decides what happens —
 ## which type spawns, where it lands, which way a body flops — comes from here
 ## and from the copy handed to each body in _spawn(). Cosmetic draws stay on
@@ -159,12 +182,30 @@ func body_cap_for(w: int) -> int:
 func difficulty() -> int:
 	return level_override if level_override > 0 else wave
 
+## Which kind of wave this is. Checked most-significant first so a wave that
+## is both a spike and a swarm reads as the bigger event.
+func kind_for(w: int) -> String:
+	if w % RHYTHM["boss_every"] == 0:
+		return "boss"
+	if w % RHYTHM["spike_every"] == 0:
+		return "spike"
+	if w >= RHYTHM["swarm_from"] and w % RHYTHM["swarm_every"] == 0:
+		return "swarm"
+	# A breather after every spike, so the curve has a trough to climb out of.
+	if w > 1 and (w - 1) % RHYTHM["spike_every"] == 0:
+		return "breather"
+	return "normal"
+
+var wave_kind := "normal"
+
 func start_wave() -> void:
 	wave += 1
 	# difficulty(), not `wave`: Rush drives escalation from its own LEVEL, which
 	# moves DOWN when you lose a life, and composition has to follow it.
 	var d := difficulty()
-	_spawn(compose(d, budget_for(d), shooter_cap_for(d), body_cap_for(d)))
+	wave_kind = kind_for(d)
+	var mult: float = KIND_BUDGET[wave_kind]
+	_spawn(compose(d, budget_for(d) * mult, shooter_cap_for(d), body_cap_for(d)))
 	wave_started.emit(wave)
 
 ## Spends a budget on types eligible at wave `w`, never exceeding `shooter_cap`
@@ -176,8 +217,8 @@ func start_wave() -> void:
 ## every tick — rather than spending a whole wave at once. Two copies of a
 ## ported table would drift apart, which is exactly the failure CLAUDE.md's
 ## porting discipline exists to prevent.
-func compose(w: int, budget: float, shooter_cap: int, body_cap: int) -> Array[String]:
-	var picks: Array[String] = []
+func compose(w: int, budget: float, shooter_cap: int, body_cap: int) -> Array:
+	var picks: Array = []
 	var shooters_left := shooter_cap
 	var bodies_left := body_cap
 	var eligible := _eligible_for(w)
@@ -192,11 +233,53 @@ func compose(w: int, budget: float, shooter_cap: int, body_cap: int) -> Array[St
 		if affordable.is_empty():
 			break
 		var pick: String = affordable[rng.randi() % affordable.size()]
-		picks.append(pick)
-		budget -= float(POOL[pick][1])
-		bodies_left -= 1
+		# The VARIANT is drawn per body, and it changes what the body costs.
+		# A swarm wave draws from its own table (groups and twins, never
+		# elites) so a swarm stays a swarm.
+		var table: Array = VARIANTS_SWARM if wave_kind == "swarm" else VARIANTS_NORMAL
+		var v: String = table[rng.randi() % table.size()]
+		var cost := float(POOL[pick][1])
+		var count := 1
+		var affix := ""
+		match v:
+			"elite":
+				cost *= ELITE_COST
+				affix = AFFIXES[rng.randi() % AFFIXES.size()]
+			"elitelite":
+				cost *= ELITELITE_COST
+				if rng.randf() < 0.5:
+					affix = AFFIXES[rng.randi() % AFFIXES.size()]
+			"twin":
+				cost *= TWIN_COST
+				count = 2
+			"group":
+				# A group is drawn from the CHEAP end — many of something small.
+				var cheap: Array[String] = []
+				for name in eligible:
+					if float(POOL[name][1]) <= SWARM_COST_MAX:
+						cheap.append(name)
+				if not cheap.is_empty():
+					pick = cheap[rng.randi() % cheap.size()]
+				count = GROUP_BASE + rng.randi() % (GROUP_RAND + 1)
+				cost = float(POOL[pick][1]) * float(count)
+		# A twin or a group asks for several bodies at once; neither may push
+		# past the body cap, which is the thing keeping the screen readable.
+		if count > bodies_left:
+			count = bodies_left
+			cost = float(POOL[pick][1]) * float(count)
+		if count <= 0:
+			break
+		if cost > budget and picks.size() > 0:
+			break
+		for k in count:
+			picks.append({"type": pick, "variant": v, "affix": affix})
+		budget -= cost
+		bodies_left -= count
 		if POOL[pick][2]:
-			shooters_left -= 1
+			# A TWIN of a shooter is two shooters. Decrementing once let a
+			# variant smuggle extra artillery past the cap that exists to keep
+			# the screen readable.
+			shooters_left -= count
 
 	return picks
 
@@ -227,13 +310,15 @@ func _eligible_for(w: int) -> Array[String]:
 ## per axis. The arena is 38 x 22, so a circle of the smaller half-extent would
 ## bunch every wave into a narrow band down the middle and leave the wide ends
 ## of the room empty.
-func _spawn(picks: Array[String]) -> void:
+func _spawn(picks: Array) -> void:
 	var rx := 0.6 * half_x
 	var rz := 0.6 * half_z
 	var n := picks.size()
 	for i in n:
 		var a := (float(i) / float(maxi(n, 1))) * TAU + rng.randf() * 0.4 - 0.2
-		var e := _make(picks[i])
+		var entry = picks[i]
+		var type_name: String = entry["type"] if typeof(entry) == TYPE_DICTIONARY else String(entry)
+		var e := _make(type_name)
 		enemies_root.add_child(e)
 		e.position = Vector3(cos(a) * rx, 0.0, sin(a) * rz)
 		e.half_x = half_x
@@ -247,6 +332,10 @@ func _spawn(picks: Array[String]) -> void:
 		# from it there (globbo's pounce phase, fanner's strafe, weeva's spiral).
 		e.rng = rng
 		e.init()
+		# The variant is applied AFTER init(), because init() is where a species
+		# sets its own base stats and a variant multiplies them.
+		if typeof(entry) == TYPE_DICTIONARY and String(entry["variant"]) != "normal":
+			e.apply_variant(String(entry["variant"]), String(entry["affix"]))
 		enemies.append(e)
 
 func _make(name: String) -> Enemy:
@@ -373,6 +462,16 @@ func _fire_revenge(e: Enemy) -> void:
 	var col := e.revenge_color()
 	var ex := e.position.x
 	var ez := e.position.z
+
+	# VOLATILE pays off the fuse: an extra ring on top of the species' own
+	# revenge (main.js onKill). The orange strobe telegraphed it the whole
+	# time the body was alive, which is what makes it fair rather than a
+	# surprise tax on killing the wrong thing.
+	if e.affix == "volatile":
+		var a0 := rng.randf() * TAU
+		for j in 8:
+			var a := a0 + (float(j) / 8.0) * TAU
+			bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
 
 	match e.revenge_dialect:
 		Enemy.Revenge.AIMED, Enemy.Revenge.FAN:

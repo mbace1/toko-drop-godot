@@ -91,6 +91,16 @@ var _base_alpha := 1.0
 ## surge lifts the WHOLE swarm rather than one hand-picked type.
 var surge_t := 0.0
 
+## Spawn VARIANT and elite AFFIX (tuning.js waves.variants / waves.affixes).
+## A variant changes the body's numbers; an affix changes its BEHAVIOUR, and
+## main.js is explicit that each one has "its own visible tell" — an elite you
+## cannot tell apart from an ordinary body is just a longer health bar.
+##   volatile - its corpse blooms a ring; strobes while alive
+##   swift    - faster, and leaves a much bolder streak
+##   anchored - does not move at all, and is tougher for it
+var variant := "normal"
+var affix := ""
+
 var _trail_t := 0.0
 var _vel := Vector2.ZERO     # measured, not declared — every species moves itself
 var _prev_pos := Vector2.ZERO
@@ -232,7 +242,42 @@ func revenge_color() -> Color:
 ## this instead of `speed` directly, which is what lets one SIREN scream make
 ## the entire arena lurch forward at once.
 func move_speed() -> float:
-	return speed * (1.6 if surge_t > 0.0 else 1.0)
+	if affix == "anchored":
+		return 0.0            # it holds its ground; that IS the modifier
+	var m := 1.6 if surge_t > 0.0 else 1.0
+	if affix == "swift":
+		m *= 1.35
+	return speed * m
+
+## Applies a spawn variant. main.js: elite doubles HP and grows 1.2x,
+## elitelite is a 1.5x HP bump with no size change.
+func apply_variant(kind: String, with_affix: String) -> void:
+	variant = kind
+	affix = with_affix
+	match kind:
+		"elite":
+			hp = int(ceil(float(hp) * 2.0))
+			base_shape *= 1.2
+		"elitelite":
+			hp = int(ceil(float(hp) * 1.5))
+	max_hp = hp
+	if affix == "anchored":
+		hp = int(ceil(float(hp) * 1.4))   # it cannot run, so it can take more
+		max_hp = hp
+	if affix == "swift":
+		trail_interval = maxf(0.03, trail_interval * 0.6)
+		trail_size = trail_size * 1.5
+	_apply_variant_look()
+
+## The tell. An elite reads as an elite before it reaches you, or the variant
+## is a surprise rather than information.
+func _apply_variant_look() -> void:
+	if variant == "elite":
+		mat.set_shader_parameter("rim_color", Color(1.0, 0.9, 0.35))
+	elif variant == "elitelite":
+		mat.set_shader_parameter("rim_color", Color(0.9, 0.8, 0.5))
+	if affix == "anchored":
+		mat.set_shader_parameter("rim_color", Color(0.6, 0.7, 0.9))
 
 func _update_common(delta: float) -> void:
 	_t += delta
@@ -253,6 +298,11 @@ func _update_common(delta: float) -> void:
 
 	mat.set_shader_parameter("wobble_time", _t)
 	mat.set_shader_parameter("hit_wobble", _hit_wobble)
+	# VOLATILE strobes orange the whole time it is alive. The corpse ring it
+	# blooms is only fair because the fuse was visible.
+	if affix == "volatile":
+		mat.set_shader_parameter("rim_color",
+			Color(1.0, 0.5, 0.1) if sin(_t * 12.0) > 0.0 else Color(0.5, 0.2, 0.0))
 
 ## Measures this body's own velocity and drops a ghost behind it on the
 ## species' cadence. Velocity is measured rather than declared because every

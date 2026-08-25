@@ -27,6 +27,7 @@ func _init() -> void:
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
+	_test_variants(root)
 	_test_weapons(root)
 	_test_armour_and_aura(root)
 	_test_feedback(root)
@@ -827,7 +828,8 @@ func _test_compose(root: Node3D) -> void:
 	var picks := wd.compose(5, 12.0, 5, 20)
 	var cost := 0.0
 	var shooters := 0
-	for name in picks:
+	for entry in picks:
+		var name: String = entry["type"]
 		cost += float(WaveDirector.POOL[name][1])
 		if WaveDirector.POOL[name][2]:
 			shooters += 1
@@ -836,7 +838,8 @@ func _test_compose(root: Node3D) -> void:
 
 	var capped := wd.compose(9, 40.0, 2, 20)
 	var capped_shooters := 0
-	for name in capped:
+	for entry in capped:
+		var name: String = entry["type"]
 		if WaveDirector.POOL[name][2]:
 			capped_shooters += 1
 	_check(capped_shooters <= 2, "compose() respects the shooter cap (%d of 2)" % capped_shooters)
@@ -851,8 +854,8 @@ func _test_compose(root: Node3D) -> void:
 	# Nothing is eligible before its minWave.
 	var early := wd.compose(1, 30.0, 9, 30)
 	var all_wave_1 := true
-	for name in early:
-		if WaveDirector.POOL[name][0] > 1:
+	for entry in early:
+		if WaveDirector.POOL[entry["type"]][0] > 1:
 			all_wave_1 = false
 	_check(all_wave_1, "compose() never picks a type before its minWave")
 
@@ -1298,3 +1301,71 @@ func _test_weapons(root: Node3D) -> void:
 	took[0] = ""
 	pool.update(0.016, Vector3(0.0, 0.0, 0.0), 0.0)
 	_check(took[0] == "", "and an ignored pod eventually expires")
+
+
+## Spawn variants, elite affixes and the wave rhythm — the three tables that
+## stop wave 12 being wave 4 with more bodies.
+func _test_variants(root: Node3D) -> void:
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+	wd.reseed(1234)
+
+	# The rhythm gives a run a SHAPE rather than a ramp.
+	_check(wd.kind_for(8) == "boss", "every 8th wave is a boss wave")
+	_check(wd.kind_for(4) == "spike", "every 4th is a spike")
+	_check(wd.kind_for(6) == "swarm", "and a swarm lands on the threes from wave 3")
+	_check(wd.kind_for(5) == "breather",
+		"the wave after a spike is a BREATHER — the curve needs a trough")
+	_check(float(WaveDirector.KIND_BUDGET["boss"]) > float(WaveDirector.KIND_BUDGET["normal"]),
+		"a boss wave spends more")
+	_check(float(WaveDirector.KIND_BUDGET["breather"]) < float(WaveDirector.KIND_BUDGET["normal"]),
+		"and a breather spends less")
+
+	# A swarm draws from its own table: groups and twins, never elites.
+	_check(not WaveDirector.VARIANTS_SWARM.has("elite"),
+		"a swarm wave never rolls an ELITE — that would not be a swarm")
+
+	# Variants must never smuggle bodies past the caps.
+	for cap in [3, 5, 9]:
+		wd.wave_kind = "swarm"
+		var picks := wd.compose(9, 60.0, 9, cap)
+		_check(picks.size() <= cap,
+			"a swarm respects a body cap of %d (got %d)" % [cap, picks.size()])
+
+	wd.wave_kind = "normal"
+	var shooters := 0
+	var sp := wd.compose(12, 60.0, 2, 30)
+	for e in sp:
+		if WaveDirector.POOL[e["type"]][2]:
+			shooters += 1
+	_check(shooters <= 2,
+		"a TWIN of a shooter counts twice against the shooter cap (got %d)" % shooters)
+
+	# The variants themselves.
+	var target := Node3D.new()
+	root.add_child(target)
+	var base: Globbo = _place(root, Globbo.new(), Vector3.ZERO, target, null)
+	var plain_hp := base.hp
+
+	var el: Globbo = _place(root, Globbo.new(), Vector3.ZERO, target, null)
+	el.apply_variant("elite", "")
+	_check(el.hp > plain_hp, "an elite has more HP (%d vs %d)" % [el.hp, plain_hp])
+	_check(el.base_shape.x > base.base_shape.x, "and is visibly bigger")
+	_check(el.max_hp == el.hp, "its max_hp tracks, so the score value is right")
+
+	# ANCHORED cannot move at all — that is the whole modifier.
+	var an: Globbo = _place(root, Globbo.new(), Vector3(5.0, 0.0, 0.0), target, null)
+	an.apply_variant("elitelite", "anchored")
+	_check(is_equal_approx(an.move_speed(), 0.0), "an ANCHORED body does not move")
+	var was := an.position
+	for i in 60:
+		an.update(1.0 / 60.0)
+	_check(an.position.distance_to(was) < 0.01, "and really does stay put")
+	_check(an.hp > int(ceil(float(plain_hp) * 1.5)) - 1, "it is tougher for standing still")
+
+	# SWIFT is faster and leaves a bolder streak.
+	var sw: Globbo = _place(root, Globbo.new(), Vector3.ZERO, target, null)
+	var base_trail := sw.trail_interval
+	sw.apply_variant("elitelite", "swift")
+	_check(sw.move_speed() > base.move_speed(), "a SWIFT body is faster")
+	_check(sw.trail_interval < base_trail, "and streaks harder, so you can see it coming")

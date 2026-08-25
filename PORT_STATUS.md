@@ -155,6 +155,24 @@ target is `PORT_BRIEF.md`.
   UNKILLABLE until you deal with the warden. It never shields itself, so
   there is always something you can shoot.
 
+**Wave shape — variants, affixes and rhythm**
+- **Wave kinds** from `tuning.js` waves.rhythm: boss every 8, spike every 4,
+  swarm every 3 from wave 3, and a breather after each spike — each with its
+  own budget multiplier. Without this, wave 12 is wave 4 with more bodies; the
+  rhythm is what gives a run a SHAPE, including a trough to climb out of.
+- **Spawn variants** per body, drawn from the source's tables (repetition is
+  the weighting): elite (×2 HP, ×1.2 size, always an affix), elitelite
+  (×1.5 HP, half the time an affix), twin (two of it), group (3–5 of
+  something CHEAP). Swarm waves draw from their own table — groups and twins,
+  never elites, because a swarm of elites is not a swarm.
+- **Elite affixes**, each with a visible tell (main.js v145): **volatile**
+  strobes orange and its corpse blooms an extra ring; **swift** is 1.35× and
+  streaks harder so you see it coming; **anchored** cannot move at all and is
+  tougher for it.
+- Two accounting bugs the tests caught: a TWIN of a shooter counted once
+  against the shooter cap that exists to keep a screen readable, and a GROUP
+  could push past the body cap entirely.
+
 **Weapons and the streak**
 - **Weapon pods** (`scripts/powerup_pool.gd`) — kills drop them, you walk over
   one and your gun changes for the rest of the run. Table mirrors main.js's
