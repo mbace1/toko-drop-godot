@@ -75,7 +75,7 @@ target is `PORT_BRIEF.md`.
   forking it (Rush holds a standing pressure rather than spending a whole wave
   at once). Pure refactor; the existing wave checks pass unmodified.
 
-**Enemies** (15 of ~40 in the live roster — `js/tuning.js` names all 40)
+**Enemies** (19 of ~40 in the live roster — `js/tuning.js` names all 40)
 - GLOBBO — chaser blob. Two behaviours stack: the lunging speed-pulse
   `speed × (max(0,sin(t·3+φ))² · 2.6 + 0.4)` (`TOKO_DROP_PORT_BRIEF.md`
   Part 2 / tuning.js line 43) **and** the stalk→crouch→leap pounce state
@@ -138,6 +138,29 @@ target is `PORT_BRIEF.md`.
   fragile and both are running away, so chasing one costs you what you were
   doing — and not chasing it costs more. `move_speed()` on the base class is
   what lets one scream lift the entire arena.
+
+- **PYRA** — the one body that never moves. Spins in place and throws a
+  7-shot fan every 2.5s, so it is entirely a positioning problem.
+- **BOTFLY** — orbits at mid range and fires slow HOMING shots that steer a
+  fraction of the way each frame rather than snapping. `bullet.js`'s own note
+  on the speed: *"speedMult 0.62 keeps it outrunnable"* — a homing bullet you
+  cannot outrun is a hit with extra steps.
+- **BULWARK** — its FRONT is bulletproof; flank it. The facing turns at a
+  limited rate on purpose (*"a quick side-step stays a real answer, the plate
+  can't snap-track"*), because a shield that tracks instantly is not a puzzle,
+  it is more HP.
+- **WARDEN** — the third side-quest body and the most demanding. It never
+  attacks; everything inside its aura shrugs off your shots. SIREN makes the
+  swarm faster and SHEPHERD makes it closer, but a WARDEN makes it
+  UNKILLABLE until you deal with the warden. It never shields itself, so
+  there is always something you can shoot.
+
+**Feedback**
+- The browser's v212 CONTEXTUAL question, ported: every damage site records
+  what hit you and how, and the deck asks about THAT, skipping anything asked
+  recently. Explicit consent (SEND only), never claims an unmade delivery,
+  and an empty submission records nothing. Files under `tokodropgodot`,
+  its own catalogue id.
 
 **HUD**
 - **Parity with the browser build's layout** (`js/main.js` drawHud): `WAVE N`

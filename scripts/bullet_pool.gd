@@ -26,6 +26,11 @@ class Bullet:
 	var phase := 0.0
 	var base_scale := 1.0
 	var color := Color.WHITE
+	## BOTFLY's shot steers toward the player each frame. bullet.js turns it a
+	## FRACTION of the way rather than snapping, so it reads as homing and stays
+	## dodgeable rather than becoming a guaranteed hit.
+	var homing := false
+	var turn_rate := 0.0
 
 var _pool: Array[Bullet] = []
 var active: Array[Bullet] = []
@@ -99,7 +104,7 @@ func _make_multimesh(mesh: Mesh, material: Material, use_colors: bool) -> MultiM
 ## but kept so enemy scripts can opt in without a pool API change later).
 ## speed_mult is what makes revenge fire readable: TUNING.revenge.speedMult is
 ## 0.6 — "revenge is slow — the graze game, not a wall".
-func spawn_dir(x: float, z: float, dx: float, dz: float, is_player: bool, color = null, fat: bool = false, speed_mult: float = 1.0) -> void:
+func spawn_dir(x: float, z: float, dx: float, dz: float, is_player: bool, color = null, fat: bool = false, speed_mult: float = 1.0, homing: bool = false, turn_rate: float = 0.0) -> void:
 	if _pool.is_empty():
 		return
 	var b: Bullet = _pool.pop_back()
@@ -120,14 +125,26 @@ func spawn_dir(x: float, z: float, dx: float, dz: float, is_player: bool, color 
 	b.phase = randf() * TAU
 	b.color = color if color != null else (Color(0.4, 1.0, 0.8) if is_player else Color(1.0, 0.33, 0.2))
 	b.base_scale = 3.0 if fat else (1.3 if is_player else 1.6)
+	b.homing = homing
+	b.turn_rate = turn_rate
 	active.append(b)
 
-func update(delta: float, half_size: float) -> void:
+## `toward` is the player's position; homing shots steer at it.
+func update(delta: float, half_size: float, toward = null) -> void:
 	for i in range(active.size() - 1, -1, -1):
 		var b: Bullet = active[i]
 		if not b.alive:
 			_recycle_at(i)
 			continue
+		if b.homing and toward != null:
+			# A TURN, not a snap (bullet.js _steerToward).
+			var sp := Vector2(b.vx, b.vz).length()
+			var to := Vector2(toward.x - b.x, toward.z - b.z)
+			if to.length() > 0.001:
+				var want := to.normalized() * sp
+				var k := minf(1.0, b.turn_rate * delta)
+				b.vx += (want.x - b.vx) * k
+				b.vz += (want.y - b.vz) * k
 		b.x += b.vx * delta
 		b.z += b.vz * delta
 		b.lifetime -= delta

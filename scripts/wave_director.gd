@@ -42,6 +42,10 @@ const POOL := {
 	# else worse, and dealing with them costs you the thing you were doing.
 	"SHEPHERD":    [4, 4, false],
 	"SIREN":       [7, 5, false],
+	"PYRA":        [5, 4, true],
+	"BOTFLY":      [5, 4, true],
+	"BULWARK":     [6, 4, false],
+	"WARDEN":      [7, 5, false],
 }
 
 ## Children are spawned BY a parent's death, never drawn from the wave budget,
@@ -258,6 +262,10 @@ func _make(name: String) -> Enemy:
 		"REDD_CUBE":   return ReddCube.new()
 		"PURP_CUBE":   return PurpCube.new()
 		"TORO":        return Toro.new()
+		"PYRA":        return Pyra.new()
+		"BOTFLY":      return Botfly.new()
+		"BULWARK":     return Bulwark.new()
+		"WARDEN":      return Warden.new()
 		"SHEPHERD":    return Shepherd.new()
 		"SIREN":       return Siren.new()
 		"REDD_MINI":   return ReddMini.new()

@@ -583,7 +583,7 @@ func _process_playing(delta: float) -> void:
 			audio.play("dash")
 
 	player.update(delta, move, aim, bullets, half_x, half_z)
-	bullets.update(delta, maxf(half_x, half_z))
+	bullets.update(delta, maxf(half_x, half_z), player.position)
 	trails.update(delta)
 	poison.update(delta)
 	debris.update(delta)
@@ -620,6 +620,19 @@ func _collide_player_bullets() -> void:
 			var r := e.radius + 0.15
 			if dx * dx + dz * dz >= r * r:
 				continue
+			# BULWARK shrugs off anything landing on its front plate, and a
+			# WARDEN's umbrella protects everything under it. Both consume the
+			# shot rather than passing it through, so a blocked hit still costs
+			# you the bullet — and both are VISIBLE, because a shot that stops
+			# working with no explanation reads as a bug.
+			if e is Bulwark and (e as Bulwark).blocks(b.x, b.z):
+				b.alive = false
+				audio.play_varied("hit")
+				continue
+			if _shielded(e):
+				b.alive = false
+				audio.play_varied("hit")
+				continue
 			b.alive = false
 			var was_max := e.max_hp
 			if e.take_hit(1):
@@ -639,6 +652,17 @@ func _collide_player_bullets() -> void:
 ## Enemy shots vs. the player. QUANTUM SHIELD belongs HERE — it turns
 ## incoming fire into outgoing fire, and is the one ability that pays you
 ## for standing and shooting.
+## Is this body under a live WARDEN's umbrella? The warden never shields
+## itself, which is what keeps the rule fair: there is always something you
+## can shoot.
+func _shielded(e: Enemy) -> bool:
+	for w in waves.enemies:
+		if not is_instance_valid(w) or not w.alive or not (w is Warden):
+			continue
+		if (w as Warden).shields(e):
+			return true
+	return false
+
 func _collide_enemy_bullets() -> void:
 	if not player.alive or player.invincible:
 		return

@@ -27,6 +27,7 @@ func _init() -> void:
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
+	_test_armour_and_aura(root)
 	_test_feedback(root)
 	_test_challenges(root)
 	_test_wave_budget(root)
@@ -1170,3 +1171,45 @@ func _test_feedback(root: Node3D) -> void:
 		"an empty submission is discarded, not filed as an empty opinion")
 	_check(fb.submit("general", "it felt good", [], {}.keys(), {}) != "",
 		"a real note is kept")
+
+
+## BULWARK's plate and WARDEN's umbrella. Both change what your gun does, so
+## both need to be provably fair: the plate must be out-steppable and the
+## warden must never shield itself.
+func _test_armour_and_aura(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+
+	var b: Bulwark = _place(root, Bulwark.new(), Vector3.ZERO, target, null)
+	b.face = Vector2(1.0, 0.0)
+	_check(b.blocks(5.0, 0.0), "a shot into the plate is blocked")
+	_check(not b.blocks(-5.0, 0.0), "a shot into its BACK is not")
+	_check(not b.blocks(0.0, 5.0), "and neither is one from the side")
+
+	# The plate must not snap-track, or side-stepping stops being an answer.
+	target.position = Vector3(0.0, 0.0, 9.0)
+	var before := b.face
+	b.update(1.0 / 60.0)
+	var turned: float = before.angle_to(b.face)
+	_check(absf(turned) < 0.1, "the plate turns SLOWLY (%.3f rad in one frame)" % turned)
+
+	var w: Warden = _place(root, Warden.new(), Vector3.ZERO, target, null)
+	var near: Globbo = _place(root, Globbo.new(), Vector3(3.0, 0.0, 0.0), target, null)
+	var far: Globbo = _place(root, Globbo.new(), Vector3(15.0, 0.0, 0.0), target, null)
+	_check(w.shields(near), "a body inside the aura is shielded")
+	_check(not w.shields(far), "one outside it is not")
+	_check(not w.shields(w), "a WARDEN never shields ITSELF — there is always something to shoot")
+
+	# BOTFLY's shot steers, but slowly enough to outrun.
+	var bullets := _make_pool(root)
+	bullets.spawn_dir(0.0, 0.0, 1.0, 0.0, false, Color.WHITE, false,
+		Botfly.SPEED_MULT, true, Botfly.TURN_RATE)
+	var shot = bullets.active[0]
+	var start_dir := Vector2(shot.vx, shot.vz).normalized()
+	for i in 30:
+		bullets.update(1.0 / 60.0, 40.0, Vector3(0.0, 0.0, 10.0))
+	var now_dir := Vector2(shot.vx, shot.vz).normalized()
+	_check(now_dir != start_dir, "a homing shot actually steers")
+	_check(now_dir.angle_to(start_dir) < 1.4, "but turns, rather than snapping onto you")
+	_check(Vector2(shot.vx, shot.vz).length() < BulletPool.ENEMY_SPEED,
+		"and it is slower than ordinary fire, so it can be outrun")
