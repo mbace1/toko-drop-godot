@@ -24,7 +24,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "1.1"
+const VERSION := "1.2"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -79,6 +79,8 @@ var pods: PowerupPool
 ## climbs per kill and resets when you are hit.
 var streak := 0
 var _weapon_name := "SINGLE"
+var _toast: Label
+var _toast_t := 0.0
 ## Camera shake as main.js does it: a TRAUMA value events add to, decaying on
 ## its own, with the offset driven by trauma SQUARED. Squaring is what stops a
 ## stream of small hits reading as a constant judder while a kill still lands.
@@ -166,6 +168,7 @@ func _ready() -> void:
 	waves.poison = poison
 	waves.enemies_root = enemies_root
 	waves.wave_cleared.connect(_on_wave_cleared)
+	waves.wave_started.connect(_on_wave_started)
 
 	input_mgr = InputManager.new()
 	input_mgr.camera = camera
@@ -234,7 +237,9 @@ func _setup_world() -> void:
 	env.ssao_enabled = true
 	env.ssao_intensity = 1.4
 	env.ssr_enabled = true
-	env.ssr_max_steps = 32
+	# 16 rather than 32: SSR is a full-screen ray march, and the arena's floor
+	# reflections do not need the extra steps to read — part of the 60fps pass.
+	env.ssr_max_steps = 16
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 1.15
 	env_node.environment = env
@@ -256,6 +261,11 @@ func _setup_world() -> void:
 	back.light_energy = 1.5
 	back.light_color = Color(0.72, 0.84, 1.0)
 	back.rotation_degrees = Vector3(-18.0, 180.0, 0.0)
+	# No shadow map: this light exists only to give SSS TRANSMITTANCE something
+	# to carry (gel.gdshader's header), never to cast a visible shadow. A
+	# second shadow-casting light doubles the shadow pass cost for a shadow
+	# nobody was meant to see — part of the 60fps pass (owner direction).
+	back.shadow_enabled = false
 	add_child(back)
 
 	_floor_inst = MeshInstance3D.new()
@@ -398,6 +408,14 @@ func _setup_hud() -> void:
 	_corner_r.position = Vector2(-16, -30)
 	_corner_r.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hud.add_child(_corner_r)
+
+	_toast = _make_label(24)
+	_toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_toast.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_toast.position.y = 90.0
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.hide()
+	hud.add_child(_toast)
 
 	_build_feedback_panel()
 
@@ -569,6 +587,8 @@ func _process(delta: float) -> void:
 				_start_game()
 
 	_update_shake(delta)
+	_update_toast(delta)
+	_update_adaptive_quality()
 	_update_wash(delta)
 	_update_hud()
 
@@ -947,6 +967,50 @@ func _finish_challenge() -> void:
 	_msg_label.show()
 	_open_feedback()
 
+## Boss waves and the wave-kind banner, both base-mode only (owner
+## direction 2026-08-25) — Rush and Challenge already have their own
+## escalation reads (heat, the clock) and do not need a second one.
+func _on_wave_started(n: int) -> void:
+	if mode != Mode.CLASSIC:
+		return
+	match waves.wave_kind:
+		"boss":
+			# The BIGGEST-radius body in the wave is promoted, not the first one
+			# spawned — a boss ring around the smallest thing on screen, with a
+			# WARDEN aura the same size sitting next to it, read as the wrong body
+			# being marked.
+			var biggest: Enemy = null
+			for e in waves.enemies:
+				if biggest == null or e.radius > biggest.radius:
+					biggest = e
+			if biggest != null:
+				biggest.apply_boss()
+			_show_toast("WAVE %d — BOSS" % n)
+			audio.play("wave")
+		"spike":
+			_show_toast("WAVE %d — SPIKE" % n)
+		"swarm":
+			_show_toast("WAVE %d — SWARM" % n)
+		"breather":
+			_show_toast("WAVE %d — BREATHER" % n)
+
+func _show_toast(text: String) -> void:
+	_toast.text = text
+	_toast.modulate.a = 1.0
+	_toast.show()
+	_toast_t = 1.8
+
+## Fades the last 0.4s rather than cutting, so it reads as a beat, not a flicker.
+func _update_toast(delta: float) -> void:
+	if _toast_t <= 0.0:
+		if _toast.visible:
+			_toast.hide()
+		return
+	_toast_t -= delta
+	_toast.modulate.a = clampf(_toast_t / 0.4, 0.0, 1.0)
+	if _toast_t <= 0.0:
+		_toast.hide()
+
 func _on_wave_cleared(n: int) -> void:
 	_wave_peak = 0
 	score += 50 * n
@@ -1097,6 +1161,21 @@ func _menu_mode_key() -> String:
 func _update_wash(delta: float) -> void:
 	var want := 0.34 if state == State.DEAD else 0.0
 	_death_wash.color.a = move_toward(_death_wash.color.a, want, delta * 1.6)
+
+## The 60fps target (owner direction 2026-08-25): SSS is a per-pixel
+## screen-space cost over every body's visible area, so the thing that
+## actually threatens the frame rate is TOTAL ALIVE COUNT, not any one
+## system. Above a soft threshold the quality scales down smoothly rather
+## than the frame rate dropping off a cliff right at the body cap.
+const SSS_FULL_BELOW := 10
+const SSS_MIN_AT := 26
+
+func _update_adaptive_quality() -> void:
+	var n := waves.enemies.size() if waves != null else 0
+	var q := 1.0
+	if n > SSS_FULL_BELOW:
+		q = clampf(1.0 - float(n - SSS_FULL_BELOW) / float(SSS_MIN_AT - SSS_FULL_BELOW), 0.35, 1.0)
+	Enemy.quality = q
 
 func _update_shake(delta: float) -> void:
 	if _trauma <= 0.0:

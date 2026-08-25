@@ -77,4 +77,9 @@ renderer/rendering_method="forward_plus"
 ; thresholds, feel); the desktop build is what the look is judged on.
 renderer/rendering_method.web="gl_compatibility"
 textures/canvas_textures/default_texture_filter=1
+; 2048 rather than the 4096 default: half the shadow-map fill cost for a
+; fixed top-down camera close to the whole arena, where the extra resolution
+; was not buying readable detail. Part of the 60fps pass.
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/size.mobile=1024
 environment/defaults/default_clear_color=Color(0.03, 0.03, 0.08, 1)

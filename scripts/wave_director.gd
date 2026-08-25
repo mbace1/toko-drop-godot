@@ -468,6 +468,9 @@ func _fire_revenge(e: Enemy) -> void:
 	var col := e.revenge_color()
 	var ex := e.position.x
 	var ez := e.position.z
+	# A boss ALWAYS rings on death, regardless of its species' own dialect —
+	# main.js: "a boss corpse is an arena event, not a duel".
+	var dialect: int = Enemy.Revenge.RING if e.is_boss else e.revenge_dialect
 
 	# VOLATILE pays off the fuse: an extra ring on top of the species' own
 	# revenge (main.js onKill). The orange strobe telegraphed it the whole
@@ -479,7 +482,7 @@ func _fire_revenge(e: Enemy) -> void:
 			var a := a0 + (float(j) / 8.0) * TAU
 			bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
 
-	match e.revenge_dialect:
+	match dialect:
 		Enemy.Revenge.AIMED, Enemy.Revenge.FAN:
 			var aimed: bool = e.revenge_dialect == Enemy.Revenge.AIMED
 			var count := REV_AIMED_COUNT if aimed else REV_FAN_COUNT
@@ -491,7 +494,7 @@ func _fire_revenge(e: Enemy) -> void:
 				var a := base + (float(j) - float(count - 1) * 0.5) * spread
 				bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
 		_:
-			var n := REV_RING_BIG if e.radius > REV_RING_BIG_RADIUS else REV_RING_SMALL
+			var n := 14 if e.is_boss else 				(REV_RING_BIG if e.radius > REV_RING_BIG_RADIUS else REV_RING_SMALL)
 			var a0 := rng.randf() * TAU
 			for j in n * revenge_mult:
 				var a := a0 + (float(j) / float(n)) * TAU

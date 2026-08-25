@@ -101,6 +101,46 @@ var surge_t := 0.0
 var variant := "normal"
 var affix := ""
 
+## main.js setBoss(): every 8th wave (WaveDirector.RHYTHM.boss_every) promotes
+## one spawned body to a boss — x3 HP, x1.5 size, and a gold aura ring on the
+## floor so it reads as a boss before you have started shooting it. A boss
+## ALWAYS rings on death regardless of its species' own revenge dialect
+## (main.js: "a boss corpse is an arena event, not a duel").
+var is_boss := false
+var _boss_ring: MeshInstance3D
+
+func apply_boss() -> void:
+	is_boss = true
+	hp = int(ceil(float(hp) * 3.0))
+	max_hp = hp
+	base_shape *= 1.5
+	_build_boss_ring()
+
+func _build_boss_ring() -> void:
+	var r: float = radius * base_shape.x * 1.7
+	var m := TorusMesh.new()
+	m.inner_radius = r * 0.82
+	m.outer_radius = r
+	m.rings = 40
+	_boss_ring = MeshInstance3D.new()
+	_boss_ring.mesh = m
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	rm.albedo_color = Color(1.0, 0.8, 0.2, 0.6)
+	_boss_ring.material_override = rm
+	_boss_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_boss_ring.position = Vector3(0.0, 0.04, 0.0)
+	add_child(_boss_ring)
+
+## Adaptive quality: main.gd lowers this when many bodies are alive at once,
+## so the per-pixel SSS/backlight cost — the most expensive part of the gel
+## shader, and the one that scales with TOTAL SCREEN AREA of gel rather than
+## with any single system — comes down smoothly instead of the frame rate
+## dropping off a cliff at the body cap.
+static var quality := 1.0
+
 var _trail_t := 0.0
 var _vel := Vector2.ZERO     # measured, not declared — every species moves itself
 var _prev_pos := Vector2.ZERO
@@ -298,6 +338,8 @@ func _update_common(delta: float) -> void:
 
 	mat.set_shader_parameter("wobble_time", _t)
 	mat.set_shader_parameter("hit_wobble", _hit_wobble)
+	mat.set_shader_parameter("sss_strength", 0.75 * quality)
+	mat.set_shader_parameter("backlight_amt", 0.45 * quality)
 	# VOLATILE strobes orange the whole time it is alive. The corpse ring it
 	# blooms is only fair because the fuse was visible.
 	if affix == "volatile":

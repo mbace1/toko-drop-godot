@@ -27,6 +27,7 @@ func _init() -> void:
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
+	_test_boss(root)
 	_test_variants(root)
 	_test_weapons(root)
 	_test_armour_and_aura(root)
@@ -51,6 +52,7 @@ func _process(_delta: float) -> bool:
 	if _frames < 2:
 		return false
 	_test_collisions()
+	_test_adaptive_quality()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
 	return true
@@ -1377,3 +1379,61 @@ func _test_variants(root: Node3D) -> void:
 	sw.apply_variant("elitelite", "swift")
 	_check(sw.move_speed() > base.move_speed(), "a SWIFT body is faster")
 	_check(sw.trail_interval < base_trail, "and streaks harder, so you can see it coming")
+
+
+## Boss promotion and always-RING revenge, both from main.js setBoss().
+func _test_boss(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	var g: Globbo = _place(root, Globbo.new(), Vector3(3.0, 0.0, 0.0), target, null)
+	var plain_hp := g.hp
+	var plain_r := g.base_shape.x
+
+	g.apply_boss()
+	_check(g.is_boss, "apply_boss() flags the body")
+	_check(g.hp == plain_hp * 3, "a boss has 3x the HP (%d vs %d)" % [g.hp, plain_hp])
+	_check(g.base_shape.x > plain_r, "and is visibly bigger")
+	_check(g.max_hp == g.hp, "max_hp tracks, so its score value is right")
+
+	# A boss corpse rings regardless of its species' own dialect — main.js:
+	# "a boss corpse is an arena event, not a duel".
+	var target2 := Node3D.new()
+	root.add_child(target2)
+	var bullets := _make_pool(root)
+	var wd := _rev_director(root, target2, bullets)
+	var sp: Spittor = _place(root, Spittor.new(), Vector3(4.0, 0.0, 0.0), target2, bullets)
+	_check(sp.revenge_dialect == Enemy.Revenge.AIMED, "SPITTOR is normally AIMED")
+	sp.apply_boss()
+	wd.enemies.append(sp)
+	while sp.alive:
+		sp.take_hit(sp.hp)
+	wd.update(1.0 / 60.0)
+	_check(bullets.active.size() == 14,
+		"a BOSS SPITTOR rings 14 anyway, not its usual AIMED burst (got %d)"
+			% bullets.active.size())
+
+## Adaptive gel quality — the 60fps pass. Enemy.quality is a shared static,
+## so this leaves it back at 1.0 for every OTHER test in the suite.
+func _test_adaptive_quality() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.waves.clear()
+
+	main._update_adaptive_quality()
+	_check(is_equal_approx(Enemy.quality, 1.0), "quality is full with few bodies alive")
+
+	for i in 20:
+		var e := Globbo.new()
+		main.waves.enemies_root.add_child(e)
+		e.rng = main.waves.rng
+		e.init()
+		main.waves.enemies.append(e)
+	main._update_adaptive_quality()
+	_check(Enemy.quality < 1.0, "and drops once the arena is crowded (%.2f)" % Enemy.quality)
+	_check(Enemy.quality >= 0.35, "but never below the floor, so bodies never go flat")
+
+	main.waves.clear()
+	main._update_adaptive_quality()
+	_check(is_equal_approx(Enemy.quality, 1.0), "and recovers once the arena empties")
+	Enemy.quality = 1.0   # leave it clean for every test after this one
+	main.queue_free()

@@ -189,6 +189,32 @@ target is `PORT_BRIEF.md`.
   hit, and wears the browser's heat tiers (gold at 5, orange at 10, red at 20)
   so the scoring depth reads at a glance.
 
+**Boss waves and the wave-kind banner** (base/Classic mode only, owner
+direction 2026-08-25 — Rush and Challenge already have their own escalation
+reads and do not need a second one)
+- **Boss** — the biggest-radius body in an every-8th-wave is promoted:
+  ×3 HP, ×1.5 size, a gold aura ring on the floor, and it ALWAYS rings on
+  death regardless of its species' own revenge dialect (main.js: *"a boss
+  corpse is an arena event, not a duel"*). Picking the biggest body rather
+  than just the first one spawned matters — the first attempt promoted
+  whatever happened to be first in the list, which could be the smallest
+  thing on screen with a WARDEN aura the same size sitting next to it.
+- **The banner** — a fading toast naming the wave kind (BOSS / SPIKE / SWARM
+  / BREATHER), so an escalation the source signals is not silent here.
+
+**60fps pass** (owner direction: always aim for it)
+- **Adaptive gel quality.** SSS is a per-pixel screen-space cost over every
+  body's visible area, so the thing that actually threatens the frame rate is
+  TOTAL ALIVE COUNT, not any one system. `Enemy.quality` is a shared static
+  main.gd scales down smoothly above 10 live bodies (floor 0.35, never fully
+  off) — the frame rate degrades gracefully instead of falling off a cliff
+  right at the body cap.
+- The back light (SSS transmittance only, never meant to cast a visible
+  shadow) no longer has `shadow_enabled` — a second shadow-casting light was
+  doubling the shadow pass for a shadow nobody was meant to see.
+- SSR steps 32 → 16, and the directional shadow atlas 4096 → 2048: both cuts
+  that do not cost the arena's fixed top-down camera visible detail.
+
 **Feedback**
 - The browser's v212 CONTEXTUAL question, ported: every damage site records
   what hit you and how, and the deck asks about THAT, skipping anything asked
