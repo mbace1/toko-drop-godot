@@ -14,6 +14,11 @@ const POOL_SIZE := 300
 const ENEMY_SPEED := 7.0
 const PLAYER_SPEED := 24.0
 
+## bullet.js: the two hit radii collisions actually use (not `base_scale`,
+## which is a visual multiplier on top of this).
+const BULLET_R := 0.15
+const FAT_BULLET_R := 0.45
+
 class Bullet:
 	var x := 0.0
 	var z := 0.0
@@ -31,6 +36,9 @@ class Bullet:
 	## dodgeable rather than becoming a guaranteed hit.
 	var homing := false
 	var turn_rate := 0.0
+	## main.js GRAZE (v125): true once this bullet has paid out its graze score,
+	## so a bullet skimming past for several frames only scores once.
+	var grazed := false
 
 var _pool: Array[Bullet] = []
 var active: Array[Bullet] = []
@@ -127,6 +135,7 @@ func spawn_dir(x: float, z: float, dx: float, dz: float, is_player: bool, color 
 	b.base_scale = 3.0 if fat else (1.3 if is_player else 1.6)
 	b.homing = homing
 	b.turn_rate = turn_rate
+	b.grazed = false
 	active.append(b)
 
 ## `toward` is the player's position; homing shots steer at it.

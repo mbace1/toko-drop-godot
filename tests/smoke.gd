@@ -52,6 +52,7 @@ func _process(_delta: float) -> bool:
 	if _frames < 2:
 		return false
 	_test_collisions()
+	_test_graze()
 	_test_adaptive_quality()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
@@ -819,6 +820,48 @@ func _test_collisions() -> void:
 	_check(main.rush.multiplier > 1, "and chains the multiplier")
 
 	main.queue_free()
+
+## GRAZE (main.js v125): a bullet that skims past without touching pays
+## score once, and only once — the loop must keep scanning past it for
+## OTHER bullets rather than stopping the way an actual hit does.
+func _test_graze() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+	main.bullets.clear()
+	main.score = 0
+	main.graze_count = 0
+
+	# A bullet just outside the hit radius but inside the graze band.
+	var hit_r: float = BulletPool.BULLET_R + Player.RADIUS
+	var gx: float = main.player.position.x + hit_r + 0.3
+	main.bullets.spawn_dir(gx, main.player.position.z, -1.0, 0.0, false)
+	main._collide_enemy_bullets()
+	_check(main.graze_count == 1, "a bullet skimming past grazes once")
+	_check(main.score == 25, "and pays graze score (%d)" % main.score)
+	_check(main.player.hp == Player.MAX_HP, "without costing HP")
+
+	# Same bullet, same frame shape again: must not pay twice.
+	main._collide_enemy_bullets()
+	_check(main.graze_count == 1, "the same bullet does not graze twice")
+	_check(main.score == 25, "or pay twice (%d)" % main.score)
+
+	# A bullet that actually connects hits instead of grazing, and a hit
+	# must not also be counted as a graze.
+	main.bullets.clear()
+	main.player.reset()
+	main.graze_count = 0
+	main.score = 0
+	main.bullets.spawn_dir(main.player.position.x, main.player.position.z,
+		1.0, 0.0, false)
+	main._collide_enemy_bullets()
+	_check(main.graze_count == 0, "a bullet that actually hits does not also graze")
+	_check(main.player.hp == Player.MAX_HP - 1, "and it costs HP as a real hit")
+
+	main.queue_free()
+
 ## compose() is start_wave()'s affordability loop, split out so Rush can spend
 ## the same ported table on a per-tick cadence instead of a whole wave at once
 ## (design/RUSH_MODE.md §3.2). Checked directly, because a second caller now

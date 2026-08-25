@@ -79,6 +79,11 @@ var pods: PowerupPool
 ## climbs per kill and resets when you are hit.
 var streak := 0
 var _weapon_name := "SINGLE"
+## main.js GRAZE (v125): bullets skimmed past while vulnerable, once each.
+## Rewards weaving through fire without touching it; i-frames (dash, Rush
+## boost) pay nothing, which is why this only runs where invincible already
+## gates the loop below.
+var graze_count := 0
 var _toast: Label
 var _toast_t := 0.0
 ## Camera shake as main.js does it: a TRAUMA value events add to, decaying on
@@ -710,17 +715,33 @@ func _collide_enemy_bullets() -> void:
 			continue
 		var dx := b.x - player.position.x
 		var dz := b.z - player.position.z
-		var r := Player.RADIUS + 0.15
-		if dx * dx + dz * dz >= r * r:
-			continue
-		if _rush_verbs() and rush.reflecting():
-			bullets.spawn_dir(b.x, b.z, -b.vx, -b.vz, true)
+		var d2 := dx * dx + dz * dz
+		var br := BulletPool.FAT_BULLET_R if b.fat else BulletPool.BULLET_R
+		var hit_r := br + Player.RADIUS
+		if d2 < hit_r * hit_r:
+			# main.js `break`s the loop the instant a bullet actually hits —
+			# only the first colliding bullet in a frame counts, so a graze
+			# never gets checked for one that just connected.
+			if _rush_verbs() and rush.reflecting():
+				bullets.spawn_dir(b.x, b.z, -b.vx, -b.vz, true)
+				b.alive = false
+				return
 			b.alive = false
-			continue
-		b.alive = false
-		_note_killer(_bullet_owner_name(b), Feedback.Cause.BULLET)
-		_damage_player()
-		return
+			_note_killer(_bullet_owner_name(b), Feedback.Cause.BULLET)
+			_damage_player()
+			return
+		# GRAZE (main.js v125): a bullet skimming past pays score once. No
+		# break here — the browser keeps checking every remaining bullet for
+		# a graze each frame, and only a hit ends the loop early.
+		# scoreMultT/grazeMult (browser powerups) aren't ported yet, so this
+		# is the base rate; documented in PORT_STATUS.md as a divergence.
+		var graze_r := hit_r + 0.55
+		if not b.grazed and d2 < graze_r * graze_r:
+			b.grazed = true
+			graze_count += 1
+			score += 25
+			audio.play_varied("graze")
+			debris.burst(b.x, b.z, 1, Color(1.0, 1.0, 1.0), 0.06, 3.0, 2.5)
 
 ## Bodies touching the player. In Rush a BOOSTING player kills instead of
 ## being hurt, which is the whole mode; that branch runs first.
@@ -860,6 +881,7 @@ func _start_game() -> void:
 	debris.clear()
 	pods.clear()
 	streak = 0
+	graze_count = 0
 	_weapon_name = "SINGLE"
 	waves.start_wave()
 	_msg_label.hide()
@@ -1059,6 +1081,9 @@ func _on_player_dead() -> void:
 	var recent := save.recent_line()
 	if recent != "":
 		out.append(recent)
+	# main.js death screen: "N graze" only shows up when it happened.
+	if graze_count > 0:
+		out.append("%d graze" % graze_count)
 	out.append("")
 	out.append("SEED %s" % waves.seed_text())
 	out.append("")

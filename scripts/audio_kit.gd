@@ -53,6 +53,7 @@ func build() -> void:
 	_make("dash",    Wave.NOISE,  900.0, 260.0, 0.160, 0.16)
 	_make("wave",    Wave.SINE,   440.0, 880.0, 0.320, 0.26)   # a wave cleared
 	_make("dead",    Wave.SAW,    300.0,  40.0, 0.900, 0.40)
+	_make("graze",   Wave.SINE,   1400.0, 1900.0, 0.045, 0.09)   # a near-miss, quick and bright
 
 ## Builds one voice: a sweep from f0 to f1 over `dur` with an exponential decay.
 func _make(name: String, wave: int, f0: float, f1: float, dur: float, vol: float) -> void:

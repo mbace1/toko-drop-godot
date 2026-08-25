@@ -188,6 +188,16 @@ target is `PORT_BRIEF.md`.
 - **Streak** — Normal mode had no chain at all. Climbs per kill, resets on a
   hit, and wears the browser's heat tiers (gold at 5, orange at 10, red at 20)
   so the scoring depth reads at a glance.
+- **Graze** (main.js v125, `_collide_enemy_bullets()`) — an enemy bullet that
+  skims within `bulletRadius + PLAYER_RADIUS + 0.55` without actually hitting
+  pays +25 score, once per bullet, and only while the loop is even reachable
+  — i.e. only while vulnerable, since the whole function returns early on
+  `player.invincible`. So dashing or Rush-boosting through fire pays nothing;
+  weaving through it does. A white puff + a short "graze" chirp mark it, and
+  the death recap prints the run's total the way the browser's death screen
+  does. **Divergence, documented rather than guessed**: the browser's
+  `grazeMult`/`scoreMultT` are both powerup-card effects that are not ported
+  yet, so this pays the base rate only (×1, not the card's ×3/×2).
 
 **Boss waves and the wave-kind banner** (base/Classic mode only, owner
 direction 2026-08-25 — Rush and Challenge already have their own escalation
