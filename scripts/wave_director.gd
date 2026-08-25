@@ -267,6 +267,12 @@ func compose(w: int, budget: float, shooter_cap: int, body_cap: int) -> Array:
 		if count > bodies_left:
 			count = bodies_left
 			cost = float(POOL[pick][1]) * float(count)
+		# ...and a multi-body variant of a SHOOTER cannot exceed the shooter
+		# cap either. Clamping only the body cap let a twin smuggle a second
+		# gun past the limit that keeps a screen readable.
+		if POOL[pick][2] and count > shooters_left:
+			count = shooters_left
+			cost = float(POOL[pick][1]) * float(count)
 		if count <= 0:
 			break
 		if cost > budget and picks.size() > 0:
