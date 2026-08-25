@@ -23,14 +23,14 @@ const CHILD_COUNT := 3        # enemy.js: "always splits into 3 small blobs"
 const STOP_DIST := 1.2
 const CHILD_SCATTER := 1.5    # how far the children are thrown on the split
 
-## Read by WaveDirector after this body dies, so it can place the children.
-var wants_children := false
-
 func init() -> void:
 	setup(Color(0.533, 1.0, 0.133), 1.1, 1.0, 5, false)
 	trail_interval = 0.07     # enemy.js TRAIL_CFG
 	trail_size = 0.60
 	revenge_dialect = Revenge.RING
+	child_count = CHILD_COUNT     # enemy.js: "always splits into 3 small blobs"
+	child_kind = "GLOBBO"         # enemy.js _childType
+	child_scatter = CHILD_SCATTER
 	_add_child_domes()
 
 ## The tell: two smaller domes riding on the body, in the same material, so the
@@ -60,21 +60,3 @@ func update(delta: float) -> void:
 		position.x += (dx / dist) * speed * delta
 		position.z += (dz / dist) * speed * delta
 		_clamp_to_arena()
-
-func die() -> void:
-	wants_children = true
-	super.die()
-
-## Where the three children should land, spread around where the parent fell.
-func child_positions() -> Array[Vector3]:
-	var out: Array[Vector3] = []
-	# WHERE the children land decides what happens next, so this draws from the
-	# run's gameplay stream, not the global one (CLAUDE.md determinism rule).
-	var a0 := rng.randf() * TAU
-	for i in CHILD_COUNT:
-		var a := a0 + (float(i) / float(CHILD_COUNT)) * TAU
-		out.append(Vector3(
-			position.x + cos(a) * CHILD_SCATTER,
-			0.0,
-			position.z + sin(a) * CHILD_SCATTER))
-	return out

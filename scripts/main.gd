@@ -68,6 +68,7 @@ var sticks: TouchSticks
 
 var rush: RushRules
 var _rush_label: Label
+var _wave_bar: ProgressBar
 var _floor_mat: ShaderMaterial
 var hud: CanvasLayer
 var _hp_label: Label
@@ -269,44 +270,44 @@ func _setup_hud() -> void:
 	hud = CanvasLayer.new()
 	add_child(hud)
 
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 16)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_right", 16)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	hud.add_child(margin)
+	# Top-left stack: WAVE, the progress bar, then the HP pips — the browser
+	# build's arrangement (js/main.js drawHud).
+	var left := VBoxContainer.new()
+	left.position = Vector2(16, 12)
+	left.add_theme_constant_override("separation", 4)
+	hud.add_child(left)
 
-	# A MarginContainer stretches its child to fill, and an HBoxContainer then
-	# centres its labels VERTICALLY — which put the whole stat row across the
-	# middle of the screen, with WAVE printed on top of the player. The column
-	# pins the row to the top and lets an empty Control eat the rest.
-	var col := VBoxContainer.new()
-	margin.add_child(col)
+	_wave_label = _make_label(20)
+	left.add_child(_wave_label)
 
-	var top := HBoxContainer.new()
-	col.add_child(top)
+	_wave_bar = ProgressBar.new()
+	_wave_bar.custom_minimum_size = Vector2(140, 4)
+	_wave_bar.show_percentage = false
+	_wave_bar.max_value = 1.0
+	_wave_bar.step = 0.0
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(1, 1, 1, 0.12)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(1.0, 0.667, 0.133)      # #ffaa22
+	_wave_bar.add_theme_stylebox_override("background", track)
+	_wave_bar.add_theme_stylebox_override("fill", fill)
+	left.add_child(_wave_bar)
 
-	_hp_label = _make_label(22)
-	top.add_child(_hp_label)
+	_hp_label = _make_label(20)
+	left.add_child(_hp_label)
 
-	var spacer1 := Control.new()
-	spacer1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(spacer1)
-
-	_wave_label = _make_label(22)
-	top.add_child(_wave_label)
-
-	var spacer2 := Control.new()
-	spacer2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(spacer2)
+	# Rush's clock and chain sit UNDER the stack rather than fighting the
+	# centre for space (owner direction).
+	_rush_label = _make_label(18)
+	_rush_label.hide()
+	left.add_child(_rush_label)
 
 	_score_label = _make_label(22)
-	top.add_child(_score_label)
-
-	var below := Control.new()
-	below.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(below)
+	_score_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_score_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_score_label.position = Vector2(-16, 12)
+	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hud.add_child(_score_label)
 
 	_msg_label = _make_label(28)
 	_msg_label.set_anchors_preset(Control.PRESET_CENTER)
@@ -315,14 +316,6 @@ func _setup_hud() -> void:
 	_msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud.add_child(_msg_label)
-
-	_rush_label = _make_label(20)
-	_rush_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_rush_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_rush_label.position.y = 44.0
-	_rush_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_rush_label.hide()
-	hud.add_child(_rush_label)
 
 	sticks = TouchSticks.new()
 	sticks.input_mgr = input_mgr
@@ -559,6 +552,7 @@ func _start_game() -> void:
 	save.mode = _cur_mode_key()   # every read below follows from this
 	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
 	rush.reset()
+	_wave_peak = 0
 	player.rush_shotgun = mode == Mode.RUSH
 	player.reset()
 	waves.clear()
@@ -577,6 +571,7 @@ func _capture_seek_wave(n: int) -> void:
 	waves.start_wave()
 
 func _on_wave_cleared(n: int) -> void:
+	_wave_peak = 0
 	score += 50 * n
 	audio.play("wave")
 	waves.start_wave()
@@ -674,6 +669,17 @@ func _update_shake(delta: float) -> void:
 func add_shake(amount: float) -> void:
 	_trauma = minf(1.0, _trauma + amount)
 
+## How much of the current wave is dead, 0..1. Peak count is remembered because
+## SPLITTA ADDS bodies mid-wave, and a bar that runs backwards reads as a bug.
+var _wave_peak := 0
+
+func _wave_progress() -> float:
+	var live := waves.enemies.size()
+	_wave_peak = maxi(_wave_peak, live)
+	if _wave_peak <= 0:
+		return 0.0
+	return clampf(1.0 - float(live) / float(_wave_peak), 0.0, 1.0)
+
 func _update_hud() -> void:
 	if player == null:
 		return
@@ -684,20 +690,25 @@ func _update_hud() -> void:
 	_wave_label.visible = in_run
 	_score_label.visible = in_run
 	_rush_label.visible = in_run and mode == Mode.RUSH
+	_wave_bar.visible = in_run
 	if not in_run:
 		return
+	var pips := "●".repeat(maxi(rush.lives if mode == Mode.RUSH else player.hp, 0))
 	if mode == Mode.RUSH:
-		_hp_label.text = "LIVES " + "●".repeat(maxi(rush.lives, 0))
+		_hp_label.text = "LIVES " + pips
 		_wave_label.text = "LEVEL %d" % rush.level
-		var pips := int(round(rush.heat * 10.0))
-		# U+2591 rendered as a hatched slab in the default font and read as a
-		# second FULL bar; a middle dot leaves the empty run obviously empty.
-		var bar := "█".repeat(pips) + "·".repeat(10 - pips)
+		_wave_bar.value = clampf(rush.level_t / rush.level_duration(rush.level), 0.0, 1.0)
+		var heat_pips := int(round(rush.heat * 10.0))
+		var bar := "█".repeat(heat_pips) + "·".repeat(10 - heat_pips)
 		var heat_txt := "OVERHEAT" if rush.overheated_now else "HEAT " + bar
-		var ab := "   " + rush.ability_name() + " READY" if rush.ability_ready() else ""
-		_rush_label.text = "%s    x%d%s" % [heat_txt, rush.multiplier, ab]
+		var ab := "  " + rush.ability_name() if rush.ability_ready() else ""
+		_rush_label.text = "%s   x%d%s" % [heat_txt, rush.multiplier, ab]
 	else:
-		_hp_label.text = "HP " + "●".repeat(maxi(player.hp, 0)) + "○".repeat(maxi(player.max_hp - player.hp, 0))
+		_hp_label.text = "HP " + pips + "○".repeat(maxi(player.max_hp - player.hp, 0))
 		_wave_label.text = "WAVE %d" % waves.wave
+		# The browser's bar is a wave TIMER; this port's waves are clear-based,
+		# so it shows how much of the wave is dead. Same slot, same question.
+		_wave_bar.value = _wave_progress()
+
 	_score_label.text = ("SCORE %d" % score) if save.hi_score <= 0 \
 		else ("SCORE %d   BEST %d" % [score, save.hi_score])

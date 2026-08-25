@@ -22,6 +22,8 @@ func _init() -> void:
 	_test_trails(root)
 	_test_poison(root)
 	_test_splitta(root)
+	_test_splitter_cubes(root)
+	_test_toro(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -1002,3 +1004,76 @@ func _rn(sv: SaveService, m: String) -> Array:
 func _rl(sv: SaveService, m: String) -> String:
 	sv.mode = m
 	return sv.recent_line()
+
+
+func _test_splitter_cubes(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	var wd := _rev_director(root, target, _make_pool(root))
+	wd.enemies_root = Node3D.new()
+	root.add_child(wd.enemies_root)
+
+	for spec in [["REDD_CUBE", 4, "REDD_MINI"], ["PURP_CUBE", 5, "PURP_MINI"]]:
+		var e: Enemy = wd._make(spec[0])
+		wd.enemies_root.add_child(e)
+		e.position = Vector3(2.0, 0.0, 1.0)
+		e.half_x = 19.0
+		e.half_z = 11.0
+		e.target = target
+		e.rng = wd.rng
+		e.init()
+		_check(e.child_count == spec[1],
+			"%s carries %d children" % [spec[0], spec[1]])
+		_check(e.child_kind == spec[2], "%s children are %s" % [spec[0], spec[2]])
+
+		wd.enemies = [e]
+		while e.alive:
+			e.take_hit(e.hp)
+		wd.update(1.0 / 60.0)
+		_check(wd.enemies.size() == spec[1],
+			"%s splits into %d (got %d)" % [spec[0], spec[1], wd.enemies.size()])
+
+	# The minis are fast and fragile — that is what makes a pack the threat.
+	var mini: Enemy = wd._make("PURP_MINI")
+	root.add_child(mini)
+	mini.rng = wd.rng
+	mini.init()
+	_check(mini.hp == 1 and mini.speed > 3.0,
+		"PURP_MINI is one hit and faster than anything else ported")
+
+func _test_toro(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(0.0, 0.0, 0.0)
+
+	var t: Toro = _place(root, Toro.new(), Vector3(-8.0, 0.0, 0.0), target, null)
+	_check(t.hp == 6, "TORO spawns at enemy.js's config hp:6")
+
+	# The indicator must reach the WALL, so its tip is the impact point.
+	var reach := t.dash_length(Vector2(1.0, 0.0))
+	_check(is_equal_approx(reach, t.half_x - t.position.x),
+		"the telegraph is raycast to the arena wall, not a fixed length (%.1f)" % reach)
+	# ...and it shortens as the wheel gets closer to that wall.
+	t.position.x = t.half_x - 3.0
+	_check(t.dash_length(Vector2(1.0, 0.0)) < reach,
+		"and it shortens as the wall gets nearer")
+	t.position.x = -8.0
+
+	# It has to walk the whole state machine and come back to idle.
+	var seen := {}
+	for i in 60 * 12:
+		t.update(1.0 / 60.0)
+		seen[t._phase] = true
+	for ph in [Toro.Phase.REV, Toro.Phase.TELEGRAPH, Toro.Phase.DASH, Toro.Phase.RECOVER]:
+		_check(seen.has(ph), "TORO reaches phase %d" % ph)
+
+	# The dash line is LOCKED at telegraph: it cannot steer onto you after the
+	# tell, which is the whole reason the tell is fair.
+	var t2: Toro = _place(root, Toro.new(), Vector3(-8.0, 0.0, 0.0), target, null)
+	while t2._phase != Toro.Phase.TELEGRAPH:
+		t2.update(1.0 / 60.0)
+	var locked := t2._dash_dir
+	target.position = Vector3(0.0, 0.0, 9.0)   # jump the player somewhere else
+	for i in 20:
+		t2.update(1.0 / 60.0)
+	_check(t2._dash_dir == locked, "the dash line does not re-aim after the telegraph")

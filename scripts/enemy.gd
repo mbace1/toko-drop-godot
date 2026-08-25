@@ -62,6 +62,16 @@ var fire_interval := 0.0
 var mesh: MeshInstance3D
 var mat: ShaderMaterial
 
+## SPLIT-ON-DEATH contract, shared because splitters come from both families:
+## SPLITTA is a blob, REDD_CUBE and PURP_CUBE are cubes, and GDScript has no
+## multiple inheritance to hang a common Splitter base off. A species with
+## child_count 0 simply never splits.
+var child_count := 0
+var child_kind := ""
+var child_scatter := 1.5
+## Read by WaveDirector after this body dies, so it can place the children.
+var wants_children := false
+
 ## Set by subclasses in init(); the fallback is RING (TUNING.revenge.fallback).
 var revenge_dialect := Revenge.RING
 
@@ -152,8 +162,23 @@ func take_hit(dmg: int) -> bool:
 ## a kill is something you SEE rather than a body vanishing mid-frame.
 func die() -> void:
 	alive = false
+	if child_count > 0:
+		wants_children = true
 	_dying = true
 	_death_t = DEATH_TIME
+
+## Where this body's children should land, spread around where it fell.
+## WHERE they land decides what happens next, so it draws from the run's
+## gameplay stream (CLAUDE.md determinism rule).
+func child_positions() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var a0 := rng.randf() * TAU
+	for i in child_count:
+		var a := a0 + (float(i) / float(child_count)) * TAU
+		out.append(Vector3(
+			position.x + cos(a) * child_scatter, 0.0,
+			position.z + sin(a) * child_scatter))
+	return out
 
 ## enemy.js updateDeath(): swells while fading on a SQUARED curve, so the body
 ## is mostly transparent by the time it is large — the death stays readable

@@ -75,7 +75,7 @@ target is `PORT_BRIEF.md`.
   forking it (Rush holds a standing pressure rather than spending a whole wave
   at once). Pure refactor; the existing wave checks pass unmodified.
 
-**Enemies** (8 of ~40 in the live roster — `js/tuning.js` names all 40)
+**Enemies** (13 of ~40 in the live roster — `js/tuning.js` names all 40)
 - GLOBBO — chaser blob. Two behaviours stack: the lunging speed-pulse
   `speed × (max(0,sin(t·3+φ))² · 2.6 + 0.4)` (`TOKO_DROP_PORT_BRIEF.md`
   Part 2 / tuning.js line 43) **and** the stalk→crouch→leap pounce state
@@ -115,6 +115,30 @@ target is `PORT_BRIEF.md`.
   Part 2), so the rule is learnable by looking rather than by dying to it.
   Children join the LIVE list, so a wave is not clear until they are dealt
   with too. Stats from `enemy.js` line 490.
+
+- REDD_CUBE / PURP_CUBE — the other two splitters, reusing the shared
+  split-on-death contract (4 REDD_MINIs, 5 PURP_MINIs; counts from
+  `enemy.js`'s `_childCount`). PURP's revenge speaks FAN, REDD's RING.
+- REDD_MINI / PURP_MINI — one hit each, fast, straight at you. Spawned only by
+  a parent's death, so deliberately absent from the wave POOL.
+- **TORO** — the showpiece charger (`TOKO_DROP_PORT_BRIEF.md` Part 4). An
+  upright wheel: idle creep → rev 1.6s → telegraph 0.5s → dash 22→14 →
+  recover 0.8s, direction snapped to 45° and **locked at the telegraph** so it
+  cannot re-aim after the tell. The indicator is raycast to the arena wall so
+  the arrowhead **tip sits exactly on the impact point** — you are told where
+  it will stop, not merely which way it is going. Spins about its axle at
+  `v / radius` while dashing, so it visibly rolls.
+
+**HUD**
+- **Parity with the browser build's layout** (`js/main.js` drawHud): `WAVE N`
+  top-left, a progress bar beneath it, HP pips under that, score top-right.
+  This port previously ran one centred row, which was the HUD divergence
+  recorded here; it is closed, which also settles Q-015. Rush's clock and
+  chain take a line UNDER that stack rather than fighting it for the centre.
+- One honest divergence: the browser's bar is a wave TIMER (`waveTimer /
+  ROUND_DUR`), because its waves escalate on a clock. This port's waves are
+  clear-based, so the same bar shows how much of the wave is dead. Same slot,
+  same question, different quantity.
 
 **Motion trails and ground**
 - **Per-species motion trails** (`scripts/trail_pool.gd`) — pooled ghost

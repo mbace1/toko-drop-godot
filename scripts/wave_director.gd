@@ -34,7 +34,14 @@ const POOL := {
 	"WEEVA":       [2, 3, true],
 	"SLUDGE_CUBE": [3, 2, false],
 	"SPLITTA":     [3, 3, false],
+	"REDD_CUBE":   [4, 3, false],
+	"PURP_CUBE":   [5, 3, false],
+	"TORO":        [6, 5, false],
 }
+
+## Children are spawned BY a parent's death, never drawn from the wave budget,
+## so they are deliberately absent from POOL.
+const CHILD_TYPES := ["GLOBBO", "REDD_MINI", "PURP_MINI"]
 
 # tuning.js waves.scale.budget
 const B_BASE := 5.0
@@ -200,6 +207,11 @@ func _make(name: String) -> Enemy:
 		"WEEVA":       return Weeva.new()
 		"SLUDGE_CUBE": return SludgeCube.new()
 		"SPLITTA":     return Splitta.new()
+		"REDD_CUBE":   return ReddCube.new()
+		"PURP_CUBE":   return PurpCube.new()
+		"TORO":        return Toro.new()
+		"REDD_MINI":   return ReddMini.new()
+		"PURP_MINI":   return PurpMini.new()
 	push_error("WaveDirector: unknown enemy '%s'" % name)
 	return Globbo.new()
 
@@ -215,8 +227,8 @@ func update(delta: float) -> void:
 			# without blocking the wave clear.
 			enemies.remove_at(i)
 			_fire_revenge(e)
-			if e is Splitta and (e as Splitta).wants_children:
-				_split(e as Splitta)
+			if e.wants_children:
+				_split(e)
 			corpses.append(e)
 			continue
 		e.update(delta)
@@ -236,10 +248,12 @@ func update(delta: float) -> void:
 ## SPLITTA's death is a spawn. The children are added to the LIVE list, so a
 ## wave is not clear until they are dealt with too — which is the whole reason
 ## the species is worth 3 budget rather than 1.
-func _split(parent: Splitta) -> void:
+## Any body carrying children hands them over on death. SPLITTA drops GLOBBOs,
+## REDD_CUBE a pack of REDD_MINIs, PURP_CUBE a bigger pack of PURP_MINIs.
+func _split(parent: Enemy) -> void:
 	parent.wants_children = false
 	for p in parent.child_positions():
-		var c := Globbo.new()
+		var c := _make(parent.child_kind)
 		enemies_root.add_child(c)
 		c.position = Vector3(
 			clampf(p.x, -half_x + 1.0, half_x - 1.0), 0.0,

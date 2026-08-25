@@ -19,6 +19,7 @@ var _main: Node
 var _frame := 0
 var _taken := 0
 var _out := ""
+var _force := ""
 var _gap := 45
 
 func _init() -> void:
@@ -35,6 +36,10 @@ func _init() -> void:
 	# arg[3] == "menu" photographs the title screen instead of a run.
 	if OS.get_cmdline_user_args().size() > 3 and OS.get_cmdline_user_args()[3] == "menu":
 		return
+	# arg[3] == "spawn:TYPE" forces one body of that type into the arena, so a
+	# bespoke mesh can be looked at without waiting for the budget to buy one.
+	if OS.get_cmdline_user_args().size() > 3 			and OS.get_cmdline_user_args()[3].begins_with("spawn:"):
+		_force = OS.get_cmdline_user_args()[3].substr(6)
 	if OS.get_cmdline_user_args().size() > 3 and OS.get_cmdline_user_args()[3] == "rush":
 		_main.set("mode", 2)   # Mode.RUSH
 	_main.call_deferred("_start_game")
@@ -49,6 +54,21 @@ func _process(_delta: float) -> bool:
 		return false
 	if (_frame - WARMUP) % _gap != 0:
 		return false
+
+	if _force != "" and _taken == 0:
+		var wd = _main.waves
+		var e = wd._make(_force)
+		wd.enemies_root.add_child(e)
+		e.position = Vector3(0.0, 0.0, -4.0)
+		e.half_x = _main.HALF_X
+		e.half_z = _main.HALF_Z
+		e.target = _main.player
+		e.bullets = _main.bullets
+		e.trails = _main.trails
+		e.rng = wd.rng
+		e.init()
+		wd.enemies.append(e)
+		_force = ""
 
 	var img := get_root().get_texture().get_image()
 	var path := "%s/shot_%02d.png" % [_out, _taken]
