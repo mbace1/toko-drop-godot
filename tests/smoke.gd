@@ -27,6 +27,7 @@ func _init() -> void:
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
+	_test_feedback(root)
 	_test_challenges(root)
 	_test_wave_budget(root)
 	_test_death_pop(root)
@@ -1128,3 +1129,44 @@ func _test_challenges(root: Node3D) -> void:
 		"a worse attempt does not lower a level's record")
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(sv.path))
+
+
+## The contextual question deck. Its whole value is that it asks about the
+## body you just lost to and does not repeat itself; both are testable.
+func _test_feedback(root: Node3D) -> void:
+	var fb := Feedback.new()
+	root.add_child(fb)
+	fb._asked.clear()
+
+	var melee := fb.pick(Feedback.Cause.MELEE, "globbo", 1)
+	_check(melee["id"] == "killer_read", "a melee death asks the melee question")
+	_check("globbo" in melee["question"], "and NAMES what killed you")
+
+	fb._asked.clear()
+	var shot := fb.pick(Feedback.Cause.BULLET, "spittor", 1)
+	_check(shot["id"] == "killer_shot", "a shot death asks a different question")
+	_check("spittor" in shot["question"], "and names the shooter")
+
+	fb._asked.clear()
+	var haz := fb.pick(Feedback.Cause.HAZARD, "", 1)
+	_check(haz["id"] == "hazard", "dying to the arena asks about the arena")
+	_check(not ("%s" in haz["question"]), "a nameless cause never leaves a hole in the text")
+
+	# It rotates: asking the same way twice must not ask the same thing.
+	fb._asked.clear()
+	var a := fb.pick(Feedback.Cause.MELEE, "globbo", 6)
+	var b := fb.pick(Feedback.Cause.MELEE, "globbo", 6)
+	_check(a["id"] != b["id"], "a repeat run does not get the same prompt twice")
+
+	# The crowd prompt only fires in an actual crowd.
+	fb._asked.clear()
+	fb._asked.append("killer_read")
+	var lonely := fb.pick(Feedback.Cause.MELEE, "globbo", 1)
+	_check(lonely["id"] != "swarm_read", "the crowd question needs an actual crowd")
+
+	# Saying nothing records nothing.
+	fb.path_override_for_test()
+	_check(fb.submit("general", "   ", [], [], {}) == "",
+		"an empty submission is discarded, not filed as an empty opinion")
+	_check(fb.submit("general", "it felt good", [], {}.keys(), {}) != "",
+		"a real note is kept")

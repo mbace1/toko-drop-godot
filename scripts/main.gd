@@ -92,6 +92,20 @@ var _death_wash: ColorRect
 ## Wall-clock length of the current run. The browser treats time survived as
 ## a headline stat on the death screen; this port had no notion of it.
 var _run_t := 0.0
+var feedback: Feedback
+## What landed the fatal blow. The death screen shows it and asks about it,
+## so the question is about something you just lived through rather than a
+## generic form every player sees forever (browser build, v212).
+var _killed_by := ""
+var _killed_how: int = Feedback.Cause.UNKNOWN
+var _crowd_at_death := 0
+var _fb_panel: PanelContainer
+var _fb_prompt: Label
+var _fb_answer: LineEdit
+var _fb_status: Label
+var _fb_id := ""
+var _fb_liked: Array = []
+var _fb_wrong: Array = []
 var _floor_mat: ShaderMaterial
 var _floor_inst: MeshInstance3D
 var _rails: Array[MeshInstance3D] = []
@@ -152,6 +166,9 @@ func _ready() -> void:
 	save = SaveService.new()
 	add_child(save)
 	save.load_state()
+
+	feedback = Feedback.new()
+	add_child(feedback)
 
 	rush = RushRules.new()
 	add_child(rush)
@@ -369,9 +386,114 @@ func _setup_hud() -> void:
 	_corner_r.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hud.add_child(_corner_r)
 
+	_build_feedback_panel()
+
 	sticks = TouchSticks.new()
 	sticks.input_mgr = input_mgr
 	hud.add_child(sticks)
+
+## The death-screen question. Hidden until a run ends; never shown on the
+## menu, because there is nothing to ask about yet.
+func _build_feedback_panel() -> void:
+	_fb_panel = PanelContainer.new()
+	_fb_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_fb_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_fb_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_fb_panel.position = Vector2(0, -24)
+	_fb_panel.custom_minimum_size = Vector2(720, 0)
+	_fb_panel.hide()
+	hud.add_child(_fb_panel)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	_fb_panel.add_child(col)
+
+	_fb_prompt = _make_label(17)
+	_fb_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_fb_prompt.custom_minimum_size = Vector2(700, 0)
+	col.add_child(_fb_prompt)
+
+	_fb_answer = LineEdit.new()
+	_fb_answer.placeholder_text = "anything else? (optional)"
+	_fb_answer.custom_minimum_size = Vector2(700, 44)
+	col.add_child(_fb_answer)
+
+	col.add_child(_chip_row("what landed", Feedback.LIKED, _fb_liked))
+	col.add_child(_chip_row("what went wrong", Feedback.WRONG, _fb_wrong))
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	col.add_child(row)
+
+	var send := Button.new()
+	send.text = "SEND"
+	send.custom_minimum_size = Vector2(150, 44)
+	send.pressed.connect(_send_feedback)
+	row.add_child(send)
+
+	var skip := Button.new()
+	skip.text = "SKIP"
+	skip.custom_minimum_size = Vector2(150, 44)
+	# SKIP sends nothing. Explicit consent by design.
+	skip.pressed.connect(func():
+		_fb_panel.hide()
+		_msg_label.position.y = 0.0)
+	row.add_child(skip)
+
+	_fb_status = _make_label(14)
+	_fb_status.add_theme_color_override("font_color", Color(0.6, 0.85, 0.7))
+	row.add_child(_fb_status)
+
+## A row of toggle chips. 44px minimum, because this has to work under a
+## thumb like everything else.
+func _chip_row(title: String, options: Array, into: Array) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var lab := _make_label(14)
+	lab.text = title
+	lab.custom_minimum_size = Vector2(140, 44)
+	lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(lab)
+	for opt in options:
+		var b := Button.new()
+		b.text = String(opt)
+		b.toggle_mode = true
+		b.custom_minimum_size = Vector2(0, 44)
+		b.toggled.connect(func(on: bool):
+			if on and not into.has(opt):
+				into.append(opt)
+			elif not on:
+				into.erase(opt))
+		row.add_child(b)
+	return row
+
+## Opens the panel with a question about the run that just ended.
+func _open_feedback() -> void:
+	var pick := feedback.pick(_killed_how, _killed_by, _crowd_at_death)
+	_fb_id = pick["id"]
+	_fb_prompt.text = pick["question"]
+	_fb_answer.text = ""
+	_fb_liked.clear()
+	_fb_wrong.clear()
+	_fb_status.text = ""
+	_fb_panel.show()
+	# The panel owns the bottom of the screen while it is open, so lift the
+	# summary clear of it — the retry line was being printed underneath it.
+	_msg_label.position.y = -120.0
+
+func _send_feedback() -> void:
+	var run := {
+		"mode": _cur_mode_key(), "score": score,
+		"wave": waves.wave, "seed": waves.seed_text(),
+		"killed_by": _killed_by,
+	}
+	var r := feedback.submit(_fb_id, _fb_answer.text, _fb_liked, _fb_wrong, run)
+	# Saying nothing records nothing, and nothing claims a delivery that has
+	# not happened — "saved" is the truthful word for a fire-and-forget POST.
+	_fb_status.text = "" if r == "" else "saved — thank you"
+	if r != "":
+		_fb_panel.hide()
+		_msg_label.position.y = 0.0
 
 func _make_label(font_size: int) -> Label:
 	var l := Label.new()
@@ -468,6 +590,7 @@ func _process_playing(delta: float) -> void:
 	# Standing in sludge costs you, long after the body that laid it died.
 	if player.alive and not player.invincible \
 			and poison.damages_at(player.position.x, player.position.z):
+		_note_killer("", Feedback.Cause.HAZARD)
 		_damage_player()
 	waves.update(delta)
 
@@ -532,6 +655,7 @@ func _collide_enemy_bullets() -> void:
 			b.alive = false
 			continue
 		b.alive = false
+		_note_killer(_bullet_owner_name(b), Feedback.Cause.BULLET)
 		_damage_player()
 		return
 
@@ -565,8 +689,30 @@ func _collide_contact() -> void:
 		var dz := e.position.z - player.position.z
 		var r := e.radius + Player.RADIUS
 		if dx * dx + dz * dz < r * r:
+			_note_killer(e.display_name(), Feedback.Cause.MELEE)
 			_damage_player()
 			return
+
+## Remembers the cause of the most recent hit. Whatever is stored when the
+## last life goes is what the death screen asks about.
+func _note_killer(who: String, how: int) -> void:
+	_killed_by = who
+	_killed_how = how
+	_crowd_at_death = waves.enemies.size()
+
+## Which species fired a given bullet. The pool carries no owner, so the
+## nearest live shooter is the honest guess rather than a false record.
+func _bullet_owner_name(b) -> String:
+	var best := ""
+	var best_d := INF
+	for e in waves.enemies:
+		if not is_instance_valid(e) or not e.alive or e.fire_interval <= 0.0:
+			continue
+		var d: float = Vector2(e.position.x - b.x, e.position.z - b.z).length()
+		if d < best_d:
+			best_d = d
+			best = e.display_name()
+	return best
 
 func _damage_player() -> void:
 	add_shake(0.45)   # the one event you must never miss
@@ -628,6 +774,7 @@ func _start_game() -> void:
 	waves.reseed()
 	_run_t = 0.0
 	_death_wash.color.a = 0.0
+	_fb_panel.hide()
 	input_mgr.set_rush(_rush_verbs())
 	waves.level_override = 0
 	save.mode = _cur_mode_key()   # every read below follows from this
@@ -751,6 +898,7 @@ func _finish_challenge() -> void:
 	_msg_label.text = "
 ".join(out)
 	_msg_label.show()
+	_open_feedback()
 
 func _on_wave_cleared(n: int) -> void:
 	_wave_peak = 0
@@ -807,6 +955,7 @@ func _on_player_dead() -> void:
 	_msg_label.text = "
 ".join(out)
 	_msg_label.show()
+	_open_feedback()
 
 func _show_menu() -> void:
 	state = State.MENU
@@ -818,6 +967,7 @@ func _show_menu() -> void:
 			break
 	_msg_label.text = _menu_text()
 	_msg_label.show()
+	_open_feedback()
 
 ## The title screen, built as text so it reflows on a phone without a layout
 ## pass. The selected mode row is marked with a caret, the same way the

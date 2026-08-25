@@ -144,6 +144,13 @@ func setup(p_color: Color, p_radius: float, p_speed: float, p_hp: int, is_cube: 
 	mesh.material_override = mat
 	add_child(mesh)
 
+## Human-readable name, for the death screen's question. The browser keeps an
+## ENEMY_LABEL table of these ("teal globbo", "red spittor") because a question
+## has to name the thing the way a player would.
+func display_name() -> String:
+	var n: String = get_script().resource_path.get_file().get_basename()
+	return n.replace("_", " ")
+
 ## Called once by WaveDirector right after position/target/bullets/half_* are
 ## set, in place of relying on _ready() ordering. Subclasses override to pick
 ## their stats + starting state (see globbo.gd / yela_cube.gd / spittor.gd).
