@@ -16,6 +16,12 @@ extends Node3D
 const HALF_X := 19.0
 const HALF_Z := 11.0
 
+## The LIVE arena size. Constants above are the default room; a challenge
+## level may shrink it (CLOSE QUARTERS), and the floor, rails, grid, spawn
+## ring and every clamp all read these rather than the constants.
+var half_x := HALF_X
+var half_z := HALF_Z
+
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -35,19 +41,27 @@ enum State { MENU, PLAYING, PAUSED, DEAD }
 ## mode ends up with a ruleset nobody chose. Selecting it today starts an
 ## ordinary run with `mode` set, so the plumbing is real and the rules land in
 ## one place when they are decided.
-enum Mode { CLASSIC, ROGUELIKE, RUSH }
+enum Mode { CLASSIC, ROGUELIKE, RUSH, CHALLENGE }
 
 const MODE_ROWS := [
 	{"mode": Mode.ROGUELIKE, "label": "ROGUELIKE MODE",
 	 "note": "no upgrades — pure arcade survival", "ready": false},
 	{"mode": Mode.RUSH, "label": "RUSH MODE",
 	 "note": "boost to kill — shoot and you lose your shield", "ready": true},
+	{"mode": Mode.CHALLENGE, "label": "CHALLENGES",
+	 "note": "levels, each with its own rule — reach C to open the next",
+	 "ready": true},
 ]
 
 var state := State.MENU
 var score := 0
 var mode := Mode.CLASSIC
 var _menu_row := 0        # which mode row the selector is on; -1 = none
+## Campaign state. `challenge_i` is which level is loaded; the rule it
+## carries is read once at run start and then the loop just plays.
+var challenge_i := 0
+var _ch_clock := 0.0
+var _ch_rule: int = Challenges.Rule.NONE
 
 var player: Player
 var bullets: BulletPool
@@ -70,6 +84,8 @@ var rush: RushRules
 var _rush_label: Label
 var _wave_bar: ProgressBar
 var _floor_mat: ShaderMaterial
+var _floor_inst: MeshInstance3D
+var _rails: Array[MeshInstance3D] = []
 var hud: CanvasLayer
 var _hp_label: Label
 var _wave_label: Label
@@ -106,8 +122,8 @@ func _ready() -> void:
 
 	waves = WaveDirector.new()
 	add_child(waves)
-	waves.half_x = HALF_X
-	waves.half_z = HALF_Z
+	waves.half_x = half_x
+	waves.half_z = half_z
 	waves.target = player
 	waves.bullets = bullets
 	waves.trails = trails
@@ -203,16 +219,16 @@ func _setup_world() -> void:
 	back.rotation_degrees = Vector3(-18.0, 180.0, 0.0)
 	add_child(back)
 
-	var floor_inst := MeshInstance3D.new()
+	_floor_inst = MeshInstance3D.new()
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(HALF_X * 2.0, HALF_Z * 2.0)
-	floor_inst.mesh = pm
+	pm.size = Vector2(half_x * 2.0, half_z * 2.0)
+	_floor_inst.mesh = pm
 	_floor_mat = ShaderMaterial.new()
 	_floor_mat.shader = FLOOR_SHADER
-	_floor_mat.set_shader_parameter("u_grid_x", (HALF_X * 2.0) / GRID_CELL)
-	_floor_mat.set_shader_parameter("u_grid_z", (HALF_Z * 2.0) / GRID_CELL)
-	floor_inst.material_override = _floor_mat
-	add_child(floor_inst)
+	_floor_mat.set_shader_parameter("u_grid_x", (half_x * 2.0) / GRID_CELL)
+	_floor_mat.set_shader_parameter("u_grid_z", (half_z * 2.0) / GRID_CELL)
+	_floor_inst.material_override = _floor_mat
+	add_child(_floor_inst)
 
 	_add_arena_edge()
 
@@ -238,18 +254,19 @@ func _add_arena_edge() -> void:
 		var horizontal := i < 2
 		var bm := BoxMesh.new()
 		if horizontal:
-			bm.size = Vector3(HALF_X * 2.0 + t * 2.0, h, t)
+			bm.size = Vector3(half_x * 2.0 + t * 2.0, h, t)
 		else:
-			bm.size = Vector3(t, h, HALF_Z * 2.0 + t * 2.0)
+			bm.size = Vector3(t, h, half_z * 2.0 + t * 2.0)
 		var mi := MeshInstance3D.new()
 		mi.mesh = bm
 		mi.material_override = rail_mat
 		match i:
-			0: mi.position = Vector3(0.0, h * 0.5, -HALF_Z - t * 0.5)
-			1: mi.position = Vector3(0.0, h * 0.5, HALF_Z + t * 0.5)
-			2: mi.position = Vector3(-HALF_X - t * 0.5, h * 0.5, 0.0)
-			3: mi.position = Vector3(HALF_X + t * 0.5, h * 0.5, 0.0)
+			0: mi.position = Vector3(0.0, h * 0.5, -half_z - t * 0.5)
+			1: mi.position = Vector3(0.0, h * 0.5, half_z + t * 0.5)
+			2: mi.position = Vector3(-half_x - t * 0.5, h * 0.5, 0.0)
+			3: mi.position = Vector3(half_x + t * 0.5, h * 0.5, 0.0)
 		add_child(mi)
+		_rails.append(mi)
 
 func _setup_camera() -> void:
 	# The source's landscape camera, verbatim (main.js ARENA_PRESETS.landscape):
@@ -348,6 +365,19 @@ func _process(delta: float) -> void:
 			# Up/down walks the mode rows; anything else starts the run.
 			# Left/right picks the Rush ability, so the choice is made before
 			# the run rather than mid-fight.
+			# Left/right walks the UNLOCKED challenge levels, skipping locked
+			# ones rather than stopping on them.
+			if MODE_ROWS[_menu_row]["mode"] == Mode.CHALLENGE \
+					and (Input.is_action_just_pressed("move_left") \
+					or Input.is_action_just_pressed("move_right")):
+				var step := 1 if Input.is_action_just_pressed("move_right") else -1
+				var n := Challenges.count()
+				for _try in n:
+					challenge_i = (challenge_i + step + n) % n
+					if Challenges.unlocked(challenge_i, save):
+						break
+				_msg_label.text = _menu_text()
+				return
 			if MODE_ROWS[_menu_row]["mode"] == Mode.RUSH \
 					and (Input.is_action_just_pressed("move_left") \
 					or Input.is_action_just_pressed("move_right")):
@@ -364,6 +394,8 @@ func _process(delta: float) -> void:
 					or input_mgr.left.active or input_mgr.right.active:
 				var row: Dictionary = MODE_ROWS[_menu_row]
 				mode = row["mode"] if row["ready"] else Mode.CLASSIC
+				if mode == Mode.CHALLENGE and not Challenges.unlocked(challenge_i, save):
+					challenge_i = 0
 				_start_game()
 
 	_update_shake(delta)
@@ -373,17 +405,26 @@ func _process_playing(delta: float) -> void:
 	var move := input_mgr.get_move_dir()
 	var aim := input_mgr.get_aim_dir(player.position)
 	var firing: bool = aim["valid"]
+	# BOOST ONLY disables the gun outright — the level's whole rule.
+	if _ch_rule == Challenges.Rule.BOOST_ONLY:
+		aim = {"x": 0.0, "z": 0.0, "valid": false}
+		firing = false
 
-	if mode == Mode.RUSH:
+	if mode == Mode.RUSH or mode == Mode.CHALLENGE:
 		_process_rush(delta, firing)
+		if mode == Mode.CHALLENGE:
+			_ch_clock -= delta
+			if _ch_clock <= 0.0:
+				_finish_challenge()
+				return
 	elif input_mgr.dash_pressed():
 		var was_ready := player.can_dash()
 		player.dash(aim)
 		if was_ready:
 			audio.play("dash")
 
-	player.update(delta, move, aim, bullets, HALF_X, HALF_Z)
-	bullets.update(delta, maxf(HALF_X, HALF_Z))
+	player.update(delta, move, aim, bullets, half_x, half_z)
+	bullets.update(delta, maxf(half_x, half_z))
 	trails.update(delta)
 	poison.update(delta)
 	debris.update(delta)
@@ -423,7 +464,7 @@ func _collide_player_bullets() -> void:
 			var was_max := e.max_hp
 			if e.take_hit(1):
 				var gain := 100 * was_max
-				score += rush.award(gain) if mode == Mode.RUSH else gain
+				score += rush.award(gain) if _rush_verbs() else gain
 				audio.play_varied("kill")
 				# TUNING.fx: killDroplets 22 / killChunks 5.
 				debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.26)
@@ -449,7 +490,7 @@ func _collide_enemy_bullets() -> void:
 		var r := Player.RADIUS + 0.15
 		if dx * dx + dz * dz >= r * r:
 			continue
-		if mode == Mode.RUSH and rush.reflecting():
+		if _rush_verbs() and rush.reflecting():
 			bullets.spawn_dir(b.x, b.z, -b.vx, -b.vz, true)
 			b.alive = false
 			continue
@@ -462,7 +503,7 @@ func _collide_enemy_bullets() -> void:
 func _collide_contact() -> void:
 	if not player.alive:
 		return
-	if mode == Mode.RUSH and rush.boosting:
+	if _rush_verbs() and rush.boosting:
 		for e in waves.enemies:
 			if not is_instance_valid(e) or not e.alive:
 				continue
@@ -492,7 +533,7 @@ func _collide_contact() -> void:
 
 func _damage_player() -> void:
 	add_shake(0.45)   # the one event you must never miss
-	if mode == Mode.RUSH:
+	if mode == Mode.RUSH or mode == Mode.CHALLENGE:
 		if player.invincible:
 			return
 		audio.play("player")
@@ -547,13 +588,19 @@ func _start_game() -> void:
 	state = State.PLAYING
 	score = 0
 	input_mgr.reset()
-	input_mgr.set_rush(mode == Mode.RUSH)
+	input_mgr.set_rush(_rush_verbs())
 	waves.level_override = 0
 	save.mode = _cur_mode_key()   # every read below follows from this
 	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
 	rush.reset()
+	# GW3's drones arrive over its campaign; so do these. An ability that has
+	# not been earned yet is simply not selectable.
+	var owned := Challenges.unlocked_abilities(save)
+	if not owned.has(rush.ability):
+		rush.ability = owned[0]
+	_start_challenge() if mode == Mode.CHALLENGE else _clear_challenge()
 	_wave_peak = 0
-	player.rush_shotgun = mode == Mode.RUSH
+	player.rush_shotgun = _rush_verbs()
 	player.reset()
 	waves.clear()
 	bullets.clear()
@@ -570,6 +617,99 @@ func _capture_seek_wave(n: int) -> void:
 	waves.wave = maxi(n - 1, 0)
 	waves.start_wave()
 
+## Applies the loaded level's rule. Everything here is a PARAMETER the game
+## already had — that is what makes an archetype cheap and a level free.
+func _start_challenge() -> void:
+	var lv := Challenges.get_level(challenge_i)
+	_ch_rule = lv["rule"]
+	_ch_clock = float(lv["duration"])
+
+	# A challenge runs on Rush's verbs — boost, heat, chain, the ability —
+	# because that is the game the campaign is teaching.
+	rush.reset()
+	player.rush_shotgun = true
+
+	half_x = HALF_X
+	half_z = HALF_Z
+	match _ch_rule:
+		Challenges.Rule.CLOSE_QUARTERS:
+			half_x = HALF_X * Challenges.CLOSE_QUARTERS_SCALE
+			half_z = HALF_Z * Challenges.CLOSE_QUARTERS_SCALE
+		Challenges.Rule.ONE_LIFE:
+			rush.lives = 1
+
+	waves.half_x = half_x
+	waves.half_z = half_z
+	waves.level_override = int(lv["difficulty"])
+	waves.only_shooters = _ch_rule == Challenges.Rule.ARTILLERY
+	waves.only_melee = _ch_rule == Challenges.Rule.SWARM
+	waves.revenge_mult = 2 if _ch_rule == Challenges.Rule.GRAVEYARD else 1
+	_resize_arena()
+
+func _clear_challenge() -> void:
+	_ch_rule = Challenges.Rule.NONE
+	half_x = HALF_X
+	half_z = HALF_Z
+	waves.half_x = half_x
+	waves.half_z = half_z
+	waves.only_shooters = false
+	waves.only_melee = false
+	waves.revenge_mult = 1
+	_resize_arena()
+
+## The floor, rails and grid all follow half_x/half_z, so CLOSE QUARTERS is
+## a real, visible change of room rather than an invisible clamp.
+func _resize_arena() -> void:
+	if _floor_inst != null:
+		(_floor_inst.mesh as PlaneMesh).size = Vector2(half_x * 2.0, half_z * 2.0)
+		_floor_mat.set_shader_parameter("u_grid_x", (half_x * 2.0) / GRID_CELL)
+		_floor_mat.set_shader_parameter("u_grid_z", (half_z * 2.0) / GRID_CELL)
+	for r in _rails:
+		r.queue_free()
+	_rails.clear()
+	_add_arena_edge()
+
+	# Pull the camera in with the room. A CLOSE QUARTERS level in the full-size
+	# frame is a small board adrift in black — the point of the rule is that the
+	# walls are CLOSE, and that only reads if they fill the screen.
+	var k := maxf(half_x / HALF_X, half_z / HALF_Z)
+	_cam_rest = Vector3(0.0, 20.5 * k, 13.5 * k)
+	camera.position = _cam_rest
+	camera.look_at(Vector3(0.0, 0.0, 2.5 * k), Vector3.UP)
+
+## The buzzer. Grades the score against the level's measured thresholds,
+## records the attempt (best-only — a level's record is its high-water mark,
+## not a history) and reports whether the next level just opened.
+func _finish_challenge() -> void:
+	state = State.DEAD
+	var lv := Challenges.get_level(challenge_i)
+	var grade := Challenges.grade_for(lv, score)
+	var did := Challenges.cleared(lv, score)
+	input_mgr.reset()
+	audio.play("wave" if did else "dead")
+	var improved := save.record_level(String(lv["id"]), score, grade)
+
+	var out := ["%s — %s" % [lv["id"], lv["name"]], "", "score %d" % score]
+	if grade != "":
+		out.append("GRADE %s" % grade)
+	else:
+		out.append("no grade — reach %d for C" % int(lv["tiers"][0]))
+	if improved and grade != "":
+		out.append("new best")
+	out.append("")
+	if did and challenge_i + 1 < Challenges.count():
+		out.append("%s UNLOCKED" % Challenges.get_level(challenge_i + 1)["name"])
+		var ab: int = lv["unlocks_ability"]
+		if ab >= 0:
+			out.append("ability: %s" % RushRules.ABILITY_DEF[ab]["name"])
+	elif not did:
+		out.append("tier C or better opens the next level")
+	out.append("")
+	out.append("tap, or press FIRE / DASH, to try again")
+	_msg_label.text = "
+".join(out)
+	_msg_label.show()
+
 func _on_wave_cleared(n: int) -> void:
 	_wave_peak = 0
 	score += 50 * n
@@ -577,6 +717,9 @@ func _on_wave_cleared(n: int) -> void:
 	waves.start_wave()
 
 func _on_player_dead() -> void:
+	if mode == Mode.CHALLENGE:
+		_finish_challenge()   # a death ends the attempt; the score still grades
+		return
 	state = State.DEAD
 	audio.play("dead")
 	input_mgr.reset()   # a finger still down must not steer the next run
@@ -622,6 +765,21 @@ func _menu_text() -> String:
 			state_txt = "SOON"
 		out.append("%s  %s: %s" % [caret, row["label"], state_txt])
 		out.append("     %s" % row["note"])
+		if row["mode"] == Mode.CHALLENGE:
+			var lv := Challenges.get_level(challenge_i)
+			var rec = save.levels.get(String(lv["id"]), {})
+			var g := ""
+			var best := 0
+			if typeof(rec) == TYPE_DICTIONARY:
+				g = String(rec.get("grade", ""))
+				best = int(rec.get("best_score", 0))
+			var pick := "< %s >" if i == _menu_row else "  %s  "
+			var rn: String = Challenges.RULE_NAME[lv["rule"]]
+			var tag := ("%s   %s" % [lv["name"], rn]) if rn != "" else String(lv["name"])
+			out.append("     " + (pick % tag))
+			out.append("     %ds \u2014 %s" % [int(lv["duration"]), Challenges.RULE_BLURB[lv["rule"]]])
+			if best > 0:
+				out.append("     best %d%s" % [best, ("   GRADE " + g) if g != "" else ""])
 		if row["mode"] == Mode.RUSH:
 			# The < > only appear on the SELECTED row: arrows you cannot press
 			# yet read as a control that is broken.
@@ -643,6 +801,14 @@ func _menu_text() -> String:
 ## Which save bucket the CURRENT run belongs to, and which the menu should
 ## quote a best from. Helpers rather than inline ternaries so that no call
 ## site can quietly forget the mode again.
+## True when the RUSH VERB SET is live — boost, heat, chain, abilities. That
+## is Rush AND every challenge level, because the campaign teaches Rush.
+## Gating any of it on `mode == Mode.RUSH` alone silently disabled boost-kills
+## inside challenges, which made the BOOST ONLY level literally unwinnable
+## (tools/measure.gd scored it 0 on every run — that is how it was found).
+func _rush_verbs() -> bool:
+	return mode == Mode.RUSH or mode == Mode.CHALLENGE
+
 func _cur_mode_key() -> String:
 	return SaveService.MODE_RUSH if mode == Mode.RUSH else SaveService.MODE_NORMAL
 
@@ -655,7 +821,7 @@ func _update_shake(delta: float) -> void:
 	if _trauma <= 0.0:
 		if camera.position != _cam_rest:
 			camera.position = _cam_rest
-			camera.look_at(Vector3(0.0, 0.0, 2.5), Vector3.UP)
+			camera.look_at(_cam_look(), Vector3.UP)
 		return
 	_trauma = maxf(0.0, _trauma - delta * 2.8)
 	var mag := _trauma * _trauma
@@ -664,7 +830,12 @@ func _update_shake(delta: float) -> void:
 		sin(t * 41.0) * mag * 1.8,
 		sin(t * 37.0) * mag * 1.2,
 		sin(t * 43.0) * mag * 1.2)
-	camera.look_at(Vector3(0.0, 0.0, 2.5), Vector3.UP)
+	camera.look_at(_cam_look(), Vector3.UP)
+
+## Where the camera aims, scaled with the room so a shrunken arena stays
+## centred in frame.
+func _cam_look() -> Vector3:
+	return Vector3(0.0, 0.0, 2.5 * maxf(half_x / HALF_X, half_z / HALF_Z))
 
 func add_shake(amount: float) -> void:
 	_trauma = minf(1.0, _trauma + amount)
@@ -689,12 +860,19 @@ func _update_hud() -> void:
 	_hp_label.visible = in_run
 	_wave_label.visible = in_run
 	_score_label.visible = in_run
-	_rush_label.visible = in_run and mode == Mode.RUSH
+	_rush_label.visible = in_run and mode != Mode.CLASSIC
 	_wave_bar.visible = in_run
 	if not in_run:
 		return
-	var pips := "●".repeat(maxi(rush.lives if mode == Mode.RUSH else player.hp, 0))
-	if mode == Mode.RUSH:
+	var pips := "●".repeat(maxi(rush.lives if mode != Mode.CLASSIC else player.hp, 0))
+	if mode == Mode.CHALLENGE:
+		var clv := Challenges.get_level(challenge_i)
+		_hp_label.text = "LIVES " + pips
+		_wave_label.text = "%s  %d:%02d" % [clv["name"], int(_ch_clock) / 60, int(_ch_clock) % 60]
+		_wave_bar.value = clampf(_ch_clock / float(clv["duration"]), 0.0, 1.0)
+		var rn: String = Challenges.RULE_NAME[_ch_rule]
+		_rush_label.text = ("x%d   %s" % [rush.multiplier, rn]) if rn != "" else "x%d" % rush.multiplier
+	elif mode == Mode.RUSH:
 		_hp_label.text = "LIVES " + pips
 		_wave_label.text = "LEVEL %d" % rush.level
 		_wave_bar.value = clampf(rush.level_t / rush.level_duration(rush.level), 0.0, 1.0)

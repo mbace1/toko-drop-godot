@@ -27,6 +27,7 @@ func _init() -> void:
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
+	_test_challenges(root)
 	_test_wave_budget(root)
 	_test_death_pop(root)
 	_test_revenge(root)
@@ -1077,3 +1078,53 @@ func _test_toro(root: Node3D) -> void:
 	for i in 20:
 		t2.update(1.0 / 60.0)
 	_check(t2._dash_dir == locked, "the dash line does not re-aim after the telegraph")
+
+
+## The campaign: grading, the tier-C gate, and ability unlocks.
+func _test_challenges(root: Node3D) -> void:
+	var sv := SaveService.new()
+	root.add_child(sv)
+	sv.path = "user://_smoke_ch.json"
+	sv.levels = {}
+
+	var l1 := Challenges.get_level(0)
+	var tiers: Array = l1["tiers"]
+
+	_check(Challenges.grade_for(l1, 0) == "", "below C there is no letter, just a score")
+	_check(Challenges.grade_for(l1, int(tiers[0])) == "C", "hitting the C threshold grades C")
+	_check(Challenges.grade_for(l1, int(tiers[3])) == "S", "and the top one grades S")
+	_check(not Challenges.cleared(l1, int(tiers[0]) - 1), "just under C does not clear")
+	_check(Challenges.cleared(l1, int(tiers[0])), "C clears the level")
+
+	# Every shipped level must have real, ordered thresholds.
+	for i in Challenges.count():
+		var lv := Challenges.get_level(i)
+		var t: Array = lv["tiers"]
+		var ordered := true
+		for k in range(1, t.size()):
+			if int(t[k]) <= int(t[k - 1]):
+				ordered = false
+		_check(ordered, "%s tiers ascend" % lv["id"])
+		_check(bool(lv["measured"]), "%s thresholds are MEASURED, not guessed" % lv["id"])
+
+	# Unlocking: level 1 open, the rest gated on the previous grade.
+	_check(Challenges.unlocked(0, sv), "the first level is always open")
+	_check(not Challenges.unlocked(1, sv), "the second is locked until the first is cleared")
+	sv.record_level("L1", int(tiers[0]), "C")
+	_check(Challenges.unlocked(1, sv), "clearing at C opens the next")
+
+	# Abilities arrive with the campaign, not all at once.
+	var owned := Challenges.unlocked_abilities(sv)
+	_check(owned.size() == 1 and owned[0] == RushRules.Ability.HEAT_EXCHANGE,
+		"only HEAT EXCHANGE is available at the start")
+	sv.record_level("L2", 99999, "S")
+	owned = Challenges.unlocked_abilities(sv)
+	_check(owned.has(RushRules.Ability.HYPER_BOMB), "clearing L2 grants HYPER BOMB")
+
+	# A level's record is its high-water mark, not a history.
+	sv.record_level("L1", 10, "")
+	var rec: Dictionary = sv.levels["L1"]
+	_check(int(rec["best_score"]) == int(tiers[0]),
+		"a worse attempt does not lower a level's record")
+
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(sv.path))

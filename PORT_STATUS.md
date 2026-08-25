@@ -205,6 +205,25 @@ target is `PORT_BRIEF.md`.
   stream of small hits reading as constant judder while a kill still lands.
   Taking damage shakes hardest — it is the one event you must not miss.
 
+**Challenges — the campaign** (`scripts/challenges.gd`)
+- A Geometry Wars 3-shaped Adventure: named levels played in order, each one a
+  RULE rather than just a different spawn table. GW3's identity is Pacifism /
+  Deflector / King; ours is BOOST ONLY / CLOSE QUARTERS / ONE LIFE /
+  ARTILLERY / SWARM / GRAVEYARD, each bending a system the game already has,
+  so a level is data and an archetype is a parameter.
+- **Timed** — the first three run a fixed clock and the score at the buzzer is
+  the grade. **Tier C or better opens the next level**, so a player merely
+  finishing keeps moving and the higher letters are for those who want them.
+- **Abilities unlock over the campaign** (GW3's drones do the same): only
+  HEAT EXCHANGE at the start, the rest arrive with cleared levels.
+- **Thresholds are MEASURED, never guessed** — `tools/measure.gd` plays each
+  level headless with a fixed yardstick bot and sets C/B/A/S from its median.
+  A BOOST ONLY level and an ARTILLERY level have completely different kill
+  rates, so one shared formula would be wrong on both. Every level carries a
+  `measured` flag; a guess is marked as a guess.
+- The camera scales with the room, so CLOSE QUARTERS reads as walls that are
+  actually close rather than a small board adrift in a full-size frame.
+
 **Material**
 - One shared `shaders/gel.gdshader`: vertex ripple + hit shockwave, Fresnel
   rim glow, clearcoat, CPU-driven spring squash. Per-instance uniforms via

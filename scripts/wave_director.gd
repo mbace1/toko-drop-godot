@@ -95,6 +95,14 @@ var target: Node3D
 var bullets: BulletPool
 var trails: TrailPool
 var poison: PoisonField
+
+## Challenge rule filters (design/CAMPAIGN_LEVELS.md archetypes). ARTILLERY
+## puts the shooters under a spotlight instead of mixed three-deep into a
+## swarm; SWARM is its exact complement. GRAVEYARD multiplies revenge volleys,
+## which makes kill ORDER and spacing the puzzle rather than aim.
+var only_shooters := false
+var only_melee := false
+var revenge_mult := 1
 var enemies_root: Node3D
 var enemies: Array[Enemy] = []
 ## Bodies mid-death-pop. They are out of `enemies` (so they cannot be shot
@@ -112,10 +120,13 @@ func budget_for(w: int) -> float:
 	return b
 
 func shooter_cap_for(w: int) -> int:
+	if only_shooters:
+		return body_cap_for(w)      # ARTILLERY: the cap stops being the limit
 	return mini(SHOOTER_CAP_MAX, SHOOTER_CAP_BASE + int(float(w) / float(SHOOTER_CAP_PER_WAVES)))
 
 func body_cap_for(w: int) -> int:
-	return mini(BODY_CAP_MAX, BODY_CAP_BASE + BODY_CAP_PER * w)
+	var cap := mini(BODY_CAP_MAX, BODY_CAP_BASE + BODY_CAP_PER * w)
+	return int(cap * 1.6) if only_melee else cap     # SWARM: more bodies
 
 ## The number difficulty is read from: the Rush level when one is set,
 ## otherwise the wave count.
@@ -166,8 +177,20 @@ func compose(w: int, budget: float, shooter_cap: int, body_cap: int) -> Array[St
 func _eligible_for(w: int) -> Array[String]:
 	var out: Array[String] = []
 	for name in POOL.keys():
-		if POOL[name][0] <= w:
-			out.append(name)
+		if POOL[name][0] > w:
+			continue
+		var is_shooter: bool = POOL[name][2]
+		if only_shooters and not is_shooter:
+			continue
+		if only_melee and is_shooter:
+			continue
+		out.append(name)
+	# A filter that leaves nothing eligible would spawn an empty wave, which
+	# reads as a broken level. Fall back to the unfiltered pool.
+	if out.is_empty():
+		for name in POOL.keys():
+			if POOL[name][0] <= w:
+				out.append(name)
 	return out
 
 ## Places the wave on an ELLIPSE at 0.6× the arena half-extents, evenly spaced
@@ -289,13 +312,13 @@ func _fire_revenge(e: Enemy) -> void:
 			var bx := target.position.x - ex
 			var bz := target.position.z - ez
 			var base := atan2(bz, bx) if Vector2(bx, bz).length() > 1e-3 else rng.randf() * TAU
-			for j in count:
+			for j in count * revenge_mult:
 				var a := base + (float(j) - float(count - 1) * 0.5) * spread
 				bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
 		_:
 			var n := REV_RING_BIG if e.radius > REV_RING_BIG_RADIUS else REV_RING_SMALL
 			var a0 := rng.randf() * TAU
-			for j in n:
+			for j in n * revenge_mult:
 				var a := a0 + (float(j) / float(n)) * TAU
 				bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
 
