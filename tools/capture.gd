@@ -59,6 +59,14 @@ func _process(_delta: float) -> bool:
 	if (_frame - WARMUP) % _gap != 0:
 		return false
 
+	# "pods" scatters one of each weapon pod, so the pickup art can be looked
+	# at without waiting for a lucky drop.
+	if _force == "pods" and _taken == 0:
+		var k := 0
+		for id in PowerupPool.PODS.keys():
+			_main.pods.drop(-7.0 + float(k) * 2.0, -2.0, id)
+			k += 1
+		_force = ""
 	if _force != "" and _taken == 0:
 		var wd = _main.waves
 		var e = wd._make(_force)

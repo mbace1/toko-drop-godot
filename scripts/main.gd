@@ -29,6 +29,9 @@ const VERSION := "1.0"
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
 
+## main.js drops a pod from roughly one kill in twelve.
+const POD_CHANCE := 0.085
+
 ## main.js: scene.background 0x0d0d1a, fog 0x0d0d1a from 42 to 80.
 const VOID_COLOR := Color(0.051, 0.051, 0.102)
 
@@ -71,6 +74,11 @@ var bullets: BulletPool
 var trails: TrailPool
 var poison: PoisonField
 var debris: DebrisPool
+var pods: PowerupPool
+## Normal mode has no chain of its own; the browser gives it a STREAK that
+## climbs per kill and resets when you are hit.
+var streak := 0
+var _weapon_name := "SINGLE"
 ## Camera shake as main.js does it: a TRAUMA value events add to, decaying on
 ## its own, with the offset driven by trauma SQUARED. Squaring is what stops a
 ## stream of small hits reading as a constant judder while a kill still lands.
@@ -138,6 +146,11 @@ func _ready() -> void:
 	debris = DebrisPool.new()
 	add_child(debris)
 	debris.build()
+
+	pods = PowerupPool.new()
+	add_child(pods)
+	pods.build()
+	pods.taken.connect(_on_pod_taken)
 
 	var enemies_root := Node3D.new()
 	enemies_root.name = "Enemies"
@@ -587,6 +600,7 @@ func _process_playing(delta: float) -> void:
 	trails.update(delta)
 	poison.update(delta)
 	debris.update(delta)
+	pods.update(delta, player.position, _run_t)
 	# Standing in sludge costs you, long after the body that laid it died.
 	if player.alive and not player.invincible \
 			and poison.damages_at(player.position.x, player.position.z):
@@ -638,6 +652,11 @@ func _collide_player_bullets() -> void:
 			if e.take_hit(1):
 				var gain := 100 * was_max
 				score += rush.award(gain) if _rush_verbs() else gain
+				streak += 1
+				# main.js drops a weapon pod from a kill now and then. Bounded, so
+				# a good wave does not carpet the floor with shopping.
+				if not _rush_verbs() and waves.rng.randf() < POD_CHANCE:
+					pods.drop(e.position.x, e.position.z, pods.roll(waves.wave, waves.rng))
 				audio.play_varied("kill")
 				# TUNING.fx: killDroplets 22 / killChunks 5.
 				debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.26)
@@ -740,6 +759,7 @@ func _bullet_owner_name(b) -> String:
 
 func _damage_player() -> void:
 	add_shake(0.45)   # the one event you must never miss
+	streak = 0   # the browser resets the streak on a hit
 	if mode == Mode.RUSH or mode == Mode.CHALLENGE:
 		if player.invincible:
 			return
@@ -818,6 +838,9 @@ func _start_game() -> void:
 	trails.clear()
 	poison.clear()
 	debris.clear()
+	pods.clear()
+	streak = 0
+	_weapon_name = "SINGLE"
 	waves.start_wave()
 	_msg_label.hide()
 
@@ -1055,6 +1078,13 @@ func _menu_text() -> String:
 func _rush_verbs() -> bool:
 	return mode == Mode.RUSH or mode == Mode.CHALLENGE
 
+## A pod changes the gun for the rest of the run, or until the next pod.
+func _on_pod_taken(mode_name: String, col: Color) -> void:
+	player.weapon = mode_name
+	_weapon_name = mode_name
+	player.mat.set_shader_parameter("rim_color", col)
+	audio.play("wave")
+
 func _cur_mode_key() -> String:
 	return SaveService.MODE_RUSH if mode == Mode.RUSH else SaveService.MODE_NORMAL
 
@@ -1111,7 +1141,7 @@ func _update_hud() -> void:
 	_hp_label.visible = in_run
 	_wave_label.visible = in_run
 	_score_label.visible = in_run
-	_rush_label.visible = in_run and mode != Mode.CLASSIC
+	_rush_label.visible = in_run
 	_wave_bar.visible = in_run
 	if not in_run:
 		return
@@ -1135,6 +1165,19 @@ func _update_hud() -> void:
 	else:
 		_hp_label.text = "HP " + pips + "○".repeat(maxi(player.max_hp - player.hp, 0))
 		_wave_label.text = "WAVE %d" % waves.wave
+		# The browser shows the streak with visible HEAT TIERS (gold at 5,
+		# orange at 10, red-hot at 20) so the scoring depth reads at a glance.
+		var bits: Array[String] = []
+		if _weapon_name != "SINGLE":
+			bits.append(_weapon_name)
+		if streak > 1:
+			bits.append("x%d STREAK" % streak)
+			_rush_label.add_theme_color_override("font_color",
+				Color(1.0, 0.33, 0.4) if streak >= 20
+				else Color(1.0, 0.667, 0.267) if streak >= 10
+				else Color(1.0, 0.867, 0.267) if streak >= 5
+				else Color(0.9, 0.95, 1.0))
+		_rush_label.text = "   ".join(bits)
 		# The browser's bar is a wave TIMER; this port's waves are clear-based,
 		# so it shows how much of the wave is dead. Same slot, same question.
 		_wave_bar.value = _wave_progress()

@@ -27,6 +27,7 @@ func _init() -> void:
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
+	_test_weapons(root)
 	_test_armour_and_aura(root)
 	_test_feedback(root)
 	_test_challenges(root)
@@ -1213,3 +1214,87 @@ func _test_armour_and_aura(root: Node3D) -> void:
 	_check(now_dir.angle_to(start_dir) < 1.4, "but turns, rather than snapping onto you")
 	_check(Vector2(shot.vx, shot.vz).length() < BulletPool.ENEMY_SPEED,
 		"and it is slower than ordinary fire, so it can be outrun")
+
+
+## Weapon pods and the modes they hand you.
+func _test_weapons(root: Node3D) -> void:
+	var p := Player.new()
+	root.add_child(p)
+	p.build()
+	p.reset()
+	var bullets := _make_pool(root)
+	var aim := {"x": 1.0, "z": 0.0, "valid": true}
+
+	_check(p.weapon == "SINGLE", "the run starts on the plain gun")
+	p.update(0.5, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	_check(bullets.active.size() == 1, "SINGLE fires one shot")
+
+	bullets.clear()
+	p.weapon = "SPREAD"
+	p._fire_t = 0.0
+	p.update(0.5, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	_check(bullets.active.size() == 5, "SPREAD fires 5 (got %d)" % bullets.active.size())
+
+	bullets.clear()
+	p.weapon = "SPREAD2"
+	p._fire_t = 0.0
+	p.update(0.5, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	_check(bullets.active.size() == 7, "SPREAD2 fires 7")
+
+	# BURST commits: the rest of the burst arrives even after you let go.
+	bullets.clear()
+	p.weapon = "BURST"
+	p._fire_t = 0.0
+	p.update(0.01, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	var immediate := bullets.active.size()
+	_check(immediate == 1, "BURST fires one immediately")
+	var idle := {"x": 0.0, "z": 0.0, "valid": false}
+	for i in 40:
+		p.update(1.0 / 60.0, Vector2.ZERO, idle, bullets, 19.0, 11.0)
+	_check(bullets.active.size() > immediate,
+		"and the queued shots still arrive after the trigger is released (%d)"
+			% bullets.active.size())
+
+	# RAPID is a RATE change, not a shot-count change.
+	p.weapon = "RAPID"
+	p._fire_t = 0.0
+	p.update(0.01, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	_check(p._fire_t < Player.FIRE_RATE, "RAPID shortens the gap between shots")
+
+	# The pod table: homing is enemy-exclusive, per enemy.js v88.
+	var pool := PowerupPool.new()
+	root.add_child(pool)
+	pool.build()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var seen := {}
+	for i in 200:
+		seen[pool.roll(1, rng)] = true
+	_check(not seen.has("H") and not seen.has("H2"),
+		"HOMING never drops — it is the enemy's toy (enemy.js v88)")
+	var early_lv2 := false
+	for i in 200:
+		if PowerupPool.LV2.has(pool.roll(1, rng)):
+			early_lv2 = true
+	_check(not early_lv2, "level-2 pods do not drop before wave %d" % PowerupPool.LV2_FROM_WAVE)
+	var late_lv2 := false
+	for i in 400:
+		if PowerupPool.LV2.has(pool.roll(9, rng)):
+			late_lv2 = true
+	_check(late_lv2, "but they do later")
+
+	# Pods expire, so taking one is a decision you make now.
+	var took := [""]
+	pool.taken.connect(func(m, c): took[0] = m)
+	pool.drop(0.0, 0.0, "S")
+	pool.update(0.016, Vector3(40.0, 0.0, 40.0), 0.0)
+	_check(took[0] == "", "a pod you are not standing on is not taken")
+	pool.update(0.016, Vector3(0.0, 0.0, 0.0), 0.0)
+	_check(took[0] == "SPREAD", "walking onto one takes it")
+
+	pool.drop(0.0, 0.0, "B")
+	for i in 60 * 14:
+		pool.update(1.0 / 60.0, Vector3(40.0, 0.0, 40.0), 0.0)
+	took[0] = ""
+	pool.update(0.016, Vector3(0.0, 0.0, 0.0), 0.0)
+	_check(took[0] == "", "and an ignored pod eventually expires")

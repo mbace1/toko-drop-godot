@@ -56,6 +56,13 @@ const BOOST_RIM := Color(0.45, 1.0, 1.0)     # invulnerable
 var rush_speed_mult := 1.0
 var rush_shotgun := false
 var rush_boosting := false
+
+## The gun, from js/player.js's fire branch. A pod swaps this for the rest of
+## the run (or until the next pod). LASER falls through to SINGLE there too —
+## it is a piercing VISUAL in the browser, not a different firing pattern.
+var weapon := "SINGLE"
+## BURST fires one now and queues the rest; each entry is {t, dx, dz}.
+var _burst: Array = []
 ## Rush's shield. Set by main.gd from RushRules.invulnerable(), which is true
 ## while boosting AND not firing — the trigger drops it (RUSH_MODE.md).
 var rush_invuln := false
@@ -200,6 +207,8 @@ func reset() -> void:
 	_sqv = 0.0
 	rush_speed_mult = 1.0
 	rush_boosting = false
+	weapon = "SINGLE"
+	_burst.clear()
 	rush_invuln = false
 	position = Vector3(0.0, RADIUS, 0.0)
 	mat.set_shader_parameter("rim_color", REST_RIM)
@@ -242,6 +251,7 @@ func dash(aim: Dictionary) -> void:
 func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, half_x: float, half_z: float) -> void:
 	if not alive:
 		return
+	_step_burst(delta, bullets)
 	if _dash_cd > 0.0:
 		_dash_cd -= delta
 	if _fire_t > 0.0:
@@ -310,8 +320,7 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 				bullets.spawn_dir(ox, oz, cos(a), sin(a), true)
 			_fire_t = FIRE_RATE * SHOTGUN_RATE_MULT
 		else:
-			bullets.spawn_dir(ox, oz, ax, az, true)
-			_fire_t = FIRE_RATE
+			_fire_weapon(ox, oz, ax, az, bullets)
 		if on_shoot.is_valid():
 			on_shoot.call()
 
@@ -331,6 +340,51 @@ func _show() -> void:
 	_eye_l.visible = true
 	_eye_r.visible = true
 	mat.set_shader_parameter("alpha_amt", 1.0)
+
+## js/player.js: SPREAD is 5 shots at PI/9, SPREAD2 is 7 at PI/10, BURST
+## queues two more at 0.12/0.24, BURST2 four at 0.10..0.40, RAPID multiplies
+## the fire rate by 0.45 and RAPID2 by 0.28.
+func _fire_weapon(ox: float, oz: float, ax: float, az: float, bullets: BulletPool) -> void:
+	var rate := FIRE_RATE
+	match weapon:
+		"SPREAD", "SPREAD2":
+			var wide := weapon == "SPREAD2"
+			var offsets := [-3, -2, -1, 0, 1, 2, 3] if wide else [-2, -1, 0, 1, 2]
+			var step := PI / 10.0 if wide else PI / 9.0
+			for o in offsets:
+				var a := atan2(az, ax) + float(o) * step
+				bullets.spawn_dir(ox, oz, cos(a), sin(a), true)
+		"BURST", "BURST2":
+			bullets.spawn_dir(ox, oz, ax, az, true)
+			var delays := [0.10, 0.20, 0.30, 0.40] if weapon == "BURST2" else [0.12, 0.24]
+			for d in delays:
+				_burst.append({"t": d, "dx": ax, "dz": az})
+		"RAPID":
+			bullets.spawn_dir(ox, oz, ax, az, true)
+			rate = FIRE_RATE * 0.45
+		"RAPID2":
+			bullets.spawn_dir(ox, oz, ax, az, true)
+			rate = FIRE_RATE * 0.28
+		_:
+			# SINGLE, and LASER/LASER2 which fire the same way in the source.
+			bullets.spawn_dir(ox, oz, ax, az, true)
+	_fire_t = rate
+
+## The queued half of a BURST. Runs on its own clock so the rest of the burst
+## still arrives even if you stop holding the trigger — which is what makes
+## burst a COMMITMENT rather than just a slower gun.
+func _step_burst(delta: float, bullets: BulletPool) -> void:
+	for i in range(_burst.size() - 1, -1, -1):
+		_burst[i]["t"] -= delta
+		if _burst[i]["t"] > 0.0:
+			continue
+		var dx: float = _burst[i]["dx"]
+		var dz: float = _burst[i]["dz"]
+		bullets.spawn_dir(position.x + dx * (RADIUS + 0.3),
+			position.z + dz * (RADIUS + 0.3), dx, dz, true)
+		if on_shoot.is_valid():
+			on_shoot.call()
+		_burst.remove_at(i)
 
 func die() -> void:
 	alive = false

@@ -155,6 +155,22 @@ target is `PORT_BRIEF.md`.
   UNKILLABLE until you deal with the warden. It never shields itself, so
   there is always something you can shoot.
 
+**Weapons and the streak**
+- **Weapon pods** (`scripts/powerup_pool.gd`) — kills drop them, you walk over
+  one and your gun changes for the rest of the run. Table mirrors main.js's
+  `WEAPON_PODS`: S/S2 spread, B/B2 burst, L/L2 laser, R/R2 rapid, level-2 only
+  from wave 4 and only 28% of the time even then. Two source rules kept:
+  **HOMING never drops** (enemy.js v88 — *"homing is enemy-exclusive now"*;
+  BOTFLY has it), and **pods expire**, so taking one is a decision you make
+  now rather than deferred shopping.
+- **Firing modes** on the player, from `js/player.js`: SPREAD 5 at π/9,
+  SPREAD2 7 at π/10, BURST +2 queued, BURST2 +4, RAPID ×0.45, RAPID2 ×0.28.
+  A burst's queued shots arrive even after you release the trigger, which is
+  what makes it a COMMITMENT rather than just a slower gun.
+- **Streak** — Normal mode had no chain at all. Climbs per kill, resets on a
+  hit, and wears the browser's heat tiers (gold at 5, orange at 10, red at 20)
+  so the scoring depth reads at a glance.
+
 **Feedback**
 - The browser's v212 CONTEXTUAL question, ported: every damage site records
   what hit you and how, and the deck asks about THAT, skipping anything asked
