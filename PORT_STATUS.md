@@ -199,6 +199,26 @@ target is `PORT_BRIEF.md`.
   `grazeMult`/`scoreMultT` are both powerup-card effects that are not ported
   yet, so this pays the base rate only (×1, not the card's ×3/×2).
 
+**Daily Run** (`scripts/daily.gd`, main.js v130/v179) — a new MODE_ROWS
+entry under Challenges. Everyone on the same UTC date plays the same seed and
+the same one-in-four twist, no server needed, since both are pure functions
+of the date string:
+- **The seed** — the browser hashes the date through `mulberry32`; this port
+  hashes it through a Thomas Wang integer mix instead (not Godot's own
+  `hash()`, which isn't promised stable across engine versions — a seed that
+  moves on an engine upgrade defeats the point of a daily). Cross-engine
+  bit-parity with the browser was never the goal; "every Godot player on the
+  same date gets the same seed" is.
+- **GLASS** and **RICH DAY** are direct ports (1 HP; budget ×1.4, `tuning.js`
+  `waves.budget.rich`). **SURGE DAY is a divergence**: the browser tightens
+  HAZARD/curtain/drain cadence, none of which exist in this port yet (no
+  room-graph, no steam vents). What this port DOES have is the wave rhythm
+  itself, so surge tightens that instead — spikes every 3rd wave instead of
+  4th, swarms every 2nd instead of 3rd. Same intent ("the floor fights
+  harder" on a shorter clock), different system underneath it.
+- Daily runs record into the same save bucket as Normal — the browser's
+  separate per-day leaderboard/best (`tokoDropDailyBest`) isn't ported.
+
 **Boss waves and the wave-kind banner** (base/Classic mode only, owner
 direction 2026-08-25 — Rush and Challenge already have their own escalation
 reads and do not need a second one)

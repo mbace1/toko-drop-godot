@@ -54,6 +54,7 @@ func _process(_delta: float) -> bool:
 	_test_collisions()
 	_test_graze()
 	_test_adaptive_quality()
+	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
 	return true
@@ -1479,4 +1480,59 @@ func _test_adaptive_quality() -> void:
 	main._update_adaptive_quality()
 	_check(is_equal_approx(Enemy.quality, 1.0), "and recovers once the arena empties")
 	Enemy.quality = 1.0   # leave it clean for every test after this one
+	main.queue_free()
+
+## DAILY RUN: the date math is pure, so it is checked directly against known
+## dates rather than against "today" (a test that only runs correctly on the
+## day it was written is not a test). main.js todaysMod(): day-since-epoch % 4
+## against [null, glass, surge, rich] — these four are consecutive days, so
+## the assertions also prove the rotation actually rotates.
+func _test_daily() -> void:
+	_check(Daily.mod_for("2026-08-23") == "", "2026-08-23 is a classic day (no twist)")
+	_check(Daily.mod_for("2026-08-24") == "glass", "2026-08-24 is GLASS")
+	_check(Daily.mod_for("2026-08-25") == "surge", "2026-08-25 is SURGE DAY")
+	_check(Daily.mod_for("2026-08-26") == "rich", "2026-08-26 is RICH DAY")
+	_check(Daily.mod_for("2026-08-22") == "rich", "the rotation wraps (day 20687 mod 4 == 3)")
+
+	_check(Daily.seed_for("2026-08-25") == Daily.seed_for("2026-08-25"),
+		"the same date always hashes to the same seed")
+	_check(Daily.seed_for("2026-08-25") != Daily.seed_for("2026-08-26"),
+		"and different dates (almost always) hash to different ones")
+	_check(Daily.seed_for("2026-08-25") >= 0 and Daily.seed_for("2026-08-25") <= 0xFFFFFF,
+		"the seed fits the six-hex-digit SEED readout")
+
+	# Wiring: starting a DAILY run seeds from today's date and applies today's
+	# mod, both deterministically — a second run started the same "today"
+	# reaches the same seed and the same mod, the way two different players
+	# opening the game on the same date are supposed to.
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.DAILY
+	main._start_game()
+	var seed1 = main.waves.run_seed
+	var mod1 = main.daily_mod
+	main._start_game()
+	_check(main.waves.run_seed == seed1, "a second DAILY run today reseeds identically")
+	_check(main.daily_mod == mod1, "and carries the same modifier")
+	_check(mod1 == Daily.mod_for(Daily.today()),
+		"which matches what the pure date math says today is")
+
+	if mod1 == "glass":
+		_check(main.player.max_hp == 1 and main.player.hp == 1, "GLASS: 1 HP")
+	elif mod1 == "rich":
+		_check(is_equal_approx(main.waves.budget_mult, 1.4), "RICH DAY: budget x1.4")
+	elif mod1 == "surge":
+		_check(main.waves.rhythm_tight, "SURGE DAY: the wave rhythm tightens")
+	else:
+		_check(main.player.max_hp == Player.MAX_HP, "an unmodified day leaves HP alone")
+		_check(is_equal_approx(main.waves.budget_mult, 1.0), "and the budget alone")
+		_check(not main.waves.rhythm_tight, "and the rhythm alone")
+
+	# A CLASSIC run must never pick up a stray daily_mod/budget_mult left over
+	# from a previous DAILY run in the same session.
+	main.mode = main.Mode.CLASSIC
+	main._start_game()
+	_check(main.daily_mod == "", "switching back to CLASSIC clears the daily modifier")
+	_check(is_equal_approx(main.waves.budget_mult, 1.0), "and the budget multiplier")
+	_check(not main.waves.rhythm_tight, "and the tightened rhythm")
 	main.queue_free()

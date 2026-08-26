@@ -47,7 +47,7 @@ enum State { MENU, PLAYING, PAUSED, DEAD }
 ## mode ends up with a ruleset nobody chose. Selecting it today starts an
 ## ordinary run with `mode` set, so the plumbing is real and the rules land in
 ## one place when they are decided.
-enum Mode { CLASSIC, ROGUELIKE, RUSH, CHALLENGE }
+enum Mode { CLASSIC, ROGUELIKE, RUSH, CHALLENGE, DAILY }
 
 const MODE_ROWS := [
 	{"mode": Mode.ROGUELIKE, "label": "ROGUELIKE MODE",
@@ -57,6 +57,8 @@ const MODE_ROWS := [
 	{"mode": Mode.CHALLENGE, "label": "CHALLENGES",
 	 "note": "levels, each with its own rule — reach C to open the next",
 	 "ready": true},
+	{"mode": Mode.DAILY, "label": "DAILY RUN",
+	 "note": "same seed as everyone today, worldwide — no upgrades", "ready": true},
 ]
 
 var state := State.MENU
@@ -84,6 +86,11 @@ var _weapon_name := "SINGLE"
 ## boost) pay nothing, which is why this only runs where invincible already
 ## gates the loop below.
 var graze_count := 0
+## DAILY RUN (main.js v130/v179). "" off-daily/Classic; else "glass" / "surge"
+## / "rich" for today's twist, from a 4-day rotation everyone worldwide is on
+## at once (Daily.mod_for, pure date math, no server). Kept here (not just on
+## WaveDirector) because GLASS is a player stat, not a spawn one.
+var daily_mod := ""
 var _toast: Label
 var _toast_t := 0.0
 ## Camera shake as main.js does it: a TRAUMA value events add to, decaying on
@@ -856,7 +863,29 @@ func _start_game() -> void:
 	state = State.PLAYING
 	score = 0
 	input_mgr.reset()
-	waves.reseed()
+	# DAILY RUN: every player on today's UTC date composes off the same seed
+	# and gets the same modifier — main.js v130/v179, pure date math so there
+	# is nothing to hand out or synchronise.
+	waves.budget_mult = 1.0
+	waves.rhythm_tight = false
+	daily_mod = ""
+	if mode == Mode.DAILY:
+		var today := Daily.today()
+		waves.reseed(Daily.seed_for(today))
+		daily_mod = Daily.mod_for(today)
+		match daily_mod:
+			"rich":
+				waves.budget_mult = 1.4    # tuning.js waves.budget.rich, direct port
+			"surge":
+				# main.js's SURGE DAY tightens HAZARD/curtain/drain cadence in
+				# systems this port hasn't built yet (steam vents, drains, the
+				# arena curtain). Divergence, not a guess at ONE of those: the
+				# closest thing this port actually HAS is the wave rhythm
+				# itself, so surge tightens THAT instead — spikes and swarms
+				# arrive on a shorter clock. Documented in PORT_STATUS.md.
+				waves.rhythm_tight = true
+	else:
+		waves.reseed()
 	_run_t = 0.0
 	_death_wash.color.a = 0.0
 	_fb_panel.hide()
@@ -874,6 +903,9 @@ func _start_game() -> void:
 	_wave_peak = 0
 	player.rush_shotgun = _rush_verbs()
 	player.reset()
+	if daily_mod == "glass":
+		player.max_hp = 1
+		player.hp = 1
 	waves.clear()
 	bullets.clear()
 	trails.clear()
@@ -993,7 +1025,7 @@ func _finish_challenge() -> void:
 ## direction 2026-08-25) — Rush and Challenge already have their own
 ## escalation reads (heat, the clock) and do not need a second one.
 func _on_wave_started(n: int) -> void:
-	if mode != Mode.CLASSIC:
+	if not _base_mode():
 		return
 	match waves.wave_kind:
 		"boss":
@@ -1143,6 +1175,9 @@ func _menu_text() -> String:
 			# yet read as a control that is broken.
 			var pick := "< %s >" if i == _menu_row else "  %s  "
 			out.append("     " + (pick % rush.ability_name()) + "  " + rush.ability_blurb())
+		if row["mode"] == Mode.DAILY:
+			var dm := Daily.mod_for(Daily.today())
+			out.append("     today: %s" % (dm.to_upper() if dm != "" else "no twist"))
 	out.append("")
 	out.append("touch — left thumb moves, right thumb aims and fires")
 	out.append("rush — hold BOOST to kill on contact; firing drops your shield")
@@ -1166,6 +1201,13 @@ func _menu_text() -> String:
 ## (tools/measure.gd scored it 0 on every run — that is how it was found).
 func _rush_verbs() -> bool:
 	return mode == Mode.RUSH or mode == Mode.CHALLENGE
+
+## True for the classic open-arena wave loop — Classic itself, and DAILY,
+## which is Classic with a shared seed and (on 3 days out of 4) one twist
+## layered on top. Everything gated to "base mode" (bosses, the wave-kind
+## banner, the streak/HP HUD) belongs to both.
+func _base_mode() -> bool:
+	return mode == Mode.CLASSIC or mode == Mode.DAILY
 
 ## A pod changes the gun for the rest of the run, or until the next pod.
 func _on_pod_taken(mode_name: String, col: Color) -> void:
@@ -1249,7 +1291,7 @@ func _update_hud() -> void:
 	_wave_bar.visible = in_run
 	if not in_run:
 		return
-	var pips := "●".repeat(maxi(rush.lives if mode != Mode.CLASSIC else player.hp, 0))
+	var pips := "●".repeat(maxi(rush.lives if not _base_mode() else player.hp, 0))
 	if mode == Mode.CHALLENGE:
 		var clv := Challenges.get_level(challenge_i)
 		_hp_label.text = "LIVES " + pips
@@ -1287,6 +1329,13 @@ func _update_hud() -> void:
 		_wave_bar.value = _wave_progress()
 
 	_corner_l.text = "v%s   %d FPS" % [VERSION, int(Engine.get_frames_per_second())]
-	_corner_r.text = "SEED %s" % waves.seed_text()
+	# main.js's corner readout prefixes "DAILY · " onto the seed on a daily
+	# run; this also names the day's modifier when there is one.
+	var seed_line := "SEED %s" % waves.seed_text()
+	if mode == Mode.DAILY:
+		seed_line = "DAILY · " + seed_line
+		if daily_mod != "":
+			seed_line += "  ·  %s" % daily_mod.to_upper()
+	_corner_r.text = seed_line
 	_score_label.text = ("SCORE %d" % score) if save.hi_score <= 0 \
 		else ("SCORE %d   BEST %d" % [score, save.hi_score])

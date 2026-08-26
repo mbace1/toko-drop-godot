@@ -115,6 +115,15 @@ const SWARM_COST_MAX := 2
 ##
 ## Left unseeded by default, so an ordinary run is as random as it ever was.
 var rng := RandomNumberGenerator.new()
+
+## DAILY RUN's RICH DAY (main.js v179, tuning.js waves.budget.rich = 1.4):
+## every wave's budget is multiplied by this before it is spent. 1.0 off-daily.
+var budget_mult := 1.0
+## DAILY RUN's SURGE DAY. The browser's surge tightens HAZARD/curtain/drain
+## cadence — systems this port has not built (see main.gd's `_start_game()`
+## for the divergence note). What this port DOES have is the wave rhythm
+## itself, so surge tightens that instead: spikes and swarms land sooner.
+var rhythm_tight := false
 ## The seed this run was composed from. Shown in the corner and on the death
 ## screen, the way the browser build prints SEED — a seeded run you cannot
 ## name is one you cannot ask anybody else to try.
@@ -185,14 +194,18 @@ func difficulty() -> int:
 ## Which kind of wave this is. Checked most-significant first so a wave that
 ## is both a spike and a swarm reads as the bigger event.
 func kind_for(w: int) -> String:
+	# SURGE DAY: spikes every 3rd wave instead of 4th, swarms every 2nd
+	# instead of 3rd — "the floor fights harder" on a shorter clock.
+	var spike_every: int = 3 if rhythm_tight else RHYTHM["spike_every"]
+	var swarm_every: int = 2 if rhythm_tight else RHYTHM["swarm_every"]
 	if w % RHYTHM["boss_every"] == 0:
 		return "boss"
-	if w % RHYTHM["spike_every"] == 0:
+	if w % spike_every == 0:
 		return "spike"
-	if w >= RHYTHM["swarm_from"] and w % RHYTHM["swarm_every"] == 0:
+	if w >= RHYTHM["swarm_from"] and w % swarm_every == 0:
 		return "swarm"
 	# A breather after every spike, so the curve has a trough to climb out of.
-	if w > 1 and (w - 1) % RHYTHM["spike_every"] == 0:
+	if w > 1 and (w - 1) % spike_every == 0:
 		return "breather"
 	return "normal"
 
@@ -205,7 +218,7 @@ func start_wave() -> void:
 	var d := difficulty()
 	wave_kind = kind_for(d)
 	var mult: float = KIND_BUDGET[wave_kind]
-	_spawn(compose(d, budget_for(d) * mult, shooter_cap_for(d), body_cap_for(d)))
+	_spawn(compose(d, budget_for(d) * mult * budget_mult, shooter_cap_for(d), body_cap_for(d)))
 	wave_started.emit(wave)
 
 ## Spends a budget on types eligible at wave `w`, never exceeding `shooter_cap`
