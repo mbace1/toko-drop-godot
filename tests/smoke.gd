@@ -29,6 +29,8 @@ func _init() -> void:
 	_test_magna(root)
 	_test_draper(root)
 	_test_cargo(root)
+	_test_vault_crate(root)
+	_test_escort_bot(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -61,6 +63,7 @@ func _process(_delta: float) -> bool:
 	_test_bambu_wiring()
 	_test_magna_wiring()
 	_test_cargo_wiring()
+	_test_arena_objectives_wiring()
 	_test_adaptive_quality()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
@@ -1436,6 +1439,90 @@ func _test_cargo_wiring() -> void:
 
 	main.queue_free()
 
+## The vault/escort's wiring into main.gd: per-wave scheduling (mutually
+## exclusive on any one wave in this test, since 7%4==3 and 9%4==1), the
+## vault's crack payout and enemy-surge ping, and the escort's delivery vs.
+## a melee kill.
+func _test_arena_objectives_wiring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+	main._clear_arena_objectives()
+	main.pods.clear()
+	main.score = 0
+
+	main._on_wave_started(7)
+	_check(main.vault != null, "wave 7 (>=5, %4==3) arms a vault")
+	_check(main.escort == null, "and does not also arm an escort on the same wave")
+
+	# The ping: a hit surges nearby enemies (Enemy.surge_t), tested before
+	# the vault actually cracks.
+	var g := Globbo.new()
+	main.waves.enemies_root.add_child(g)
+	g.position = main.vault.position + Vector3(1.0, 0.0, 0.0)
+	g.half_x = 19.0
+	g.half_z = 11.0
+	g.target = main.player
+	g.bullets = main.bullets
+	g.rng = main.waves.rng
+	g.init()
+	main.waves.enemies.append(g)
+	main.bullets.spawn_dir(main.vault.position.x, main.vault.position.z, 1.0, 0.0, true)
+	main._collide_vault()
+	_check(g.surge_t > 0.0, "a vault hit surges nearby enemies")
+
+	# The remaining hits crack it.
+	for i in VaultCrate.HP - 1:
+		main.bullets.spawn_dir(main.vault.position.x, main.vault.position.z, 1.0, 0.0, true)
+		main._collide_vault()
+	_check(main.vault == null, "cracking the vault clears it")
+	_check(main.score > 0, "and pays out score")
+	var pod_dropped := false
+	for l in main.pods._life:
+		if l > 0.0:
+			pod_dropped = true
+			break
+	_check(pod_dropped, "and drops the guaranteed pod")
+
+	# Escort, on a different scheduled wave.
+	main._clear_arena_objectives()
+	main._on_wave_started(9)
+	_check(main.escort != null, "wave 9 (>=6, %4==1) arms an escort")
+	_check(main.vault == null, "and does not also arm a vault on the same wave")
+
+	main.pods.clear()
+	main.escort.position.x = main.escort.target_x
+	var arrived: bool = main.escort.update(0.0)
+	_check(arrived, "the escort reports arrival once at its target")
+	_check(not main._collide_escort(), "and nothing has killed it")
+	main._escort_delivered()
+	_check(main.escort == null, "delivering it clears it")
+	pod_dropped = false
+	for l in main.pods._life:
+		if l > 0.0:
+			pod_dropped = true
+			break
+	_check(pod_dropped, "and drops a pod on delivery")
+
+	# Dying to a melee-type body's touch.
+	main._clear_arena_objectives()
+	main._on_wave_started(9)
+	var yc := YelaCube.new()
+	main.waves.enemies_root.add_child(yc)
+	yc.position = main.escort.position
+	yc.half_x = 19.0
+	yc.half_z = 11.0
+	yc.target = main.player
+	yc.bullets = main.bullets
+	yc.rng = main.waves.rng
+	yc.init()
+	main.waves.enemies.append(yc)
+	_check(main._collide_escort(), "a melee-type body touching the escort kills it")
+
+	main.queue_free()
+
 ## The cargo convoy (main.js CargoCluster): formation, determinism, and the
 ## all_killed() rule that gates the guaranteed pod.
 func _test_cargo(root: Node3D) -> void:
@@ -1489,6 +1576,51 @@ func _test_cargo(root: Node3D) -> void:
 			break
 	_check(result == "done", "the convoy eventually clears the arena and reports done")
 	_check(not c3.active, "and marks itself inactive")
+
+## VaultCrate (main.js v175): fixed HP, cracks on the last hit.
+func _test_vault_crate(root: Node3D) -> void:
+	var v := VaultCrate.new()
+	root.add_child(v)
+	v.build(3.0, -2.0)
+	_check(v.hp == VaultCrate.HP, "VaultCrate spawns at enemy.js's config hp:8")
+	_check(is_equal_approx(v.position.x, 3.0) and is_equal_approx(v.position.z, -2.0),
+		"and at the given position")
+	for i in VaultCrate.HP - 1:
+		v.hit()
+	_check(v.hp == 1, "hp decrements one per hit")
+	_check(not v.cracked(), "not cracked yet")
+	v.hit()
+	_check(v.cracked(), "the 8th hit cracks it")
+
+## EscortBot (main.js v175): crosses from one wall to the other and reports
+## arrival; a hit costs HP the same as the vault.
+func _test_escort_bot(root: Node3D) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var e := EscortBot.new()
+	root.add_child(e)
+	e.build(19.0, 11.0, rng)
+	_check(e.hp == EscortBot.HP, "EscortBot spawns at enemy.js's config hp:2")
+	_check(absf(e.position.x) > 17.0, "starts hard against one side wall")
+	_check(is_equal_approx(e.target_x, -e.position.x), "and targets the opposite side exactly")
+
+	var start_x := e.position.x
+	var arrived := false
+	for i in 60 * 20:   # 14s crossing time, plus margin
+		arrived = e.update(1.0 / 60.0)
+		if arrived:
+			break
+	_check(arrived, "it reaches the far wall within the crossing time")
+	_check(signf(e.position.x - start_x) == signf(e.target_x - start_x),
+		"having moved toward its target the whole way")
+
+	var e2 := EscortBot.new()
+	root.add_child(e2)
+	e2.build(19.0, 11.0, rng)
+	e2.hit()
+	_check(e2.hp == 1, "a hit costs HP")
+	e2.hit()
+	_check(e2.dead(), "the second hit kills it (config hp:2)")
 
 ## The campaign: grading, the tier-C gate, and ability unlocks.
 func _test_challenges(root: Node3D) -> void:

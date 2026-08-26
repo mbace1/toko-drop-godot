@@ -78,6 +78,10 @@ var poison: PoisonField
 var debris: DebrisPool
 var pods: PowerupPool
 var cargo: CargoCluster
+## v175 "living-arena objectives" — one at a time, unresolved ones vanish at
+## the next wave's setup rather than carrying over.
+var vault: VaultCrate
+var escort: EscortBot
 ## Seconds into the CURRENT wave the convoy fires (main.js clusterSpawnAt,
 ## "3-8s into the wave — always overlaps live enemies"); -1 once spent.
 var _cargo_spawn_at := -1.0
@@ -173,6 +177,8 @@ func _ready() -> void:
 
 	cargo = CargoCluster.new()
 	add_child(cargo)
+	vault = null
+	escort = null
 
 	var enemies_root := Node3D.new()
 	enemies_root.name = "Enemies"
@@ -643,6 +649,7 @@ func _process_playing(delta: float) -> void:
 	pods.update(delta, player.position, _run_t)
 	if _base_mode():
 		_update_cargo(delta)
+		_update_arena_objectives(delta)
 	# Standing in sludge costs you, long after the body that laid it died.
 	if player.alive and not player.invincible \
 			and poison.damages_at(player.position.x, player.position.z):
@@ -823,6 +830,121 @@ func _collide_bambu_lobs() -> void:
 		if dx * dx + dz * dz < rr * rr:
 			_note_killer("bambu lobber", Feedback.Cause.HAZARD)
 			_damage_player()
+
+func _clear_arena_objectives() -> void:
+	if is_instance_valid(vault):
+		vault.queue_free()
+	vault = null
+	if is_instance_valid(escort):
+		escort.queue_free()
+	escort = null
+
+## v175 "living-arena objectives": the vault takes hits and pings the room;
+## the escort bot crosses the arena and dies to stray fire or a melee touch,
+## paying on delivery. Base/Classic mode only, same reason as the cargo
+## convoy above.
+func _update_arena_objectives(delta: float) -> void:
+	if vault != null:
+		vault.update(delta)
+		_collide_vault()
+	if escort != null:
+		var arrived := escort.update(delta)
+		var bot_dead := _collide_escort()
+		if bot_dead:
+			_escort_died()
+		elif arrived:
+			_escort_delivered()
+
+## Player bullets vs the vault: every hit PINGS the room — every living
+## enemy within SURGE_RADIUS surges toward the player (`Enemy.surge_t`, the
+## same field SIREN's scream already drives) — so cracking it open costs
+## something, not a free chest.
+func _collide_vault() -> void:
+	for b in bullets.active:
+		if not b.alive or not b.is_player:
+			continue
+		var dx := b.x - vault.position.x
+		var dz := b.z - vault.position.z
+		if dx * dx + dz * dz >= VaultCrate.HIT_R * VaultCrate.HIT_R:
+			continue
+		b.alive = false
+		vault.hit()
+		audio.play_varied("hit")
+		for e in waves.enemies:
+			if not is_instance_valid(e) or not e.alive:
+				continue
+			var ex := e.position.x - vault.position.x
+			var ez := e.position.z - vault.position.z
+			if ex * ex + ez * ez < VaultCrate.SURGE_RADIUS * VaultCrate.SURGE_RADIUS:
+				e.surge_t = maxf(e.surge_t, VaultCrate.SURGE_DUR)
+		if vault.cracked():
+			_crack_vault()
+		break
+
+func _crack_vault() -> void:
+	var vx := vault.position.x
+	var vz := vault.position.z
+	debris.burst(vx, vz, 12, Color(1.0, 0.8, 0.2), 0.12, 5.0, 2.5)
+	add_shake(0.4)
+	audio.play("wave")
+	pods.drop(vx, vz, pods.roll(waves.wave, waves.rng))
+	# main.js's cash cache (800 + wave*60) plus a 40% chance of a second
+	# "scoremult" bonus — both paid as instant score, the same divergence
+	# _drop_cargo_loot() documents (main.js's Powerup class isn't ported).
+	var cash := 800 + waves.wave * 60
+	score += cash
+	if waves.rng.randf() < 0.4:
+		score += cash
+	_show_toast("VAULT CRACKED!")
+	vault.queue_free()
+	vault = null
+
+## Enemy bullets (not the player's) cost the bot HP; any MELEE-attacking body
+## touching it kills it outright (main.js's MELEE_TYPES — the ported subset
+## of that set is this port's own touch-attacking roster). Returns true the
+## instant it's dead, whatever the cause.
+func _collide_escort() -> bool:
+	for b in bullets.active:
+		if not b.alive or b.is_player:
+			continue
+		var dx := b.x - escort.position.x
+		var dz := b.z - escort.position.z
+		if dx * dx + dz * dz >= EscortBot.HIT_R * EscortBot.HIT_R:
+			continue
+		b.alive = false
+		escort.hit()
+		break
+	if escort.dead():
+		return true
+	for e in waves.enemies:
+		if not is_instance_valid(e) or not e.alive or not _is_melee_type(e):
+			continue
+		var dx := e.position.x - escort.position.x
+		var dz := e.position.z - escort.position.z
+		var r := e.radius + 0.5
+		if dx * dx + dz * dz < r * r:
+			return true
+	return false
+
+## main.js's MELEE_TYPES, the ported subset: species that attack by TOUCH
+## rather than gunfire. Not every non-shooter in this roster is on it —
+## SHEPHERD/SIREN/WARDEN/MAGNA have their own non-contact mechanics and
+## aren't a bump hazard to a passing bot the way a blob or a cube is.
+func _is_melee_type(e: Enemy) -> bool:
+	return e is Globbo or e is Splitta or e is Bulwark or e is YelaCube 		or e is SludgeCube or e is ReddCube or e is PurpCube 		or e is ReddMini or e is PurpMini or e is Toro
+
+func _escort_died() -> void:
+	debris.burst(escort.position.x, escort.position.z, 6,
+		Color(0.267, 0.867, 1.0), 0.14, 3.0, 3.0)
+	_show_toast("THE BOT IS DOWN…")
+	escort.queue_free()
+	escort = null
+
+func _escort_delivered() -> void:
+	pods.drop(escort.position.x, escort.position.z, pods.roll(waves.wave, waves.rng))
+	_show_toast("ESCORT DELIVERED! ENJOY THE POD")
+	escort.queue_free()
+	escort = null
 
 ## The cargo convoy's per-wave clock. main.js schedules exactly one convoy
 ## per wave in classic mode (SMASH TV's extra convoys don't apply — this
@@ -1054,6 +1176,7 @@ func _start_game() -> void:
 	cargo.clear()
 	_cargo_spawn_at = -1.0
 	_cargo_wave_t = 0.0
+	_clear_arena_objectives()
 	streak = 0
 	graze_count = 0
 	_weapon_name = "SINGLE"
@@ -1174,6 +1297,20 @@ func _on_wave_started(n: int) -> void:
 	# header for why a convoy's timing has to be seed-reproducible too.
 	_cargo_wave_t = 0.0
 	_cargo_spawn_at = 3.0 + waves.rng.randf() * 5.0
+	# v175 living-arena objectives: unresolved ones from the last wave vanish
+	# here (main.js's clearArenaObjectives(), called from the same per-wave
+	# setup that schedules the next one) rather than carrying over.
+	_clear_arena_objectives()
+	if waves.wave_kind != "boss":
+		if n >= 5 and n % 4 == 3:
+			vault = VaultCrate.new()
+			add_child(vault)
+			vault.build((waves.rng.randf() * 2.0 - 1.0) * (half_x - 5.0),
+				(waves.rng.randf() * 2.0 - 1.0) * (half_z - 5.0))
+		if n >= 6 and n % 4 == 1:
+			escort = EscortBot.new()
+			add_child(escort)
+			escort.build(half_x, half_z, waves.rng)
 	match waves.wave_kind:
 		"boss":
 			# The BIGGEST-radius body in the wave is promoted, not the first one
@@ -1194,6 +1331,11 @@ func _on_wave_started(n: int) -> void:
 			_show_toast("WAVE %d — SWARM" % n)
 		"breather":
 			_show_toast("WAVE %d — BREATHER" % n)
+	# Escort's toast runs last, so it wins the shared toast slot over a
+	# same-wave kind banner — a fresh objective is the more useful thing to
+	# tell the player about right now.
+	if escort != null and n >= 6 and n % 4 == 1:
+		_show_toast("ESCORT THE BOT!")
 
 func _show_toast(text: String) -> void:
 	_toast.text = text

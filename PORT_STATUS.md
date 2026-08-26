@@ -259,6 +259,27 @@ weapon-pod system this port has via `PowerupPool`. That class isn't ported,
 so both non-pod outcomes pay an instant score bonus here instead of spawning
 a pickup (`main.gd`'s `_drop_cargo_loot()` says so at the point it happens).
 
+**Living-arena objectives** (`scripts/vault_crate.gd`/`escort_bot.gd`,
+main.js v175) — two more per-wave bonus events, base/Classic mode only
+(same scoping as the cargo convoy above), alternating on offset beats so
+they never stack:
+- **VaultCrate** — every 4th wave from 5 (never a boss wave), a locked
+  crate with 8 HP appears at a random point. Shoot it down and it cracks:
+  a guaranteed weapon pod plus a cash bonus. Every hit before that also
+  PINGS the room — every living enemy within 9 units surges toward the
+  player for 0.7s (reusing `Enemy.surge_t`, the exact field SIREN's
+  scream already drives) — so cracking it open costs something.
+- **EscortBot** — every 4th wave from 6, offset from the vault's (never a
+  boss wave), a small robot enters from one side wall and crosses to the
+  other over ~14s. Enemies never chase it, but stray enemy fire costs it
+  HP and any touch-attacking body (main.js's `MELEE_TYPES`) kills it
+  outright — protecting it is pure positioning, not a fight. Deliver it
+  to the far wall and it gifts a guaranteed weapon pod.
+
+Both share the cargo convoy's divergence for non-pod payouts (VaultCrate's
+cash + 40%-chance second bonus): instant score rather than a walk-over
+pickup, since main.js's `Powerup` class isn't ported.
+
 **Daily Run** (`scripts/daily.gd`, main.js v130/v179) — a new MODE_ROWS
 entry under Challenges. Everyone on the same UTC date plays the same seed and
 the same one-in-four twist, no server needed, since both are pure functions
