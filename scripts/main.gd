@@ -77,6 +77,11 @@ var trails: TrailPool
 var poison: PoisonField
 var debris: DebrisPool
 var pods: PowerupPool
+var cargo: CargoCluster
+## Seconds into the CURRENT wave the convoy fires (main.js clusterSpawnAt,
+## "3-8s into the wave — always overlaps live enemies"); -1 once spent.
+var _cargo_spawn_at := -1.0
+var _cargo_wave_t := 0.0
 ## Normal mode has no chain of its own; the browser gives it a STREAK that
 ## climbs per kill and resets when you are hit.
 var streak := 0
@@ -165,6 +170,9 @@ func _ready() -> void:
 	add_child(pods)
 	pods.build()
 	pods.taken.connect(_on_pod_taken)
+
+	cargo = CargoCluster.new()
+	add_child(cargo)
 
 	var enemies_root := Node3D.new()
 	enemies_root.name = "Enemies"
@@ -633,6 +641,8 @@ func _process_playing(delta: float) -> void:
 	poison.update(delta)
 	debris.update(delta)
 	pods.update(delta, player.position, _run_t)
+	if _base_mode():
+		_update_cargo(delta)
 	# Standing in sludge costs you, long after the body that laid it died.
 	if player.alive and not player.invincible \
 			and poison.damages_at(player.position.x, player.position.z):
@@ -645,6 +655,7 @@ func _process_playing(delta: float) -> void:
 	_collide_contact()
 	_collide_bambu_lobs()
 	_apply_magna_pull(delta)
+	_collide_cargo_bullets()
 
 	if not player.alive:
 		_on_player_dead()
@@ -813,6 +824,69 @@ func _collide_bambu_lobs() -> void:
 			_note_killer("bambu lobber", Feedback.Cause.HAZARD)
 			_damage_player()
 
+## The cargo convoy's per-wave clock. main.js schedules exactly one convoy
+## per wave in classic mode (SMASH TV's extra convoys don't apply — this
+## port has no room-graph mode); base/Classic mode only, same reason
+## _on_wave_started's boss/banner branch is (owner direction 2026-08-25) —
+## Rush/Challenge already suppress weapon-pod drops outright, and a convoy's
+## whole point is dropping them.
+func _update_cargo(delta: float) -> void:
+	_cargo_wave_t += delta
+	if not cargo.active and _cargo_spawn_at >= 0.0 and _cargo_wave_t >= _cargo_spawn_at:
+		cargo.half_x = half_x
+		cargo.half_z = half_z
+		cargo.spawn(waves.rng)
+		_cargo_spawn_at = -1.0   # one convoy per wave
+	if cargo.active:
+		cargo.update(delta, _run_t)
+
+## Player bullets vs the convoy's moths (main.js ~line 8432). A method of its
+## own for the usual reason — this is neither of the two existing collision
+## loops' business (moths aren't in `waves.enemies`, and don't touch or shoot
+## the player), so nothing else would ever call it.
+func _collide_cargo_bullets() -> void:
+	if not cargo.active:
+		return
+	for b in bullets.active:
+		if not b.alive or not b.is_player:
+			continue
+		for i in cargo.drones.size():
+			var d: CargoCluster.Drone = cargo.drones[i]
+			if not d.alive:
+				continue
+			var dx := b.x - d.node.position.x
+			var dz := b.z - d.node.position.z
+			if dx * dx + dz * dz >= CargoCluster.HIT_R * CargoCluster.HIT_R:
+				continue
+			b.alive = false
+			cargo.kill(i)
+			add_shake(0.08)
+			audio.play_varied("kill")
+			debris.burst(d.node.position.x, d.node.position.z, 5,
+				Color(1.0, 0.867, 0.333), 0.1, 3.5, 1.0)
+			_drop_cargo_loot(d.node.position.x, d.node.position.z)
+			break
+
+## main.js: clearing every moth before any escape guarantees a weapon pod;
+## otherwise a roll between a pod / an instant score nugget / (classic split
+## 55/25/20). This port has no score/scoremult walk-over PICKUP entities —
+## main.js's separate `Powerup` class, distinct from the weapon-pod system
+## this port DOES have via PowerupPool — so both non-pod outcomes pay an
+## instant score bonus instead. Documented divergence, not a silent guess.
+func _drop_cargo_loot(x: float, z: float) -> void:
+	if cargo.all_killed():
+		pods.drop(x, z, pods.roll(waves.wave, waves.rng))
+		return
+	var roll := waves.rng.randf()
+	if roll < 0.55:
+		pods.drop(x, z, pods.roll(waves.wave, waves.rng))
+	elif roll < 0.80:
+		score += 250 + waves.wave * 25   # main.js's "score" nugget value
+	else:
+		# Stands in for main.js's 10s x2 SCORE MULTIPLIER buff (scoreMultT),
+		# which this port has no equivalent system for.
+		score += 2 * (250 + waves.wave * 25)
+
 ## MAGNA pull (main.js v144, MAGNA_REACH 11 / MAGNA_PULL 1.1 per magna,
 ## combined cap 2.0/s): every living Magna in reach drags the player toward
 ## it. Dashing grants ~1.2s of immunity (player.magna_immune_t) — momentum
@@ -977,6 +1051,9 @@ func _start_game() -> void:
 	poison.clear()
 	debris.clear()
 	pods.clear()
+	cargo.clear()
+	_cargo_spawn_at = -1.0
+	_cargo_wave_t = 0.0
 	streak = 0
 	graze_count = 0
 	_weapon_name = "SINGLE"
@@ -1092,6 +1169,11 @@ func _finish_challenge() -> void:
 func _on_wave_started(n: int) -> void:
 	if not _base_mode():
 		return
+	# main.js: "3-8s into the wave — always overlaps live enemies". Drawn
+	# from the gameplay stream, not global randf() — see cargo_cluster.gd's
+	# header for why a convoy's timing has to be seed-reproducible too.
+	_cargo_wave_t = 0.0
+	_cargo_spawn_at = 3.0 + waves.rng.randf() * 5.0
 	match waves.wave_kind:
 		"boss":
 			# The BIGGEST-radius body in the wave is promoted, not the first one

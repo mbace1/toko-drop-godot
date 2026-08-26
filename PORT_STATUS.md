@@ -242,6 +242,23 @@ closing it out:
   ended, so the tell is the entire warning — it does not re-aim at the
   last instant.
 
+**Cargo convoy** (`scripts/cargo_cluster.gd`, main.js `CargoCluster`) — a
+formation of 3-5 golden goo-moths flies a straight line across the arena with
+a sinusoidal sweep, once per wave (3-8s in, base/Classic mode only — the
+same scoping as Daily's weapon-pod-bearing systems below, since Rush/
+Challenge already suppress pod drops outright and a convoy's whole point is
+dropping them). They never attack; the event is a bonus window. Shoot every
+moth before any of them crosses the far edge and it drops a GUARANTEED
+weapon pod; leave one to escape and each kill instead rolls a smaller,
+individual payout. Spawn edge/curve/timing all draw from `WaveDirector.rng`,
+not global `randf()`, so two Daily Run players on the same date see the same
+convoy at the same time.
+**Divergence**: main.js's non-pod loot rolls a walk-over "score" or
+"scoremult" pickup — its own `Powerup` class, entirely separate from the
+weapon-pod system this port has via `PowerupPool`. That class isn't ported,
+so both non-pod outcomes pay an instant score bonus here instead of spawning
+a pickup (`main.gd`'s `_drop_cargo_loot()` says so at the point it happens).
+
 **Daily Run** (`scripts/daily.gd`, main.js v130/v179) — a new MODE_ROWS
 entry under Challenges. Everyone on the same UTC date plays the same seed and
 the same one-in-four twist, no server needed, since both are pure functions

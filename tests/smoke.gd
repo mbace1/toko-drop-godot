@@ -28,6 +28,7 @@ func _init() -> void:
 	_test_cloaker(root)
 	_test_magna(root)
 	_test_draper(root)
+	_test_cargo(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -59,6 +60,7 @@ func _process(_delta: float) -> bool:
 	_test_graze()
 	_test_bambu_wiring()
 	_test_magna_wiring()
+	_test_cargo_wiring()
 	_test_adaptive_quality()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
@@ -1366,6 +1368,127 @@ func _test_magna_wiring() -> void:
 	_check(is_equal_approx(main.player.position.x, px), "point-blank range does not pull")
 
 	main.queue_free()
+
+## The convoy's wiring into main.gd: scheduling, collision, and loot.
+func _test_cargo_wiring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+	main.cargo.clear()
+	main.pods.clear()
+	main.score = 0
+
+	main._on_wave_started(1)
+	_check(main._cargo_spawn_at >= 3.0 and main._cargo_spawn_at <= 8.0,
+		"the convoy is scheduled 3-8s into the wave (%.2f)" % main._cargo_spawn_at)
+	# Real per-frame deltas, not one giant jump: _update_cargo() both checks
+	# the schedule AND advances the convoy's own flight in the same call, so
+	# a single huge delta would spawn it and immediately fly it clean off the
+	# arena before this line ever got to look.
+	var dt := 1.0 / 60.0
+	var elapsed := 0.0
+	while elapsed < main._cargo_spawn_at + 0.05:
+		main._update_cargo(dt)
+		elapsed += dt
+	_check(main.cargo.active, "and actually spawns once the wave clock reaches it")
+	_check(main._cargo_spawn_at < 0.0, "and only schedules one convoy per wave")
+
+	# A player bullet on top of a moth kills it.
+	var d0 = main.cargo.drones[0]
+	main.bullets.spawn_dir(d0.node.position.x, d0.node.position.z, 1.0, 0.0, true)
+	main._collide_cargo_bullets()
+	_check(not d0.alive, "a player bullet kills the moth it lands on")
+
+	# Killing every remaining drone with none escaping drops a guaranteed pod.
+	for i in range(1, main.cargo.drones.size()):
+		var d = main.cargo.drones[i]
+		main.bullets.spawn_dir(d.node.position.x, d.node.position.z, 1.0, 0.0, true)
+		main._collide_cargo_bullets()
+	_check(main.cargo.all_killed(), "every drone was shot and none escaped")
+	var pod_dropped := false
+	for l in main.pods._life:
+		if l > 0.0:
+			pod_dropped = true
+			break
+	_check(pod_dropped, "so the guaranteed all-clear pod actually dropped")
+
+	# _drop_cargo_loot() always pays something, pod or score, never nothing —
+	# checked directly against a FRESH (not all-killed) convoy so the roll
+	# branch runs rather than the guaranteed-pod one.
+	main.cargo.spawn(main.waves.rng)
+	main.pods.clear()
+	var any_pod := false
+	var any_score := false
+	for i in 40:
+		var before_score: int = main.score
+		main._drop_cargo_loot(0.0, 0.0)
+		for l in main.pods._life:
+			if l > 0.0:
+				any_pod = true
+				main.pods.clear()
+				break
+		if main.score > before_score:
+			any_score = true
+	_check(any_pod, "the loot roll drops a pod sometimes")
+	_check(any_score, "and pays an instant score bonus sometimes (main.js's Powerup class isn't ported)")
+
+	main.queue_free()
+
+## The cargo convoy (main.js CargoCluster): formation, determinism, and the
+## all_killed() rule that gates the guaranteed pod.
+func _test_cargo(root: Node3D) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 12345
+	var c := CargoCluster.new()
+	root.add_child(c)
+	c.half_x = 19.0
+	c.half_z = 11.0
+	c.spawn(rng)
+	_check(c.active, "spawn() activates the convoy")
+	_check(c.drones.size() >= 3 and c.drones.size() <= 5,
+		"3-5 drones (%d)" % c.drones.size())
+	_check(not c.all_killed(), "nothing has been killed yet")
+
+	# Same seed, same convoy — determinism, the same reason wave composition
+	# has it (design/DETERMINISM_AND_SEEDS.md).
+	var rng2 := RandomNumberGenerator.new()
+	rng2.seed = 12345
+	var c2 := CargoCluster.new()
+	root.add_child(c2)
+	c2.half_x = 19.0
+	c2.half_z = 11.0
+	c2.spawn(rng2)
+	_check(c2.drones.size() == c.drones.size(), "the same seed spawns the same drone count")
+
+	# Kill every drone without letting any escape.
+	for i in c.drones.size():
+		c.kill(i)
+	_check(c.all_killed(), "killing every drone before any escapes reads as all_killed()")
+
+	# One escapee breaks it, even if every OTHER drone was shot.
+	for i in range(1, c2.drones.size()):
+		c2.kill(i)
+	c2.drones[0].escaped = true
+	c2.drones[0].alive = false
+	_check(not c2.all_killed(), "one escapee breaks all_killed() even if the rest were shot")
+
+	# It eventually flies clear off the arena and reports "done".
+	var rng3 := RandomNumberGenerator.new()
+	rng3.seed = 3
+	var c3 := CargoCluster.new()
+	root.add_child(c3)
+	c3.half_x = 19.0
+	c3.half_z = 11.0
+	c3.spawn(rng3)
+	var result := "alive"
+	for i in 600:   # 10s at 60fps, comfortably crosses a 19x11 arena at >=5.5 u/s
+		result = c3.update(1.0 / 60.0, float(i) / 60.0)
+		if result == "done":
+			break
+	_check(result == "done", "the convoy eventually clears the arena and reports done")
+	_check(not c3.active, "and marks itself inactive")
 
 ## The campaign: grading, the tier-C gate, and ability unlocks.
 func _test_challenges(root: Node3D) -> void:
