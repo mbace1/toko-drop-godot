@@ -88,6 +88,10 @@ var escort: EscortBot
 var gates: Array[Gate] = []
 var gate_chain_t := 0.0
 var gate_chain_n := 0
+## CLEANSE FOAM: also persists across waves (its own 12s life or a cleanse
+## ends it, never a new wave on its own) — same reason it is not swept by
+## `_clear_arena_objectives()` either.
+var foam_zones: Array[FoamZone] = []
 ## Seconds into the CURRENT wave the convoy fires (main.js clusterSpawnAt,
 ## "3-8s into the wave — always overlaps live enemies"); -1 once spent.
 var _cargo_spawn_at := -1.0
@@ -665,6 +669,7 @@ func _process_playing(delta: float) -> void:
 		_update_cargo(delta)
 		_update_arena_objectives(delta)
 		_update_gates(delta)
+		_update_foam_zones(delta)
 	# Standing in sludge costs you, long after the body that laid it died.
 	if player.alive and not player.invincible \
 			and poison.damages_at(player.position.x, player.position.z):
@@ -925,6 +930,34 @@ func _use_gate(g: Gate) -> void:
 		_add_score(500 * gate_chain_n)
 		_show_toast("GATE CHAIN x%d! +%d" % [gate_chain_n, score - before])
 		audio.play("wave")
+
+## CLEANSE FOAM: standing inside charges it, leaving decays it, full charge
+## clears every enemy bullet on screen and pays per bullet cleared.
+## Independent of the vault/escort/gate clocks — its own array, own
+## per-instance life/burst timers.
+func _update_foam_zones(delta: float) -> void:
+	for i in range(foam_zones.size() - 1, -1, -1):
+		var fz: FoamZone = foam_zones[i]
+		var keep := fz.update(delta, player.position, player.alive, _run_t)
+		if fz.is_charged():
+			fz.begin_cleanse()
+			_cleanse_foam(fz)
+		if not keep:
+			foam_zones.remove_at(i)
+			fz.queue_free()
+
+func _cleanse_foam(fz: FoamZone) -> void:
+	var n := 0
+	for b in bullets.active:
+		if not b.alive or b.is_player:
+			continue
+		b.alive = false
+		n += 1
+	debris.burst(fz.position.x, fz.position.z, 10, Color(0.8, 0.965, 1.0), 0.1, 3.0, 2.5)
+	_add_score(500 + n * 10)   # main.js: "pays per bullet cleared"
+	add_shake(0.18)
+	audio.play("wave")
+	_show_toast("CLEANSED!")
 
 func _clear_arena_objectives() -> void:
 	if is_instance_valid(vault):
@@ -1271,6 +1304,10 @@ func _start_game() -> void:
 	gates.clear()
 	gate_chain_t = 0.0
 	gate_chain_n = 0
+	for fz in foam_zones:
+		if is_instance_valid(fz):
+			fz.queue_free()
+	foam_zones.clear()
 	score_mult_t = 0.0
 	streak = 0
 	graze_count = 0
@@ -1421,6 +1458,12 @@ func _on_wave_started(n: int) -> void:
 			escort = EscortBot.new()
 			add_child(escort)
 			escort.build(half_x, half_z, waves.rng)
+		if n >= 6 and n % 4 == 2:
+			var fz := FoamZone.new()
+			add_child(fz)
+			fz.build((waves.rng.randf() * 2.0 - 1.0) * (half_x - 4.0),
+				(waves.rng.randf() * 2.0 - 1.0) * (half_z - 4.0))
+			foam_zones.append(fz)
 	match waves.wave_kind:
 		"boss":
 			# The BIGGEST-radius body in the wave is promoted, not the first one

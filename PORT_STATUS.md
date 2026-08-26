@@ -308,6 +308,17 @@ from `WaveDirector`'s own corpse sweep rather than from the collision site
 that killed a body, so it isn't suppressed by kill source here. A
 gate-killed enemy still rings its normal revenge volley.
 
+**CLEANSE FOAM** (`scripts/foam_zone.gd`, main.js `FoamZone`) — the third
+"living-arena" bonus event, offset onto its own beat (wave >= 6, every 4th
+wave from there, `w%4==2` — never the same wave as VaultCrate's `w%4==3` or
+EscortBot's `w%4==1`) and, like Gates, **persisting across waves** rather
+than being swept at the next wave's setup. A circle of foam on the floor:
+stand inside it and a charge ring fills over 1.2s of CONTINUOUS presence;
+step out and it decays at 1.5x the build rate, rewarding commitment over a
+quick tag. Fully charge it and every enemy bullet on screen vanishes (the
+player's own shots are untouched), paid per bullet cleared (500 + 10 each)
+— a defensive panic button you have to stand still and earn, not press.
+
 **Non-weapon value pickups** (`scripts/powerup_pool.gd`'s `VALUES` table +
 `value_taken` signal, main.js's `Powerup` class) — the walk-over pickups the
 three systems above actually drop, closing the divergence cargo/vault used
@@ -563,6 +574,21 @@ visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
 long before weapons, touch, and grazing existed, and read as done from the
 "Ported" section above; verify before trusting them as open work. Item 1 is
 closed as of 2026-08-26 — see below.
+
+**Main.js classes surveyed 2026-08-26 and deliberately left unported**,
+so the next hunt doesn't re-open them as if they were missed:
+- `Civilian`, `Generator`, `KkCrate` — TOKOTRON/GAUNDROP/KAIKKI-exclusive
+  (a tile dungeon, ghost-stream generators, a cash-crate minigame). Those
+  modes were never in this port's scope; porting these would mean building
+  the mode around them first.
+- `ScreamRing`, `BubblePool`, `SplatPool` — pure visual polish (an
+  expanding ring on SIREN's scream, floating bubble particles, pooled
+  ground-decal puddles/slime trails) layered onto mechanics this port
+  already has. No new gameplay, purely cosmetic; lower priority than
+  anything above that changes what a run can do.
+- `PoisonZone` — checked and it's already covered: this is SLUDGE_CUBE's
+  walking poison trail, which is `poison_field.gd` here (`SludgeCube`'s
+  `poison` wiring in `wave_director.gd`), not a separate gap.
 
 1. ~~Enemy roster.~~ **Done, 2026-08-26.** The browser's full `tuning.js`
    `waves.pool` (21 types) is now entirely ported — CLOAKER, MAGNA, and

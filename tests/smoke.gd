@@ -33,6 +33,7 @@ func _init() -> void:
 	_test_escort_bot(root)
 	_test_powerup_values(root)
 	_test_gate(root)
+	_test_foam_zone(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -68,6 +69,7 @@ func _process(_delta: float) -> bool:
 	_test_arena_objectives_wiring()
 	_test_score_mult_wiring()
 	_test_gates_wiring()
+	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
 	_test_daily()
@@ -1621,6 +1623,46 @@ func _test_kill_scoring() -> void:
 
 	main.queue_free()
 
+## CLEANSE FOAM's wiring into main.gd: per-wave spawn (offset from vault's/
+## escort's beats), and a full charge clearing every ENEMY bullet while
+## leaving the player's own alone.
+func _test_foam_wiring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+	main.foam_zones.clear()
+	main.bullets.clear()
+	main.score = 0
+
+	main._on_wave_started(6)
+	_check(main.foam_zones.size() == 1, "wave 6 (>=6, %4==2) arms a foam zone")
+	_check(main.vault == null and main.escort == null,
+		"and does not also arm a vault/escort on the same wave")
+
+	var fz: FoamZone = main.foam_zones[0]
+	main.player.position = fz.position
+	main.bullets.spawn_dir(1.0, 1.0, 1.0, 0.0, false)   # an enemy bullet on screen
+	main.bullets.spawn_dir(2.0, 2.0, 1.0, 0.0, true)    # the player's own — must survive
+	for i in int(60 * (FoamZone.CHARGE_NEEDED + 0.1)):
+		main._update_foam_zones(1.0 / 60.0)
+	_check(fz.done, "fully charging it triggers the cleanse")
+	var enemy_bullets_left := 0
+	var player_bullets_left := 0
+	for b in main.bullets.active:
+		if not b.alive:
+			continue
+		if b.is_player:
+			player_bullets_left += 1
+		else:
+			enemy_bullets_left += 1
+	_check(enemy_bullets_left == 0, "the cleanse clears every ENEMY bullet")
+	_check(player_bullets_left == 1, "and leaves the player's own bullet alone")
+	_check(main.score > 0, "and pays out (500 + 10/bullet cleared)")
+
+	main.queue_free()
+
 func _test_gates_wiring() -> void:
 	var main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(main)
@@ -1888,6 +1930,50 @@ func _test_gate(root: Node3D) -> void:
 	_check(gd.position != start_pos, "a DRIFT gate actually moves")
 	_check(absf(gd.position.x) <= 19.0 - 3.0 + 0.5 and absf(gd.position.z) <= 11.0 - 3.0 + 0.5,
 		"and stays bounced back inside the wall margin")
+
+## CLEANSE FOAM (main.js FoamZone): charges while stood in, decays FASTER
+## while stood out of, and expires on its own if never touched.
+func _test_foam_zone(root: Node3D) -> void:
+	var fz := FoamZone.new()
+	root.add_child(fz)
+	fz.build(0.0, 0.0)
+	_check(not fz.is_charged(), "a fresh zone is not charged")
+
+	var keep := true
+	for i in int(60 * (FoamZone.CHARGE_NEEDED + 0.1)):
+		keep = fz.update(1.0 / 60.0, Vector3.ZERO, true, 0.0)
+	_check(fz.is_charged(), "standing inside the whole time fully charges it")
+	_check(keep, "and it's still 'alive' the frame it reaches full charge")
+
+	fz.begin_cleanse()
+	_check(not fz.is_charged(), "begin_cleanse() marks it done")
+	var alive := true
+	for i in 60:
+		alive = fz.update(1.0 / 60.0, Vector3.ZERO, true, 0.0)
+		if not alive:
+			break
+	_check(not alive, "the burst plays out and then it reports finished")
+
+	var fz2 := FoamZone.new()
+	root.add_child(fz2)
+	fz2.build(0.0, 0.0)
+	for i in 30:
+		fz2.update(1.0 / 60.0, Vector3.ZERO, true, 0.0)
+	var charged_at_30 := fz2.charge
+	for i in 30:
+		fz2.update(1.0 / 60.0, Vector3(50.0, 0.0, 50.0), true, 0.0)   # well outside
+	_check(fz2.charge < charged_at_30 * 0.5,
+		"leaving decays the charge FASTER than it built (1.5x)")
+
+	var fz3 := FoamZone.new()
+	root.add_child(fz3)
+	fz3.build(0.0, 0.0)
+	var still_alive := true
+	for i in int(60 * (FoamZone.LIFE + 0.5)):
+		still_alive = fz3.update(1.0 / 60.0, Vector3(50.0, 0.0, 50.0), true, 0.0)
+		if not still_alive:
+			break
+	_check(not still_alive, "an untouched zone expires on its own life timer")
 
 ## The campaign: grading, the tier-C gate, and ability unlocks.
 func _test_challenges(root: Node3D) -> void:
