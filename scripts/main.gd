@@ -82,6 +82,12 @@ var cargo: CargoCluster
 ## the next wave's setup rather than carrying over.
 var vault: VaultCrate
 var escort: EscortBot
+## v175 gates: up to 2 alive at once, one new one added most waves — these
+## persist ACROSS waves (unlike vault/escort), so they live in their own
+## array rather than being cleared by `_clear_arena_objectives()`.
+var gates: Array[Gate] = []
+var gate_chain_t := 0.0
+var gate_chain_n := 0
 ## Seconds into the CURRENT wave the convoy fires (main.js clusterSpawnAt,
 ## "3-8s into the wave — always overlaps live enemies"); -1 once spent.
 var _cargo_spawn_at := -1.0
@@ -658,6 +664,7 @@ func _process_playing(delta: float) -> void:
 	if _base_mode():
 		_update_cargo(delta)
 		_update_arena_objectives(delta)
+		_update_gates(delta)
 	# Standing in sludge costs you, long after the body that laid it died.
 	if player.alive and not player.invincible \
 			and poison.damages_at(player.position.x, player.position.z):
@@ -838,6 +845,77 @@ func _collide_bambu_lobs() -> void:
 		if dx * dx + dz * dz < rr * rr:
 			_note_killer("bambu lobber", Feedback.Cause.HAZARD)
 			_damage_player()
+
+## Gates persist across waves, so their own clock (chain window, pulse/
+## risk-cycle/drift) runs every frame in base mode regardless of what the
+## vault/escort/cargo clocks are doing.
+func _update_gates(delta: float) -> void:
+	if gate_chain_t > 0.0:
+		gate_chain_t -= delta
+		if gate_chain_t <= 0.0:
+			gate_chain_n = 0
+	for g in gates:
+		g.update(delta, _run_t, half_x, half_z)
+	_collide_gates()
+
+## Two independent interactions per gate, per frame: the PLAYER dashing
+## through pays out (or, on a red RISK gate, is a harmless dud); any ENEMY
+## touching the beam takes damage on a 0.5s-per-gate cooldown, unconditional
+## on risk/colour — the beam is armed for enemies whenever it's alive.
+func _collide_gates() -> void:
+	for g in gates:
+		if not g.alive:
+			continue
+		if player.alive and g.hits_point(player.position.x, player.position.z, Player.RADIUS) 				and player.dashing:
+			_use_gate(g)
+			if not g.alive:
+				continue   # deactivated by _use_gate(); no longer a hazard either
+		if g.dmg_cooldown <= 0.0:
+			for e in waves.enemies:
+				if not is_instance_valid(e) or not e.alive:
+					continue
+				if not g.hits_point(e.position.x, e.position.z, e.radius * 0.5):
+					continue
+				# main.js: "gate lasers, vents, and suds walls vaporize
+				# cleanly" — env kills skip the revenge volley there. This
+				# port's revenge fire runs from WaveDirector's own corpse
+				# sweep, not from the collision site, so it isn't suppressed
+				# here — a documented divergence, not an oversight.
+				if e.take_hit(1):
+					streak += 1
+					_add_score(100 * e.max_hp)
+					debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.26)
+					audio.play_varied("kill")
+				else:
+					audio.play_varied("hit")
+				g.dmg_cooldown = Gate.DMG_COOLDOWN
+				break
+
+## The player dashed through a live gate: RISK+red is a dud (deactivates,
+## pays nothing); otherwise it drops one random buff (TWO, offset, on
+## RISK+green — "GREEN RUSH! DOUBLE PRIZE") and, if another gate was banked
+## within the last 6s, a climbing GATE CHAIN bonus.
+func _use_gate(g: Gate) -> void:
+	g.deactivate()
+	if g.risk and not g.green:
+		_show_toast("DUD! GREEN MEANS GO")
+		audio.play_varied("hit")
+		return
+	debris.burst(g.position.x, g.position.z, 14, Color(0.267, 1.0, 0.533), 0.13, 5.5, 1.0)
+	add_shake(0.14)
+	audio.play_varied("kill")
+	var gate_types := ["hp", "invincible", "firerate", "scoremult"]
+	pods.drop(g.position.x, g.position.z, gate_types[waves.rng.randi() % gate_types.size()])
+	if g.risk:
+		pods.drop(g.position.x + 1.2, g.position.z, gate_types[waves.rng.randi() % gate_types.size()])
+		_show_toast("GREEN RUSH! DOUBLE PRIZE")
+	gate_chain_n = gate_chain_n + 1 if gate_chain_t > 0.0 else 1
+	gate_chain_t = 6.0
+	if gate_chain_n >= 2:
+		var before := score
+		_add_score(500 * gate_chain_n)
+		_show_toast("GATE CHAIN x%d! +%d" % [gate_chain_n, score - before])
+		audio.play("wave")
 
 func _clear_arena_objectives() -> void:
 	if is_instance_valid(vault):
@@ -1178,6 +1256,12 @@ func _start_game() -> void:
 	_cargo_spawn_at = -1.0
 	_cargo_wave_t = 0.0
 	_clear_arena_objectives()
+	for g in gates:
+		if is_instance_valid(g):
+			g.queue_free()
+	gates.clear()
+	gate_chain_t = 0.0
+	gate_chain_n = 0
 	score_mult_t = 0.0
 	streak = 0
 	graze_count = 0
@@ -1303,6 +1387,21 @@ func _on_wave_started(n: int) -> void:
 	# here (main.js's clearArenaObjectives(), called from the same per-wave
 	# setup that schedules the next one) rather than carrying over.
 	_clear_arena_objectives()
+	# Gates, unlike vault/escort, spawn every wave from 3 regardless of kind
+	# (main.js has no boss-wave exclusion for these) and PERSIST — only the
+	# 2-alive cap evicts one, never a new wave on its own.
+	if n >= 3:
+		if gates.size() >= 2:
+			var oldest: Gate = gates.pop_front()
+			if is_instance_valid(oldest):
+				oldest.queue_free()
+		var gx := (waves.rng.randf() - 0.5) * half_x * 1.5
+		var gz := (waves.rng.randf() - 0.5) * half_z * 1.5
+		var gangle := waves.rng.randf() * PI
+		var g := Gate.new()
+		add_child(g)
+		g.build(gx, gz, gangle, n >= 5 and waves.rng.randf() < 0.35, n >= 10, waves.rng)
+		gates.append(g)
 	if waves.wave_kind != "boss":
 		if n >= 5 and n % 4 == 3:
 			vault = VaultCrate.new()
@@ -1520,6 +1619,15 @@ func _on_value_taken(kind: String, value: int, _col: Color) -> void:
 			audio.play("wave")
 		"scoremult":
 			score_mult_t = 10.0
+			audio.play("wave")
+		"hp":
+			player.hp = mini(player.max_hp, player.hp + 1)
+			audio.play("wave")
+		"invincible":
+			player.grant_invincibility(3.0)
+			audio.play("wave")
+		"firerate":
+			player.grant_fire_rate_boost(8.0)
 			audio.play("wave")
 
 func _cur_mode_key() -> String:

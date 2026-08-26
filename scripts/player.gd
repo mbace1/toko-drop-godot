@@ -92,7 +92,7 @@ var _eye_r: Node3D
 var _built := false
 
 var invincible: bool:
-	get: return _dash_time > 0.0 or _mercy_t > 0.0 or rush_invuln
+	get: return _dash_time > 0.0 or _mercy_t > 0.0 or rush_invuln or _invinc_boost_t > 0.0
 
 var dashing: bool:
 	get: return _dash_time > 0.0
@@ -102,6 +102,25 @@ var dashing: bool:
 ## off the same dash state main.gd has no other reason to poll every frame.
 const MAGNA_IMMUNE_DUR := 1.2
 var magna_immune_t := 0.0
+
+## Gate reward buffs (main.js player.js `grantInvincibility`/
+## `grantFireRateBoost`) — both are `Math.max` REFRESHES, not stacking adds:
+## grabbing a second one while the first is still running extends to the
+## longer of the two, it does not add on top.
+var _invinc_boost_t := 0.0
+var _fire_rate_boost_t := 0.0
+
+func grant_invincibility(t: float) -> void:
+	_invinc_boost_t = maxf(_invinc_boost_t, t)
+
+func grant_fire_rate_boost(t: float) -> void:
+	_fire_rate_boost_t = maxf(_fire_rate_boost_t, t)
+
+## player.js: `_fireRateBoost > 0 ? 0.4 : 1` — the SAME multiplier however
+## the shot got fired (shotgun, SINGLE, RAPID...), applied where each firing
+## branch sets its own `_fire_t`.
+func _fire_rate_scale() -> float:
+	return 0.4 if _fire_rate_boost_t > 0.0 else 1.0
 
 func _ready() -> void:
 	build()
@@ -213,6 +232,8 @@ func reset() -> void:
 	_dash_cd = 0.0
 	_fire_t = 0.0
 	magna_immune_t = 0.0
+	_invinc_boost_t = 0.0
+	_fire_rate_boost_t = 0.0
 	_sq = 1.0
 	_sqv = 0.0
 	rush_speed_mult = 1.0
@@ -265,6 +286,10 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 		magna_immune_t = MAGNA_IMMUNE_DUR
 	elif magna_immune_t > 0.0:
 		magna_immune_t -= delta
+	if _invinc_boost_t > 0.0:
+		_invinc_boost_t -= delta
+	if _fire_rate_boost_t > 0.0:
+		_fire_rate_boost_t -= delta
 	_step_burst(delta, bullets)
 	if _dash_cd > 0.0:
 		_dash_cd -= delta
@@ -332,7 +357,7 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 				var f := (float(i) / float(SHOTGUN_PELLETS - 1)) - 0.5
 				var a := base + f * SHOTGUN_SPREAD
 				bullets.spawn_dir(ox, oz, cos(a), sin(a), true)
-			_fire_t = FIRE_RATE * SHOTGUN_RATE_MULT
+			_fire_t = FIRE_RATE * SHOTGUN_RATE_MULT * _fire_rate_scale()
 		else:
 			_fire_weapon(ox, oz, ax, az, bullets)
 		if on_shoot.is_valid():
@@ -382,7 +407,7 @@ func _fire_weapon(ox: float, oz: float, ax: float, az: float, bullets: BulletPoo
 		_:
 			# SINGLE, and LASER/LASER2 which fire the same way in the source.
 			bullets.spawn_dir(ox, oz, ax, az, true)
-	_fire_t = rate
+	_fire_t = rate * _fire_rate_scale()
 
 ## The queued half of a BURST. Runs on its own clock so the rest of the burst
 ## still arrives even if you stop holding the trigger — which is what makes

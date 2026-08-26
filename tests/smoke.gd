@@ -32,6 +32,7 @@ func _init() -> void:
 	_test_vault_crate(root)
 	_test_escort_bot(root)
 	_test_powerup_values(root)
+	_test_gate(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -66,6 +67,7 @@ func _process(_delta: float) -> bool:
 	_test_cargo_wiring()
 	_test_arena_objectives_wiring()
 	_test_score_mult_wiring()
+	_test_gates_wiring()
 	_test_adaptive_quality()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
@@ -1561,6 +1563,102 @@ func _test_score_mult_wiring() -> void:
 
 	main.queue_free()
 
+## Gates' wiring into main.gd: per-wave spawn/eviction cap, a dash-through
+## reward (and a RISK-red dud, and a RISK-green double), enemy damage on
+## beam touch, and the GATE CHAIN bonus for banking two within 6s.
+func _test_gates_wiring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+	main.gates.clear()
+	main.pods.clear()
+	main.score = 0
+	main.gate_chain_t = 0.0
+	main.gate_chain_n = 0
+
+	main._on_wave_started(3)
+	_check(main.gates.size() == 1, "wave 3 arms the first gate")
+	main._on_wave_started(4)
+	_check(main.gates.size() == 2, "and a second the next wave")
+	var first_gate = main.gates[0]
+	main._on_wave_started(5)
+	_check(main.gates.size() == 2, "a 3rd gate does not exceed the 2-alive cap")
+	_check(main.gates[0] != first_gate, "the OLDEST gate is the one evicted, not the newest")
+
+	# Dash through a plain (non-RISK) gate: pays out one buff pickup.
+	var g0 = main.gates[0]
+	main.player.position = g0.position
+	main.player._dash_time = 0.5
+	main.pods.clear()
+	main._collide_gates()
+	_check(not g0.alive, "dashing through a gate deactivates it")
+	var pod_count := 0
+	for l in main.pods._life:
+		if l > 0.0:
+			pod_count += 1
+	_check(pod_count == 1, "and drops exactly one buff pickup (not RISK+green)")
+
+	# A fresh RISK gate on red is a harmless dud.
+	var gr := Gate.new()
+	main.add_child(gr)
+	gr.build(main.player.position.x, main.player.position.z, 0.0, true, false, main.waves.rng)
+	gr.green = false
+	main.gates.append(gr)
+	main.pods.clear()
+	main.player._dash_time = 0.5
+	main._collide_gates()
+	_check(not gr.alive, "a RISK gate still deactivates on a dud")
+	pod_count = 0
+	for l in main.pods._life:
+		if l > 0.0:
+			pod_count += 1
+	_check(pod_count == 0, "but a red RISK gate pays nothing")
+
+	# A RISK gate on green pays DOUBLE.
+	var gg := Gate.new()
+	main.add_child(gg)
+	gg.build(main.player.position.x, main.player.position.z, 0.0, true, false, main.waves.rng)
+	gg.green = true
+	main.gates.append(gg)
+	main.pods.clear()
+	main.player._dash_time = 0.5
+	main._collide_gates()
+	pod_count = 0
+	for l in main.pods._life:
+		if l > 0.0:
+			pod_count += 1
+	_check(pod_count == 2, "a RISK gate on green pays double")
+
+	# GATE CHAIN: two SUCCESSFUL gates (the dud does not count — main.js
+	# `break`s before the chain increment on a dud) banked within 6s pays a
+	# climbing bonus.
+	_check(main.gate_chain_n >= 2, "banking gates back-to-back builds the chain (%d)" % main.gate_chain_n)
+	_check(main.score > 0, "and the chain bonus actually paid out")
+
+	# Enemy damage on beam touch — independent of the player entirely.
+	var g1 := Gate.new()
+	main.add_child(g1)
+	g1.build(0.0, 0.0, 0.0, false, false, main.waves.rng)
+	main.gates.append(g1)
+	var e := Globbo.new()
+	main.waves.enemies_root.add_child(e)
+	e.position = Vector3(0.0, 0.0, 0.5)   # on the beam axis at angle 0 (para runs along z)
+	e.half_x = 19.0
+	e.half_z = 11.0
+	e.target = main.player
+	e.bullets = main.bullets
+	e.rng = main.waves.rng
+	e.init()
+	main.waves.enemies.append(e)
+	main.player.position = Vector3(30.0, 0.0, 30.0)   # well clear of the beam
+	main.player._dash_time = 0.0
+	main._collide_gates()
+	_check(not e.alive, "an enemy touching a live beam takes damage (GLOBBO is hp 1)")
+
+	main.queue_free()
+
 ## The cargo convoy (main.js CargoCluster): formation, determinism, and the
 ## all_killed() rule that gates the guaranteed pod.
 func _test_cargo(root: Node3D) -> void:
@@ -1690,6 +1788,51 @@ func _test_powerup_values(root: Node3D) -> void:
 	pp.drop(-3.0, 0.0, "S")
 	pp.update(0.016, Vector3(-3.0, 0.0, 0.0), 0.0)
 	_check(got_mode[0] == "SPREAD", "weapon pods are unaffected by the value-pickup path")
+
+## Gate (main.js v175): the beam hit-test, the RISK green/red cycle, DRIFT
+## wander + wall bounce, and deactivate().
+func _test_gate(root: Node3D) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+
+	var g := Gate.new()
+	root.add_child(g)
+	g.build(0.0, 0.0, 0.0, false, false, rng)
+	# hits_point()'s own axis convention at angle 0: para runs along Z
+	# (ax=-sin(0)=0, az=cos(0)=1), so "along the beam" means varying z, not x.
+	_check(g.alive, "a fresh gate is alive")
+	_check(g.hits_point(0.0, 1.5, 0.1), "a point along the beam axis hits")
+	_check(not g.hits_point(1.5, 0.0, 0.1), "a point off the beam axis (across it) does not")
+	_check(not g.hits_point(0.0, 3.5, 0.1), "a point past the beam's own length does not")
+
+	g.deactivate()
+	_check(not g.alive, "deactivate() kills it")
+	_check(not g.hits_point(0.0, 1.5, 0.1), "and a dead gate never hits")
+
+	# RISK: green/red on a strict 1.6s clock.
+	var gr := Gate.new()
+	root.add_child(gr)
+	gr.build(5.0, 5.0, 0.0, true, false, rng)
+	var seen_green := false
+	var seen_red := false
+	for i in 200:
+		gr.update(1.0 / 60.0, float(i) / 60.0 * 3.2, 19.0, 11.0)
+		if gr.green:
+			seen_green = true
+		else:
+			seen_red = true
+	_check(seen_green and seen_red, "a RISK gate actually cycles green and red")
+
+	# DRIFT: wanders, and bounces back inside the wall margin.
+	var gd := Gate.new()
+	root.add_child(gd)
+	gd.build(0.0, 0.0, 0.0, false, true, rng)
+	var start_pos := gd.position
+	for i in 60 * 30:
+		gd.update(1.0 / 60.0, 0.0, 19.0, 11.0)
+	_check(gd.position != start_pos, "a DRIFT gate actually moves")
+	_check(absf(gd.position.x) <= 19.0 - 3.0 + 0.5 and absf(gd.position.z) <= 11.0 - 3.0 + 0.5,
+		"and stays bounced back inside the wall margin")
 
 ## The campaign: grading, the tier-C gate, and ability unlocks.
 func _test_challenges(root: Node3D) -> void:

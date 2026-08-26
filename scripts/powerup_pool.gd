@@ -39,16 +39,22 @@ const LV2_FROM_WAVE := 4
 const LV2_CHANCE := 0.28
 
 ## Non-weapon walk-over pickups (main.js `Powerup`/`NON_WEAPON_COLORS`).
-## That class covers 8 types; `hp`/`invincible`/`firerate`/`item`/`key`/
-## `potion` are either KAIKKI-mode shaped pickups (a key that looks like a
-## key, a flask that looks like a flask — a different mode's own art, not a
-## gap here) or player buffs this port has no slot for yet. Only the two
-## CLASSIC-mode value drops this port's OWN systems (the cargo convoy,
-## VaultCrate) actually roll for are ported: an instant score nugget, and a
-## timed x2 SCORE MULTIPLIER (`main.gd`'s `score_mult_t`).
+## That class covers 8 types; `item`/`key`/`potion` are KAIKKI-mode SHAPED
+## pickups (a key that looks like a key, a flask that looks like a flask —
+## a different mode's own art) and stay out of scope. The other five —
+## every type this port's own drop sources (the cargo convoy, VaultCrate,
+## Gate) actually roll for — are all here:
+##   score      — an instant nugget, value carried per-drop.
+##   scoremult  — starts a timed x2 window (`main.gd`'s `score_mult_t`).
+##   hp         — heals 1 HP, capped at max.
+##   invincible — 3s of i-frames (`Player.grant_invincibility`).
+##   firerate   — 8s at 0.4x the fire interval (`Player.grant_fire_rate_boost`).
 const VALUES := {
-	"score":     {"color": Color(0.533, 1.0, 0.533)},
-	"scoremult": {"color": Color(1.0, 0.867, 0.2)},
+	"score":      {"color": Color(0.533, 1.0, 0.533)},
+	"scoremult":  {"color": Color(1.0, 0.867, 0.2)},
+	"hp":         {"color": Color(1.0, 0.267, 0.4)},
+	"invincible": {"color": Color(1.0, 1.0, 1.0)},
+	"firerate":   {"color": Color(1.0, 0.533, 0.667)},
 }
 
 signal taken(mode: String, color: Color)

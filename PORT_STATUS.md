@@ -273,21 +273,50 @@ they never stack:
   outright — protecting it is pure positioning, not a fight. Deliver it
   to the far wall and it gifts a guaranteed weapon pod.
 
+**Gates** (`scripts/gate.gd`, main.js v175 "M5b gates, round 2") — laser
+barriers between two posts, spawning one per wave from wave 3 (every kind,
+including boss waves — unlike vault/escort/cargo above), capped at 2 alive
+at once (the OLDEST is evicted, not just deactivated, when a 3rd would
+spawn) and, unlike vault/escort, **persisting across waves** rather than
+being swept at the next wave's setup. Dash through a live one and it pays
+out a random buff pickup (hp/invincible/firerate/scoremult) and deactivates;
+bank a second one within 6s and a climbing GATE CHAIN bonus fires
+(500 x the chain length). Two variants layer on from there: **RISK** gates
+(35% chance, from wave 5) alternate green/red on a readable 1.6s clock —
+dashing on green pays DOUBLE, red is a harmless dud. **DRIFT** gates (from
+wave 10) wander slowly, bouncing inside the walls, so the late-game route
+keeps changing. Enemies pay too: anything touching a live beam takes damage
+on a 0.5s-per-gate cooldown, independent of the player entirely.
+**Divergence**: main.js explicitly suppresses the revenge volley for
+gate/vent/"env" kills ("vaporize cleanly... so a barricade can never become
+a bullet fountain you farm from cover") — this port's revenge fire runs
+from `WaveDirector`'s own corpse sweep rather than from the collision site
+that killed a body, so it isn't suppressed by kill source here. A
+gate-killed enemy still rings its normal revenge volley.
+
 **Non-weapon value pickups** (`scripts/powerup_pool.gd`'s `VALUES` table +
-`value_taken` signal, main.js's `Powerup` class) — the walk-over "score" and
-"scoremult" pickups the two systems above actually drop, closing the
-divergence both used to carry (an instant score award standing in for a
-pickup that didn't exist). Reuses `PowerupPool`'s existing pooled rendering
-rather than a second pickup system: a `score` id pays its carried value
-once, a `scoremult` id starts (main.js: *overwrites, not stacks*) a real 10s
-x2 window (`main.gd`'s `score_mult_t`), applied uniformly through a new
-`_add_score()` helper rather than threaded through every individual
-`score +=` site by hand. **Scoped down from the source's 8 pickup types**:
-`hp`/`invincible`/`firerate` are player buffs this port has no drop source
-for yet, and `item`/`key`/`potion` are KAIKKI-mode shaped pickups (a key
-that looks like a key, a flask that looks like a flask — a different mode's
-own art). Only the two this port's OWN systems actually roll for are
-ported.
+`value_taken` signal, main.js's `Powerup` class) — the walk-over pickups the
+three systems above actually drop, closing the divergence cargo/vault used
+to carry (an instant score award standing in for a pickup that didn't
+exist). Reuses `PowerupPool`'s existing pooled rendering rather than a
+second pickup system:
+- `score` pays its carried value once.
+- `scoremult` starts (main.js: *overwrites, not stacks*) a real 10s x2
+  window (`main.gd`'s `score_mult_t`), applied uniformly through a new
+  `_add_score()` helper rather than threaded through every individual
+  `score +=` site by hand (kills, graze, wave-clear, cargo/vault/gate loot).
+- `hp` heals 1, capped at max.
+- `invincible` grants 3s of i-frames (`Player.grant_invincibility()`,
+  folded into the existing `invincible` getter alongside dash/mercy/rush).
+- `firerate` grants 8s at the fire interval x0.4
+  (`Player.grant_fire_rate_boost()`); both buffs are `max()` REFRESHES like
+  the source, not stacking adds.
+
+**Scoped down from the source's 8 pickup types**: `item`/`key`/`potion` are
+KAIKKI-mode SHAPED pickups (a key that looks like a key, a flask that looks
+like a flask — a different mode's own art) and stay out of scope. The other
+five — every type this port's OWN drop sources (cargo, VaultCrate, Gate)
+actually roll for — are all ported.
 
 **Daily Run** (`scripts/daily.gd`, main.js v130/v179) — a new MODE_ROWS
 entry under Challenges. Everyone on the same UTC date plays the same seed and
