@@ -24,7 +24,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "1.7"
+const VERSION := "1.8"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
