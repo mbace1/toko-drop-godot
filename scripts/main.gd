@@ -717,9 +717,18 @@ func _collide_player_bullets() -> void:
 			b.alive = false
 			var was_max := e.max_hp
 			if e.take_hit(1):
-				var gain := 100 * was_max
-				_add_score(rush.award(gain) if _rush_verbs() else gain)
-				streak += 1
+				if _rush_verbs():
+					_add_score(rush.award(100 * was_max))
+				else:
+					# main.js onKill(): "streak++; score += 100 * streak * ..." —
+					# a COMBO multiplier, not a per-body value keyed to the
+					# thing's own toughness. Rush keeps its own chain
+					# (`rush.multiplier`) and formula; this was a real
+					# discrepancy in the base-mode path, found (not caused) by
+					# porting Gates — the old `100 * max_hp` here never
+					# actually matched the browser.
+					streak += 1
+					_add_kill_score(100 * streak)
 				# main.js drops a weapon pod from a kill now and then. Bounded, so
 				# a good wave does not carpet the floor with shopping.
 				if not _rush_verbs() and waves.rng.randf() < POD_CHANCE:
@@ -883,7 +892,7 @@ func _collide_gates() -> void:
 				# here — a documented divergence, not an oversight.
 				if e.take_hit(1):
 					streak += 1
-					_add_score(100 * e.max_hp)
+					_add_kill_score(100 * streak)
 					debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.26)
 					audio.play_varied("kill")
 				else:
@@ -1197,7 +1206,7 @@ func _fire_ability() -> void:
 			var m := e.max_hp
 			if e.take_hit(99):
 				rush.add_boost_kill()
-				score += rush.award(100 * m)
+				_add_score(rush.award(100 * m))
 
 func _start_game() -> void:
 	state = State.PLAYING
@@ -1611,6 +1620,16 @@ func _on_pod_taken(mode_name: String, col: Color) -> void:
 ## one is a top-up, not a stack) a 10s x2 window.
 func _add_score(amount: int) -> void:
 	score += amount * (2 if score_mult_t > 0.0 else 1)
+
+## main.js's GLASS-day doubling ("GLASS pays double") lives ONLY in
+## onKill()'s own formula — the wave-clear bonus and graze both stay at
+## plain scoreMultT-only (checked directly against their own source lines,
+## `1500 + wave*100` / `25 * grazeMult`, neither of which multiplies by
+## dailyMod). So this is its own helper, not folded into _add_score()
+## itself, or every score site would double on a GLASS day when only kills
+## are supposed to.
+func _add_kill_score(amount: int) -> void:
+	_add_score(amount * (2 if daily_mod == "glass" else 1))
 
 func _on_value_taken(kind: String, value: int, _col: Color) -> void:
 	match kind:

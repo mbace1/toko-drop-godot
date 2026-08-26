@@ -189,6 +189,20 @@ target is `PORT_BRIEF.md`.
 - **Streak** — Normal mode had no chain at all. Climbs per kill, resets on a
   hit, and wears the browser's heat tiers (gold at 5, orange at 10, red at 20)
   so the scoring depth reads at a glance.
+- **Kill scoring, corrected 2026-08-26**: found while porting Gates, not
+  caused by it. main.js's `onKill()` pays `100 * streak * multipliers` —
+  the SAME body costs more to kill the deeper into a streak you already
+  are — and this port had instead been paying `100 * max_hp` (a per-body
+  value keyed to the enemy's own toughness, never what the browser does).
+  Fixed at both base-mode kill sites (`_collide_player_bullets()`, the
+  gate's own enemy-kill path) via a new `_add_kill_score()` helper, which
+  also folds in GLASS day's kill-only double (main.js: *"GLASS pays
+  double"* — checked directly against the source line, this does NOT
+  apply to graze/wave-clear/loot, which stay on plain `_add_score()`).
+  Rush/Challenge keep their own unrelated `rush.multiplier` chain and
+  formula — there is no browser mode to match there, so nothing changed
+  for them beyond routing through `_add_score()` for the shared
+  `score_mult_t` handling.
 - **Graze** (main.js v125, `_collide_enemy_bullets()`) — an enemy bullet that
   skims within `bulletRadius + PLAYER_RADIUS + 0.55` without actually hitting
   pays +25 score, once per bullet, and only while the loop is even reachable

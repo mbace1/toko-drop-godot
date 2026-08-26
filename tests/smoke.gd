@@ -68,6 +68,7 @@ func _process(_delta: float) -> bool:
 	_test_arena_objectives_wiring()
 	_test_score_mult_wiring()
 	_test_gates_wiring()
+	_test_kill_scoring()
 	_test_adaptive_quality()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
@@ -1566,6 +1567,60 @@ func _test_score_mult_wiring() -> void:
 ## Gates' wiring into main.gd: per-wave spawn/eviction cap, a dash-through
 ## reward (and a RISK-red dud, and a RISK-green double), enemy damage on
 ## beam touch, and the GATE CHAIN bonus for banking two within 6s.
+## Base-mode kill scoring: main.js onKill()'s REAL formula is
+## "streak++; score += 100 * streak * ..." — a combo multiplier, not the
+## per-body `100 * max_hp` this port used to pay (found, not caused, by
+## porting Gates). Also: GLASS day's double only applies to KILLS, never to
+## every _add_score() site (graze/wave-clear/loot don't multiply by
+## dailyMod in the source, checked directly against those lines).
+func _test_kill_scoring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+	main.score = 0
+	main.streak = 0
+
+	var e1 := Globbo.new()
+	main.waves.enemies_root.add_child(e1)
+	e1.position = Vector3(3.0, 0.0, 0.0)
+	e1.half_x = 19.0
+	e1.half_z = 11.0
+	e1.target = main.player
+	e1.rng = main.waves.rng
+	e1.init()
+	main.waves.enemies.append(e1)
+	main.bullets.spawn_dir(3.0, 0.0, 1.0, 0.0, true)
+	main._collide_player_bullets()
+	_check(main.streak == 1, "the first kill starts the streak at 1")
+	_check(main.score == 100, "and pays 100 x streak (100)")
+
+	var e2 := Globbo.new()
+	main.waves.enemies_root.add_child(e2)
+	e2.position = Vector3(3.0, 0.0, 0.0)
+	e2.half_x = 19.0
+	e2.half_z = 11.0
+	e2.target = main.player
+	e2.rng = main.waves.rng
+	e2.init()
+	main.waves.enemies.append(e2)
+	main.bullets.spawn_dir(3.0, 0.0, 1.0, 0.0, true)
+	main._collide_player_bullets()
+	_check(main.streak == 2, "a second kill climbs the streak")
+	_check(main.score == 300, "and the SAME body now pays more (100 + 200 = 300)")
+
+	main.daily_mod = "glass"
+	main.score = 0
+	main._add_kill_score(100)
+	_check(main.score == 200, "GLASS day doubles a kill")
+	main.score = 0
+	main._add_score(100)
+	_check(main.score == 100, "but not graze/wave-clear/loot (plain _add_score())")
+	main.daily_mod = ""
+
+	main.queue_free()
+
 func _test_gates_wiring() -> void:
 	var main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(main)
