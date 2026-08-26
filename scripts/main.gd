@@ -13,12 +13,36 @@ extends Node3D
 ## was the single biggest structural difference from the browser build: a
 ## square 18x18 made every body look huge, left no room to run, and framed
 ## nothing like the real game. 38 x 22 is a WIDE room you cross.
-const HALF_X := 19.0
-const HALF_Z := 11.0
+##
+## main.js ALSO has a PORTRAIT preset (halfX 11, halfZ 18 — a TALL room) and
+## picks between the two off the actual device's aspect (`landscapeMode =
+## innerWidth > innerHeight`), re-deriving on resize/rotation. This port only
+## ever had the landscape half — found 2026-08-26 by a real phone in portrait
+## showing a landscape level, a landscape camera, and a landscape-sized HUD
+## regardless of the actual (tall) screen. `HALF_X`/`HALF_Z` below are now
+## the CURRENT preset's numbers, not a constant — `_apply_orientation()`
+## picks one before anything gets built.
+const HALF_X_LANDSCAPE := 19.0
+const HALF_Z_LANDSCAPE := 11.0
+const CAM_REST_LANDSCAPE := Vector3(0.0, 20.5, 13.5)
+const CAM_LOOK_LANDSCAPE := Vector3(0.0, 0.0, 2.5)
 
-## The LIVE arena size. Constants above are the default room; a challenge
-## level may shrink it (CLOSE QUARTERS), and the floor, rails, grid, spawn
-## ring and every clamp all read these rather than the constants.
+const HALF_X_PORTRAIT := 11.0
+const HALF_Z_PORTRAIT := 18.0
+const CAM_REST_PORTRAIT := Vector3(0.0, 27.0, 21.0)
+const CAM_LOOK_PORTRAIT := Vector3(0.0, 0.0, -3.0)
+
+var HALF_X := HALF_X_LANDSCAPE
+var HALF_Z := HALF_Z_LANDSCAPE
+## main.js: `landscapeMode = innerWidth > innerHeight`.
+var landscape_mode := true
+var _cam_rest_base := CAM_REST_LANDSCAPE
+var _cam_look_base := CAM_LOOK_LANDSCAPE
+
+## The LIVE arena size. `HALF_X`/`HALF_Z` above are the current preset's
+## default room; a challenge level may shrink it further (CLOSE QUARTERS),
+## and the floor, rails, grid, spawn ring and every clamp all read these
+## rather than the constants.
 var half_x := HALF_X
 var half_z := HALF_Z
 
@@ -161,7 +185,51 @@ var _wave_label: Label
 var _score_label: Label
 var _msg_label: Label
 
+## main.js's own check, ported verbatim: the ACTUAL device/window aspect,
+## not a stored preference — a game that opens portrait and gets rotated
+## mid-title-screen should pick up the new shape (see the resize hook below).
+func _detect_landscape() -> bool:
+	var sz := get_viewport().get_visible_rect().size
+	# >=, not >: a perfectly square viewport never happens on a real device
+	# (headless test contexts report a dummy 100x100, though — see
+	# tests/smoke.gd), and defaulting a tie to landscape is what the whole
+	# existing test suite (half_x=19 assumed throughout) already expects.
+	return sz.x >= sz.y
+
+func _apply_orientation() -> void:
+	_set_orientation(_detect_landscape())
+
+## Split from _apply_orientation() so a test can drive the preset-selection
+## logic directly, without needing to fake an actual window resize to
+## exercise the portrait branch.
+func _set_orientation(is_landscape: bool) -> void:
+	landscape_mode = is_landscape
+	HALF_X = HALF_X_LANDSCAPE if landscape_mode else HALF_X_PORTRAIT
+	HALF_Z = HALF_Z_LANDSCAPE if landscape_mode else HALF_Z_PORTRAIT
+	_cam_rest_base = CAM_REST_LANDSCAPE if landscape_mode else CAM_REST_PORTRAIT
+	_cam_look_base = CAM_LOOK_LANDSCAPE if landscape_mode else CAM_LOOK_PORTRAIT
+
+## main.js: "Re-derive orientation while on the title screen: rotating the
+## device flips it... the next run picks up the new orientation instead" —
+## a live rotation mid-run would teleport the arena under the player, so
+## this only actually re-derives while at the menu.
+func _on_viewport_resized() -> void:
+	if camera == null or state != State.MENU:
+		return   # a resize before setup finishes, or mid-run — ignore it
+	if _detect_landscape() == landscape_mode:
+		return
+	_apply_orientation()
+	half_x = HALF_X
+	half_z = HALF_Z
+	waves.half_x = half_x
+	waves.half_z = half_z
+	_resize_arena()
+
 func _ready() -> void:
+	_apply_orientation()
+	half_x = HALF_X
+	half_z = HALF_Z
+	get_viewport().size_changed.connect(_on_viewport_resized)
 	_setup_world()
 	_setup_camera()
 
@@ -360,17 +428,18 @@ func _add_arena_edge() -> void:
 		_rails.append(mi)
 
 func _setup_camera() -> void:
-	# The source's landscape camera, verbatim (main.js ARENA_PRESETS.landscape):
-	# camRest [0, 20.5, 13.5], camLook [0, 0, 2.5], PerspectiveCamera fov 60.
-	# Looking slightly PAST the centre (+2.5 z) is what tips the far half of
-	# the arena up into the frame and gives the browser build its wide, shallow
-	# read. The earlier derived framing was a reasonable guess and looked
-	# nothing like the game.
+	# The source's camera, verbatim per orientation (main.js ARENA_PRESETS):
+	# landscape camRest [0, 20.5, 13.5] / camLook [0, 0, 2.5]; portrait
+	# camRest [0, 27, 21] / camLook [0, 0, -3]. PerspectiveCamera fov 60 in
+	# both. Looking slightly PAST the centre is what tips the far half of the
+	# arena up into the frame and gives the browser build its shallow read —
+	# `_apply_orientation()` (called before this, in _ready()) already picked
+	# which pair applies.
 	camera = Camera3D.new()
 	camera.fov = 60.0
-	camera.position = Vector3(0.0, 20.5, 13.5)
+	camera.position = _cam_rest_base
 	add_child(camera)
-	camera.look_at(Vector3(0.0, 0.0, 2.5), Vector3.UP)
+	camera.look_at(_cam_look_base, Vector3.UP)
 	camera.current = true
 	_cam_rest = camera.position
 
@@ -1378,11 +1447,15 @@ func _resize_arena() -> void:
 
 	# Pull the camera in with the room. A CLOSE QUARTERS level in the full-size
 	# frame is a small board adrift in black — the point of the rule is that the
-	# walls are CLOSE, and that only reads if they fill the screen.
+	# walls are CLOSE, and that only reads if they fill the screen. Scaled off
+	# whichever orientation's own base camera is active, not a landscape
+	# constant — `k` is 1 outside CLOSE QUARTERS, so this is a no-op then.
+	if camera == null:
+		return   # called by _on_viewport_resized() before _setup_camera() runs
 	var k := maxf(half_x / HALF_X, half_z / HALF_Z)
-	_cam_rest = Vector3(0.0, 20.5 * k, 13.5 * k)
+	_cam_rest = _cam_rest_base * k
 	camera.position = _cam_rest
-	camera.look_at(Vector3(0.0, 0.0, 2.5 * k), Vector3.UP)
+	camera.look_at(_cam_look_base * k, Vector3.UP)
 
 ## The buzzer. Grades the score against the level's measured thresholds,
 ## records the attempt (best-only — a level's record is its high-water mark,
@@ -1738,7 +1811,7 @@ func _update_shake(delta: float) -> void:
 ## Where the camera aims, scaled with the room so a shrunken arena stays
 ## centred in frame.
 func _cam_look() -> Vector3:
-	return Vector3(0.0, 0.0, 2.5 * maxf(half_x / HALF_X, half_z / HALF_Z))
+	return _cam_look_base * maxf(half_x / HALF_X, half_z / HALF_Z)
 
 func add_shake(amount: float) -> void:
 	_trauma = minf(1.0, _trauma + amount)

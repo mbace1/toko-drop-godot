@@ -7,6 +7,40 @@ target is `PORT_BRIEF.md`.
 
 ## Ported
 
+**Portrait/landscape dual arena** (`scripts/main.gd`, main.js
+`ARENA_PRESETS`) — found 2026-08-26 by a real phone, not a capture: this
+port had ONLY ever ported the browser's LANDSCAPE preset (halfX 19, halfZ
+11) and treated it as THE arena. main.js actually swaps between that and a
+PORTRAIT preset (halfX 11, halfZ 18 — a tall room, not the wide one
+scaled down) off the real device aspect (`landscapeMode = innerWidth >
+innerHeight`), each with its own camera rest position and look-at target,
+and re-derives on resize/rotation while at the title screen. Opening this
+port on an actual portrait phone got the landscape room, the landscape
+camera, and a landscape-sized HUD regardless — a sideways level on a
+vertical screen, everything undersized, menus reading wrong. `main.gd` now
+carries both presets (`HALF_X_LANDSCAPE`/`HALF_X_PORTRAIT` etc.,
+`CAM_REST_LANDSCAPE`/`CAM_REST_PORTRAIT`), picks one at `_ready()` via
+`_detect_landscape()` (viewport width vs height), and re-picks on resize
+while `state == State.MENU` (never mid-run, which would teleport the arena
+under the player — same reason main.js gates it the same way). The
+project's `window/handheld/orientation` was forcing `"landscape"` via the
+Screen Orientation API — a lock that only actually works in fullscreen
+mobile browsers, so in a normal tab it was likely a silent no-op fighting
+nothing, while the game underneath had no portrait math to fall back on
+regardless. Changed to `"sensor"` so the real orientation reaches the game,
+which now knows what to do with either one.
+
+**Not yet independently confirmed**: the same report flagged on-screen touch
+sticks not appearing and dash not firing, and a visually small/misplaced
+HUD, when actually played in portrait on a phone. The touch stick / dash
+logic (`input_manager.gd`) already reads the live viewport size rather than
+a hardcoded landscape one, so the orientation-lock removal above may
+resolve it as a side effect (a fought/failed orientation lock is a
+plausible cause of scrambled touch coordinates too) — but this hasn't been
+re-tested on device yet, and this port still has no working screenshot
+capture in the dev environment to check visually either. Flagging rather
+than claiming fixed.
+
 **Core loop**
 - Twin-stick movement + mouse/gamepad aim, dash with i-frames, fire-rate
   gated shooting — `scripts/player.gd`, numbers from `js/player.js`

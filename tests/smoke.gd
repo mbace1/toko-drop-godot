@@ -69,6 +69,7 @@ func _process(_delta: float) -> bool:
 	_test_arena_objectives_wiring()
 	_test_score_mult_wiring()
 	_test_gates_wiring()
+	_test_orientation_wiring()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1626,6 +1627,41 @@ func _test_kill_scoring() -> void:
 ## CLEANSE FOAM's wiring into main.gd: per-wave spawn (offset from vault's/
 ## escort's beats), and a full charge clearing every ENEMY bullet while
 ## leaving the player's own alone.
+## The portrait/landscape dual-arena system (main.js ARENA_PRESETS), added
+## 2026-08-26 after a real phone in portrait showed a landscape level, a
+## landscape camera, and a landscape HUD regardless of the actual screen.
+func _test_orientation_wiring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+
+	_check(is_equal_approx(main.HALF_X_PORTRAIT, 11.0) and is_equal_approx(main.HALF_Z_PORTRAIT, 18.0),
+		"portrait preset matches main.js ARENA_PRESETS (halfX 11, halfZ 18)")
+	_check(is_equal_approx(main.HALF_X_LANDSCAPE, 19.0) and is_equal_approx(main.HALF_Z_LANDSCAPE, 11.0),
+		"landscape preset matches main.js (halfX 19, halfZ 11)")
+	_check(main.CAM_REST_PORTRAIT == Vector3(0.0, 27.0, 21.0), "portrait camera rest matches main.js")
+	_check(main.CAM_LOOK_PORTRAIT == Vector3(0.0, 0.0, -3.0), "portrait camera look-at matches main.js")
+	_check(main.CAM_REST_LANDSCAPE == Vector3(0.0, 20.5, 13.5), "landscape camera rest matches main.js")
+	_check(main.CAM_LOOK_LANDSCAPE == Vector3(0.0, 0.0, 2.5), "landscape camera look-at matches main.js")
+
+	main._set_orientation(false)
+	_check(not main.landscape_mode, "portrait mode sets landscape_mode false")
+	_check(is_equal_approx(main.HALF_X, 11.0) and is_equal_approx(main.HALF_Z, 18.0),
+		"and HALF_X/HALF_Z switch to the portrait numbers")
+	_check(main._cam_rest_base == main.CAM_REST_PORTRAIT, "and the camera base switches too")
+
+	main._set_orientation(true)
+	_check(main.landscape_mode, "landscape mode sets landscape_mode true")
+	_check(is_equal_approx(main.HALF_X, 19.0) and is_equal_approx(main.HALF_Z, 11.0),
+		"and HALF_X/HALF_Z switch back")
+	_check(main._cam_rest_base == main.CAM_REST_LANDSCAPE, "and the camera base switches back")
+
+	# A headless/test viewport reports a square (100x100) size — the tie
+	# has to resolve to landscape, or the whole rest of this test suite
+	# (half_x=19 assumed almost everywhere) breaks under it.
+	_check(main._detect_landscape(), "a square (tied) viewport defaults to landscape")
+
+	main.queue_free()
+
 func _test_foam_wiring() -> void:
 	var main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(main)

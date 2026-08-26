@@ -18,11 +18,17 @@ config/icon="res://icon.svg"
 
 [display]
 
+; main.gd now ports the browser's own dual ARENA_PRESETS (landscape AND
+; portrait, main.js's `landscapeMode = innerWidth > innerHeight`) and picks
+; between them at runtime — so this must not lock the device to one
+; orientation and fight what the game itself already adapts to. A phone
+; held in portrait used to get a landscape-shaped level, camera and HUD
+; regardless (found 2026-08-26); "sensor" lets the real orientation through.
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation="landscape"
+window/handheld/orientation="sensor"
 
 [input]
 
