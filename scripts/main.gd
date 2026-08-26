@@ -73,7 +73,19 @@ enum State { MENU, PLAYING, PAUSED, DEAD }
 ## one place when they are decided.
 enum Mode { CLASSIC, ROGUELIKE, RUSH, CHALLENGE, DAILY }
 
+## CLASSIC is listed FIRST and is always "ready" — `_show_menu()` parks the
+## cursor on the first ready row, so this is what a player who just taps
+## FIRE without navigating actually launches into. Before this row existed
+## that fell through to RUSH (the next ready row after the not-yet-built
+## ROGUELIKE), which is a real bug a real phone found 2026-08-27: tapping
+## through the menu launched Rush — wrong weapon (the shotgun), wrong mode
+## — for anyone who did what the "tap, or press FIRE / DASH, to start" line
+## on the menu itself tells them to do. main.js's own title screen defaults
+## to classic/arcade the same way (a big "tap to start", Roguelike a small
+## OFF-by-default toggle beneath it) — this restores that.
 const MODE_ROWS := [
+	{"mode": Mode.CLASSIC, "label": "CLASSIC MODE",
+	 "note": "the original run — dash, guns, a climbing streak", "ready": true},
 	{"mode": Mode.ROGUELIKE, "label": "ROGUELIKE MODE",
 	 "note": "no upgrades — pure arcade survival", "ready": false},
 	{"mode": Mode.RUSH, "label": "RUSH MODE",
@@ -191,6 +203,7 @@ var _hp_label: Label
 var _wave_label: Label
 var _score_label: Label
 var _msg_label: Label
+var _title_label: Label
 
 ## main.js's own check, ported verbatim: the ACTUAL device/window aspect,
 ## not a stored preference — a game that opens portrait and gets rotated
@@ -537,6 +550,26 @@ func _setup_hud() -> void:
 	_death_wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(_death_wash)
 
+	# main.js's title screen has real visual HIERARCHY — a huge glowing
+	# hand-drawn "TOKO DROP" logo, then much smaller plain text for
+	# everything else. This port's menu was one Label at one font size
+	# throughout, with no size/colour contrast at all — a real gap a real
+	# phone's "still hard to read" report pointed at (2026-08-27). A
+	# separate, big, warm-gold title label is the cheapest way to actually
+	# emulate that hierarchy without rebuilding the menu as BBCode/rich
+	# text (a bigger, riskier change to a control several other screens —
+	# pause, death, level-end — already depend on behaving exactly as a
+	# plain Label).
+	_title_label = _make_label(56)
+	_title_label.text = "TOKO DROP"
+	_title_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.267))
+	_title_label.set_anchors_preset(Control.PRESET_CENTER)
+	_title_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_title_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.hide()
+	hud.add_child(_title_label)
+
 	_msg_label = _make_label(28)
 	_msg_label.set_anchors_preset(Control.PRESET_CENTER)
 	_msg_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -696,6 +729,7 @@ func _process(delta: float) -> void:
 	if input_mgr.pause_pressed():
 		if state == State.PLAYING:
 			state = State.PAUSED
+			_title_label.hide()
 			_msg_label.text = "PAUSED\n\npress PAUSE to resume"
 			_msg_label.show()
 		elif state == State.PAUSED:
@@ -721,19 +755,23 @@ func _process(delta: float) -> void:
 					if Challenges.unlocked(challenge_i, save):
 						break
 				_msg_label.text = _menu_text()
+				_position_title()
 				return
 			if MODE_ROWS[_menu_row]["mode"] == Mode.RUSH \
 					and (Input.is_action_just_pressed("move_left") \
 					or Input.is_action_just_pressed("move_right")):
 				rush.cycle_ability(1 if Input.is_action_just_pressed("move_right") else -1)
 				_msg_label.text = _menu_text()
+				_position_title()
 				return
 			if Input.is_action_just_pressed("move_down"):
 				_menu_row = mini(_menu_row + 1, MODE_ROWS.size() - 1)
 				_msg_label.text = _menu_text()
+				_position_title()
 			elif Input.is_action_just_pressed("move_up"):
 				_menu_row = maxi(_menu_row - 1, 0)
 				_msg_label.text = _menu_text()
+				_position_title()
 			elif input_mgr.dash_pressed() or Input.is_action_just_pressed("fire") \
 					or input_mgr.left.active or input_mgr.right.active:
 				var row: Dictionary = MODE_ROWS[_menu_row]
@@ -1427,6 +1465,7 @@ func _start_game() -> void:
 	graze_count = 0
 	_weapon_name = "SINGLE"
 	waves.start_wave()
+	_title_label.hide()
 	_msg_label.hide()
 
 ## Capture-only: fast-forward the director so tools/capture.gd can photograph
@@ -1531,6 +1570,7 @@ func _finish_challenge() -> void:
 		out.append("tier C or better opens the next level")
 	out.append("")
 	out.append("tap, or press FIRE / DASH, to try again")
+	_title_label.hide()
 	_msg_label.text = "
 ".join(out)
 	_msg_label.show()
@@ -1680,10 +1720,25 @@ func _on_player_dead() -> void:
 	out.append("SEED %s" % waves.seed_text())
 	out.append("")
 	out.append("tap, or press FIRE / DASH, to retry")
+	_title_label.hide()
 	_msg_label.text = "
 ".join(out)
 	_msg_label.show()
 	_open_feedback()
+
+## _title_label and _msg_label share ONE anchor point (hud's own centre)
+## the same way main.js's #overlay is a SINGLE centered div (index.html:
+## `top:50%; left:50%; transform:translate(-50%,-50%)`) — the title and the
+## menu text move together as one block. Two independent Controls can't
+## share a container without a bigger restructure, so this stacks them by
+## reading each other's actual (post-text) height every time the menu text
+## changes, rather than a fixed pixel guess that only matched one row count.
+func _position_title() -> void:
+	if _title_label == null or not _title_label.visible:
+		return
+	var msg_h := _msg_label.get_minimum_size().y
+	var title_h := _title_label.get_minimum_size().y
+	_title_label.position.y = -(msg_h * 0.5 + title_h * 0.5 + 24.0)
 
 func _show_menu() -> void:
 	state = State.MENU
@@ -1693,7 +1748,9 @@ func _show_menu() -> void:
 		if MODE_ROWS[r]["ready"]:
 			_menu_row = r
 			break
+	_title_label.show()
 	_msg_label.text = _menu_text()
+	_position_title()
 	_msg_label.show()
 	# NOT _open_feedback() — this is the fresh title screen, not a death
 	# recap, and _open_feedback() asks a question keyed off whatever run
@@ -1708,7 +1765,13 @@ func _show_menu() -> void:
 ## pass. The selected mode row is marked with a caret, the same way the
 ## browser hub marks its selection.
 func _menu_text() -> String:
-	var out := ["TOKO DROP", "", "twin-stick swarm survival", ""]
+	var out := ["twin-stick swarm survival", ""]
+	save.mode = _menu_mode_key()
+	if save.hi_score > 0:
+		out.append("best %d" % save.hi_score)
+		out.append("")
+	out.append("tap, or press FIRE / DASH, to start")
+	out.append("")
 	for i in MODE_ROWS.size():
 		var row: Dictionary = MODE_ROWS[i]
 		var caret := ">" if i == _menu_row else " "
@@ -1751,11 +1814,6 @@ func _menu_text() -> String:
 	out.append("keys \u2014 WASD move, hold LMB to aim and fire, SPACE dash")
 	out.append("pad \u2014 sticks move and aim, A dash, Start pause")
 	out.append("")
-	save.mode = _menu_mode_key()
-	if save.hi_score > 0:
-		out.append("best %d" % save.hi_score)
-		out.append("")
-	out.append("tap, or press FIRE / DASH, to start")
 	return "\n".join(out)
 
 ## Which save bucket the CURRENT run belongs to, and which the menu should

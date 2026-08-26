@@ -73,6 +73,40 @@ Fixed with three separate, verified pieces:
   unconditionally; that call only belongs on an actual death/level-end
   recap (the other two call sites), so it's removed from the menu path.
 
+**Menu launched RUSH by default, and the title screen had no visual
+hierarchy** — a real phone re-check after the HUD/touch fixes above still
+called menus "hard to read", and separately asked whether tapping to start
+was landing in Rush Mode (it explained getting a shotgun on what should have
+been a first CLASSIC run). Both true, both in `main.gd`, both fixed
+2026-08-27:
+- `MODE_ROWS` (the menu's row table) never had a `Mode.CLASSIC` entry — it
+  started at ROGUELIKE (`"ready": false`) then RUSH. `_show_menu()` parks the
+  caret on the first `"ready": true` row, which was RUSH, so a tap/dash
+  before ever touching the d-pad launched Rush (shotgun ability, boost/heat
+  HUD) instead of the plain original run. Added an explicit, always-ready
+  `Mode.CLASSIC` row first, matching main.js's own default mode.
+- The title screen was one `Label` at one font size/colour throughout — no
+  equivalent of main.js's huge glowing `logo.png` wordmark over small plain
+  copy (`showTitle()`, `js/main.js`). Added a second, big (56px), warm-gold
+  `_title_label` ("TOKO DROP") shown only on the menu (hidden on
+  pause/death/challenge-finish, which never carried it). Getting it to sit
+  where it should have taken a second pass: anchoring it to a fixed pixel
+  offset from the top put it in a completely different part of the screen
+  from the (vertically-centred) menu body on a portrait phone, because the
+  message `Label` centres against the CanvasLayer's real (very tall, post-
+  `"expand"`-stretch) viewport while a fixed offset does not track that.
+  main.js's own `#overlay` is ONE div, `top:50%; transform:translate(-50%,
+  -50%)` — title and body move together as a single centred block. Ported
+  that behaviour with two independent Controls by anchoring both to the same
+  centre point and adding `_position_title()`, which reads
+  `_msg_label.get_minimum_size().y` (recomputed on every menu redraw — row
+  selection changes how many lines are showing) to place the title directly
+  above the body with a fixed gap, rather than a screen-space guess.
+  `_menu_text()` also dropped its own now-redundant `"TOKO DROP", ""` header
+  line and moved "tap, or press FIRE / DASH, to start" up to right after the
+  subtitle, ahead of the mode-row list — main.js's own order (logo, subtitle,
+  best score, tap-to-start, mode toggles, controls).
+
 **Core loop**
 - Twin-stick movement + mouse/gamepad aim, dash with i-frames, fire-rate
   gated shooting — `scripts/player.gd`, numbers from `js/player.js`
