@@ -31,6 +31,7 @@ func _init() -> void:
 	_test_cargo(root)
 	_test_vault_crate(root)
 	_test_escort_bot(root)
+	_test_powerup_values(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -64,6 +65,7 @@ func _process(_delta: float) -> bool:
 	_test_magna_wiring()
 	_test_cargo_wiring()
 	_test_arena_objectives_wiring()
+	_test_score_mult_wiring()
 	_test_adaptive_quality()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
@@ -1417,25 +1419,26 @@ func _test_cargo_wiring() -> void:
 			break
 	_check(pod_dropped, "so the guaranteed all-clear pod actually dropped")
 
-	# _drop_cargo_loot() always pays something, pod or score, never nothing —
-	# checked directly against a FRESH (not all-killed) convoy so the roll
-	# branch runs rather than the guaranteed-pod one.
+	# _drop_cargo_loot() always pays something — a weapon pod or a value
+	# pickup (score/scoremult) — never nothing. Checked against a FRESH (not
+	# all-killed) convoy so the roll branch runs rather than the
+	# guaranteed-pod one.
 	main.cargo.spawn(main.waves.rng)
 	main.pods.clear()
 	var any_pod := false
-	var any_score := false
+	var any_value := false
 	for i in 40:
-		var before_score: int = main.score
 		main._drop_cargo_loot(0.0, 0.0)
-		for l in main.pods._life:
-			if l > 0.0:
+		for j in main.pods.POOL_SIZE:
+			if main.pods._life[j] <= 0.0:
+				continue
+			if main.pods.PODS.has(main.pods._id[j]):
 				any_pod = true
-				main.pods.clear()
-				break
-		if main.score > before_score:
-			any_score = true
-	_check(any_pod, "the loot roll drops a pod sometimes")
-	_check(any_score, "and pays an instant score bonus sometimes (main.js's Powerup class isn't ported)")
+			else:
+				any_value = true
+		main.pods.clear()
+	_check(any_pod, "the loot roll drops a weapon pod sometimes")
+	_check(any_value, "and a score/scoremult value pickup sometimes")
 
 	main.queue_free()
 
@@ -1478,13 +1481,23 @@ func _test_arena_objectives_wiring() -> void:
 		main.bullets.spawn_dir(main.vault.position.x, main.vault.position.z, 1.0, 0.0, true)
 		main._collide_vault()
 	_check(main.vault == null, "cracking the vault clears it")
-	_check(main.score > 0, "and pays out score")
 	var pod_dropped := false
-	for l in main.pods._life:
-		if l > 0.0:
+	var cash_dropped := false
+	for j in main.pods.POOL_SIZE:
+		if main.pods._life[j] <= 0.0:
+			continue
+		if main.pods.PODS.has(main.pods._id[j]):
 			pod_dropped = true
-			break
+		elif main.pods._id[j] == "score":
+			cash_dropped = true
+			# _crack_vault() reads WaveDirector's OWN `wave` counter, not the
+			# `n` this test called _on_wave_started(n) with directly (that is
+			# just a signal handler — it never sets waves.wave itself).
+			var want: int = 800 + main.waves.wave * 60
+			_check(main.pods._value[j] == want,
+				"the cash drop carries main.js's value (800 + wave*60 = %d)" % want)
 	_check(pod_dropped, "and drops the guaranteed pod")
+	_check(cash_dropped, "plus a walk-over cash pickup rather than instant score")
 
 	# Escort, on a different scheduled wave.
 	main._clear_arena_objectives()
@@ -1520,6 +1533,31 @@ func _test_arena_objectives_wiring() -> void:
 	yc.init()
 	main.waves.enemies.append(yc)
 	_check(main._collide_escort(), "a melee-type body touching the escort kills it")
+
+	main.queue_free()
+
+## score_mult_t (main.js scoreMultT): the "scoremult" pickup's 10s x2 window,
+## and that every existing score site (_add_score()) actually respects it.
+func _test_score_mult_wiring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.score = 0
+	main.score_mult_t = 0.0
+
+	main._on_value_taken("score", 300, Color.WHITE)
+	_check(main.score == 300, "a 'score' pickup pays its value once")
+
+	main._on_value_taken("scoremult", 0, Color.WHITE)
+	_check(main.score_mult_t > 0.0, "a 'scoremult' pickup starts the timer")
+
+	main.score = 0
+	main._on_value_taken("score", 100, Color.WHITE)
+	_check(main.score == 200, "and every score award doubles while it's running")
+
+	main._add_score(50)
+	_check(main.score == 300, "including the shared _add_score() path (graze/kills/wave-clear)")
 
 	main.queue_free()
 
@@ -1621,6 +1659,37 @@ func _test_escort_bot(root: Node3D) -> void:
 	_check(e2.hp == 1, "a hit costs HP")
 	e2.hit()
 	_check(e2.dead(), "the second hit kills it (config hp:2)")
+
+## PowerupPool's non-weapon value pickups (main.js's Powerup class, scoped
+## to the two CLASSIC-mode drops this port's own systems roll for).
+func _test_powerup_values(root: Node3D) -> void:
+	var pp := PowerupPool.new()
+	root.add_child(pp)
+	pp.build()
+
+	# 1-element Arrays, not bare locals: GDScript closures capture outer
+	# locals BY VALUE, so a lambda assigning to a plain `var` would never be
+	# seen out here (design note in this repo's CLAUDE.md).
+	var got := ["", 0]
+	pp.value_taken.connect(func(k, v, _c): got[0] = k; got[1] = v)
+
+	pp.drop(2.0, -1.0, "score", 777)
+	pp.update(0.016, Vector3(2.0, 0.0, -1.0), 0.0)
+	_check(got[0] == "score", "picking up a 'score' drop emits value_taken with that kind")
+	_check(got[1] == 777, "and carries the value through")
+
+	got[0] = ""
+	pp.drop(5.0, 5.0, "scoremult")
+	pp.update(0.016, Vector3(5.0, 0.0, 5.0), 0.0)
+	_check(got[0] == "scoremult", "and 'scoremult' drops the same way")
+
+	# Weapon pods are unaffected — they still go through the original `taken`
+	# signal, not the new one.
+	var got_mode := [""]
+	pp.taken.connect(func(m, _c): got_mode[0] = m)
+	pp.drop(-3.0, 0.0, "S")
+	pp.update(0.016, Vector3(-3.0, 0.0, 0.0), 0.0)
+	_check(got_mode[0] == "SPREAD", "weapon pods are unaffected by the value-pickup path")
 
 ## The campaign: grading, the tier-C gate, and ability unlocks.
 func _test_challenges(root: Node3D) -> void:

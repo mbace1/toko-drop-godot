@@ -38,12 +38,29 @@ const LV2 := ["S2", "B2", "L2", "R2"]
 const LV2_FROM_WAVE := 4
 const LV2_CHANCE := 0.28
 
+## Non-weapon walk-over pickups (main.js `Powerup`/`NON_WEAPON_COLORS`).
+## That class covers 8 types; `hp`/`invincible`/`firerate`/`item`/`key`/
+## `potion` are either KAIKKI-mode shaped pickups (a key that looks like a
+## key, a flask that looks like a flask — a different mode's own art, not a
+## gap here) or player buffs this port has no slot for yet. Only the two
+## CLASSIC-mode value drops this port's OWN systems (the cargo convoy,
+## VaultCrate) actually roll for are ported: an instant score nugget, and a
+## timed x2 SCORE MULTIPLIER (`main.gd`'s `score_mult_t`).
+const VALUES := {
+	"score":     {"color": Color(0.533, 1.0, 0.533)},
+	"scoremult": {"color": Color(1.0, 0.867, 0.2)},
+}
+
 signal taken(mode: String, color: Color)
+## `value` only means something for VALUES ids — 0 for "scoremult", which
+## pays a fixed duration rather than an amount.
+signal value_taken(kind: String, value: int, color: Color)
 
 var _x := PackedFloat32Array()
 var _z := PackedFloat32Array()
 var _life := PackedFloat32Array()
 var _id: Array[String] = []
+var _value := PackedInt32Array()
 var _mm: MultiMeshInstance3D
 var _built := false
 
@@ -56,6 +73,7 @@ func build() -> void:
 	_built = true
 	_x.resize(POOL_SIZE); _z.resize(POOL_SIZE); _life.resize(POOL_SIZE)
 	_id.resize(POOL_SIZE)
+	_value.resize(POOL_SIZE)
 
 	# An octahedron reads as a PICKUP at a glance: nothing else in the arena
 	# is a faceted spinning solid, so it never gets lost among the bodies.
@@ -92,13 +110,14 @@ func roll(wave: int, rng: RandomNumberGenerator) -> String:
 		return LV2[rng.randi() % LV2.size()]
 	return LV1[rng.randi() % LV1.size()]
 
-func drop(x: float, z: float, id: String) -> void:
+func drop(x: float, z: float, id: String, value: int = 0) -> void:
 	for i in POOL_SIZE:
 		if _life[i] > 0.0:
 			continue
 		_x[i] = x; _z[i] = z
 		_life[i] = LIFE
 		_id[i] = id
+		_value[i] = value
 		return
 	# Full: the oldest one goes, rather than the drop being silently lost.
 	var worst := 0
@@ -110,6 +129,7 @@ func drop(x: float, z: float, id: String) -> void:
 	_x[worst] = x; _z[worst] = z
 	_life[worst] = LIFE
 	_id[worst] = id
+	_value[worst] = value
 
 ## Steps the pods and collects any the player is standing on.
 func update(delta: float, player_pos: Vector3, t: float) -> void:
@@ -125,13 +145,18 @@ func update(delta: float, player_pos: Vector3, t: float) -> void:
 
 		var dx := player_pos.x - _x[i]
 		var dz := player_pos.z - _z[i]
+		var is_pod: bool = PODS.has(_id[i])
 		if dx * dx + dz * dz < PICKUP_R * PICKUP_R:
-			var def: Dictionary = PODS[_id[i]]
 			_life[i] = 0.0
-			taken.emit(String(def["mode"]), def["color"])
+			if is_pod:
+				var def: Dictionary = PODS[_id[i]]
+				taken.emit(String(def["mode"]), def["color"])
+			else:
+				var vdef: Dictionary = VALUES[_id[i]]
+				value_taken.emit(_id[i], _value[i], vdef["color"])
 			continue
 
-		var def2: Dictionary = PODS[_id[i]]
+		var def2: Dictionary = PODS[_id[i]] if is_pod else VALUES[_id[i]]
 		var y := 0.55 + sin(t * 3.0 + float(i)) * BOB
 		var b := Basis(Vector3.UP, t * 1.8 + float(i))
 		# Blink out over the last two seconds, so "it is about to go" is a

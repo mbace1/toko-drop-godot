@@ -95,6 +95,11 @@ var _weapon_name := "SINGLE"
 ## boost) pay nothing, which is why this only runs where invincible already
 ## gates the loop below.
 var graze_count := 0
+## main.js scoreMultT: a 10s x2 SCORE MULTIPLIER, from the "scoremult"
+## pickup (cargo convoy / VaultCrate loot). Applies uniformly via
+## `_add_score()` rather than being threaded through every individual
+## `score +=` site by hand.
+var score_mult_t := 0.0
 ## DAILY RUN (main.js v130/v179). "" off-daily/Classic; else "glass" / "surge"
 ## / "rich" for today's twist, from a 4-day rotation everyone worldwide is on
 ## at once (Daily.mod_for, pure date math, no server). Kept here (not just on
@@ -174,6 +179,7 @@ func _ready() -> void:
 	add_child(pods)
 	pods.build()
 	pods.taken.connect(_on_pod_taken)
+	pods.value_taken.connect(_on_value_taken)
 
 	cargo = CargoCluster.new()
 	add_child(cargo)
@@ -647,6 +653,8 @@ func _process_playing(delta: float) -> void:
 	poison.update(delta)
 	debris.update(delta)
 	pods.update(delta, player.position, _run_t)
+	if score_mult_t > 0.0:
+		score_mult_t = maxf(0.0, score_mult_t - delta)
 	if _base_mode():
 		_update_cargo(delta)
 		_update_arena_objectives(delta)
@@ -703,7 +711,7 @@ func _collide_player_bullets() -> void:
 			var was_max := e.max_hp
 			if e.take_hit(1):
 				var gain := 100 * was_max
-				score += rush.award(gain) if _rush_verbs() else gain
+				_add_score(rush.award(gain) if _rush_verbs() else gain)
 				streak += 1
 				# main.js drops a weapon pod from a kill now and then. Bounded, so
 				# a good wave does not carpet the floor with shopping.
@@ -759,14 +767,14 @@ func _collide_enemy_bullets() -> void:
 			return
 		# GRAZE (main.js v125): a bullet skimming past pays score once. No
 		# break here — the browser keeps checking every remaining bullet for
-		# a graze each frame, and only a hit ends the loop early.
-		# scoreMultT/grazeMult (browser powerups) aren't ported yet, so this
-		# is the base rate; documented in PORT_STATUS.md as a divergence.
+		# a graze each frame, and only a hit ends the loop early. Respects
+		# scoreMultT via _add_score(); grazeMult (a separate "GRAZE" powerup
+		# card, x3) isn't ported — no drop source rolls for it in this port.
 		var graze_r := hit_r + 0.55
 		if not b.grazed and d2 < graze_r * graze_r:
 			b.grazed = true
 			graze_count += 1
-			score += 25
+			_add_score(25)
 			audio.play_varied("graze")
 			debris.burst(b.x, b.z, 1, Color(1.0, 1.0, 1.0), 0.06, 3.0, 2.5)
 
@@ -786,7 +794,7 @@ func _collide_contact() -> void:
 				var bmax := e.max_hp
 				if e.take_hit(99):
 					rush.add_boost_kill()
-					score += rush.award(100 * bmax)
+					_add_score(rush.award(100 * bmax))
 					audio.play_varied("kill")
 					debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.30)
 					add_shake(0.16)
@@ -889,12 +897,10 @@ func _crack_vault() -> void:
 	audio.play("wave")
 	pods.drop(vx, vz, pods.roll(waves.wave, waves.rng))
 	# main.js's cash cache (800 + wave*60) plus a 40% chance of a second
-	# "scoremult" bonus — both paid as instant score, the same divergence
-	# _drop_cargo_loot() documents (main.js's Powerup class isn't ported).
-	var cash := 800 + waves.wave * 60
-	score += cash
+	# scoremult bonus, at the same offsets from the crate it uses.
+	pods.drop(vx + 1.1, vz, "score", 800 + waves.wave * 60)
 	if waves.rng.randf() < 0.4:
-		score += cash
+		pods.drop(vx - 1.1, vz, "scoremult")
 	_show_toast("VAULT CRACKED!")
 	vault.queue_free()
 	vault = null
@@ -990,11 +996,8 @@ func _collide_cargo_bullets() -> void:
 			break
 
 ## main.js: clearing every moth before any escape guarantees a weapon pod;
-## otherwise a roll between a pod / an instant score nugget / (classic split
-## 55/25/20). This port has no score/scoremult walk-over PICKUP entities —
-## main.js's separate `Powerup` class, distinct from the weapon-pod system
-## this port DOES have via PowerupPool — so both non-pod outcomes pay an
-## instant score bonus instead. Documented divergence, not a silent guess.
+## otherwise a roll between a pod / an instant score nugget / a SCORE
+## MULTIPLIER (classic split 55/25/20).
 func _drop_cargo_loot(x: float, z: float) -> void:
 	if cargo.all_killed():
 		pods.drop(x, z, pods.roll(waves.wave, waves.rng))
@@ -1003,11 +1006,9 @@ func _drop_cargo_loot(x: float, z: float) -> void:
 	if roll < 0.55:
 		pods.drop(x, z, pods.roll(waves.wave, waves.rng))
 	elif roll < 0.80:
-		score += 250 + waves.wave * 25   # main.js's "score" nugget value
+		pods.drop(x, z, "score", 250 + waves.wave * 25)
 	else:
-		# Stands in for main.js's 10s x2 SCORE MULTIPLIER buff (scoreMultT),
-		# which this port has no equivalent system for.
-		score += 2 * (250 + waves.wave * 25)
+		pods.drop(x, z, "scoremult")
 
 ## MAGNA pull (main.js v144, MAGNA_REACH 11 / MAGNA_PULL 1.1 per magna,
 ## combined cap 2.0/s): every living Magna in reach drags the player toward
@@ -1177,6 +1178,7 @@ func _start_game() -> void:
 	_cargo_spawn_at = -1.0
 	_cargo_wave_t = 0.0
 	_clear_arena_objectives()
+	score_mult_t = 0.0
 	streak = 0
 	graze_count = 0
 	_weapon_name = "SINGLE"
@@ -1356,7 +1358,7 @@ func _update_toast(delta: float) -> void:
 
 func _on_wave_cleared(n: int) -> void:
 	_wave_peak = 0
-	score += 50 * n
+	_add_score(50 * n)
 	audio.play("wave")
 	waves.start_wave()
 
@@ -1504,6 +1506,21 @@ func _on_pod_taken(mode_name: String, col: Color) -> void:
 	_weapon_name = mode_name
 	player.mat.set_shader_parameter("rim_color", col)
 	audio.play("wave")
+
+## main.js's non-weapon pickups: "score" pays an instant nugget, "scoremult"
+## starts (or refreshes — main.js overwrites, not adds, so grabbing a second
+## one is a top-up, not a stack) a 10s x2 window.
+func _add_score(amount: int) -> void:
+	score += amount * (2 if score_mult_t > 0.0 else 1)
+
+func _on_value_taken(kind: String, value: int, _col: Color) -> void:
+	match kind:
+		"score":
+			_add_score(value)
+			audio.play("wave")
+		"scoremult":
+			score_mult_t = 10.0
+			audio.play("wave")
 
 func _cur_mode_key() -> String:
 	return SaveService.MODE_RUSH if mode == Mode.RUSH else SaveService.MODE_NORMAL

@@ -250,14 +250,10 @@ Challenge already suppress pod drops outright and a convoy's whole point is
 dropping them). They never attack; the event is a bonus window. Shoot every
 moth before any of them crosses the far edge and it drops a GUARANTEED
 weapon pod; leave one to escape and each kill instead rolls a smaller,
-individual payout. Spawn edge/curve/timing all draw from `WaveDirector.rng`,
-not global `randf()`, so two Daily Run players on the same date see the same
-convoy at the same time.
-**Divergence**: main.js's non-pod loot rolls a walk-over "score" or
-"scoremult" pickup — its own `Powerup` class, entirely separate from the
-weapon-pod system this port has via `PowerupPool`. That class isn't ported,
-so both non-pod outcomes pay an instant score bonus here instead of spawning
-a pickup (`main.gd`'s `_drop_cargo_loot()` says so at the point it happens).
+individual payout — a weapon pod, a "score" nugget, or a "scoremult" window
+(classic split 55/25/20). Spawn edge/curve/timing all draw from
+`WaveDirector.rng`, not global `randf()`, so two Daily Run players on the
+same date see the same convoy at the same time.
 
 **Living-arena objectives** (`scripts/vault_crate.gd`/`escort_bot.gd`,
 main.js v175) — two more per-wave bonus events, base/Classic mode only
@@ -265,9 +261,10 @@ main.js v175) — two more per-wave bonus events, base/Classic mode only
 they never stack:
 - **VaultCrate** — every 4th wave from 5 (never a boss wave), a locked
   crate with 8 HP appears at a random point. Shoot it down and it cracks:
-  a guaranteed weapon pod plus a cash bonus. Every hit before that also
-  PINGS the room — every living enemy within 9 units surges toward the
-  player for 0.7s (reusing `Enemy.surge_t`, the exact field SIREN's
+  a guaranteed weapon pod plus a cash pickup (800 + wave×60), and a 40%
+  chance of a second "scoremult" pickup beside it. Every hit before that
+  also PINGS the room — every living enemy within 9 units surges toward
+  the player for 0.7s (reusing `Enemy.surge_t`, the exact field SIREN's
   scream already drives) — so cracking it open costs something.
 - **EscortBot** — every 4th wave from 6, offset from the vault's (never a
   boss wave), a small robot enters from one side wall and crosses to the
@@ -276,9 +273,21 @@ they never stack:
   outright — protecting it is pure positioning, not a fight. Deliver it
   to the far wall and it gifts a guaranteed weapon pod.
 
-Both share the cargo convoy's divergence for non-pod payouts (VaultCrate's
-cash + 40%-chance second bonus): instant score rather than a walk-over
-pickup, since main.js's `Powerup` class isn't ported.
+**Non-weapon value pickups** (`scripts/powerup_pool.gd`'s `VALUES` table +
+`value_taken` signal, main.js's `Powerup` class) — the walk-over "score" and
+"scoremult" pickups the two systems above actually drop, closing the
+divergence both used to carry (an instant score award standing in for a
+pickup that didn't exist). Reuses `PowerupPool`'s existing pooled rendering
+rather than a second pickup system: a `score` id pays its carried value
+once, a `scoremult` id starts (main.js: *overwrites, not stacks*) a real 10s
+x2 window (`main.gd`'s `score_mult_t`), applied uniformly through a new
+`_add_score()` helper rather than threaded through every individual
+`score +=` site by hand. **Scoped down from the source's 8 pickup types**:
+`hp`/`invincible`/`firerate` are player buffs this port has no drop source
+for yet, and `item`/`key`/`potion` are KAIKKI-mode shaped pickups (a key
+that looks like a key, a flask that looks like a flask — a different mode's
+own art). Only the two this port's OWN systems actually roll for are
+ported.
 
 **Daily Run** (`scripts/daily.gd`, main.js v130/v179) — a new MODE_ROWS
 entry under Challenges. Everyone on the same UTC date plays the same seed and
