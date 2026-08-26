@@ -643,6 +643,7 @@ func _process_playing(delta: float) -> void:
 	_collide_player_bullets()
 	_collide_enemy_bullets()
 	_collide_contact()
+	_collide_bambu_lobs()
 
 	if not player.alive:
 		_on_player_dead()
@@ -783,6 +784,33 @@ func _collide_contact() -> void:
 			_note_killer(e.display_name(), Feedback.Cause.MELEE)
 			_damage_player()
 			return
+
+## BAMBU (main.js "Part 5"): a landed lob deals splash damage ONLY if the
+## player is still standing in the landing ring when it lands — the ring
+## flashed and the blob arced in visibly, so a hit here was avoidable. A
+## method of its own for the usual reason: this is a hazard, not a bullet or
+## a body touch, so neither of the two collision loops above would ever see
+## it, and a system only reachable through input is a system the gate cannot
+## see (see CLAUDE.md / PORT_STATUS.md's collision-bug postmortem).
+func _collide_bambu_lobs() -> void:
+	for e in waves.enemies:
+		if not is_instance_valid(e) or not (e is Bambu):
+			continue
+		var landed = (e as Bambu).drain_landed()
+		if landed == null:
+			continue
+		var lob: Vector2 = landed
+		debris.burst(lob.x, lob.y, 10, Color(0.867, 0.733, 0.267), 0.11, 4.0, 4.0)
+		add_shake(0.12)
+		audio.play_varied("hit")
+		if not player.alive or player.invincible:
+			continue
+		var dx := player.position.x - lob.x
+		var dz := player.position.z - lob.y
+		var rr := Bambu.RING_OUTER + Player.RADIUS
+		if dx * dx + dz * dz < rr * rr:
+			_note_killer("bambu lobber", Feedback.Cause.HAZARD)
+			_damage_player()
 
 ## Remembers the cause of the most recent hit. Whatever is stored when the
 ## last life goes is what the death screen asks about.

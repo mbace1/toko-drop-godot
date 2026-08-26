@@ -49,8 +49,9 @@ target is `PORT_BRIEF.md`.
   half of TOKO_DROP_ROADMAP.md Phase 4. `user://` stands in for localStorage;
   last 10 runs newest-first, and the death screen's "recent" line skips index 0
   because that is the run you are already reading the big number for. Nothing
-  leaves the machine — no leaderboard, no network call. The daily seed is still
-  open.
+  leaves the machine — no leaderboard, no network call. Daily Run (below)
+  ports the seed/modifier half of this; the browser's separate per-day
+  leaderboard is not.
 - **Save schema v2 — per-mode buckets.** v1 was flat and MODE-BLIND
   (`{hi_score, runs}`), so the first Rush run would have overwritten the Normal
   best with a number from a different game. It also had no version field, so
@@ -198,6 +199,20 @@ target is `PORT_BRIEF.md`.
   does. **Divergence, documented rather than guessed**: the browser's
   `grazeMult`/`scoreMultT` are both powerup-card effects that are not ported
   yet, so this pays the base rate only (×1, not the card's ×3/×2).
+
+**BAMBU** (`scripts/bambu.gd`, enemy.js "Part 5" + TUNING.bambu) — a
+stationary segmented lobber, the last of the source's own "one genuinely new
+gameplay affordance" call-outs. Never moves; the whole threat is a
+telegraphed lob you dodge after it lands, not a bullet you weave: a flashing
+landing ring appears at the target point, a charge climbs the 3-segment
+stalk, a visible blob arcs in on a parabola, and splashdown only costs HP if
+you're still standing in the ring when it lands (`main.gd`'s
+`_collide_bambu_lobs()` — its own method for the usual reason, since this is
+a hazard neither of the two bullet/contact collision loops would ever see).
+Every hit pops the top segment, so HP and the visible stalk height are the
+same number. Divergence: spawns pre-grown at full 3 segments rather than
+animating the browser's ~0.5s emerge-and-grow beat — the growth window is
+cosmetic and under a second in the source.
 
 **Daily Run** (`scripts/daily.gd`, main.js v130/v179) — a new MODE_ROWS
 entry under Challenges. Everyone on the same UTC date plays the same seed and
@@ -426,11 +441,18 @@ list stays the port's own ordered backlog.
 Gameplay breadth first (each item is small and mostly mechanical), then the
 visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
 
-1. **More enemy types.** The child-spawning machinery SPLITTA needed is now
-   shared, so REDD_CUBE and PURP_CUBE (wave 4/5, both splitters) are cheap.
-   TORO is the big one — wheel body + exact telegraph,
-   `TOKO_DROP_PORT_BRIEF.md` Part 4 — and BAMBU needs the landing-ring lob
-   (Part 5), the one genuinely new gameplay affordance in that document.
+**This list drifted stale** — items 1-4 below described the port's state
+long before boss waves, variants, weapons, touch, or grazing existed. Left
+as-is except item 1 (corrected 2026-08-26) rather than re-auditing all ten
+in one pass; items 2-4 read as done from the "Ported" section above and
+should be verified before anyone trusts them as open work.
+
+1. **3 enemy types left** of the browser's full `tuning.js` pool: CLOAKER
+   (ambusher, shimmer-flank, telegraphed burst, wave 9), MAGNA (magnet that
+   pulls you off your line, dash breaks it, wave 10), DRAPER (wall-weaver,
+   marching bullet curtains, wave 7). BAMBU (landing-ring lob, Part 5) and
+   TORO (wheel body + telegraph, Part 4) are both ported — see `bambu.gd`/
+   `toro.gd` and the "Ported" section above.
 2. **Kill particles.** The pop and the revenge volley are in; the *debris*
    is not — `TUNING.fx.killDroplets` 22 / `killChunks` 5, plus the splat
    decal they leave. Worth doing as `GPUParticles3D` straight away rather

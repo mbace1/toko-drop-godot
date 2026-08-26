@@ -17,7 +17,7 @@
 ##    ~wave 12 (tuning.js line 200). Without this cap a budget spend happily
 ##    fills the arena with artillery and the wave becomes unreadable.
 ##
-## Only 6 of the roster's ~40 types are ported so far — see PORT_STATUS.md.
+## See PORT_STATUS.md for the roster's ported/not-yet-ported split.
 class_name WaveDirector
 extends Node3D
 
@@ -46,6 +46,7 @@ const POOL := {
 	"BOTFLY":      [5, 4, true],
 	"BULWARK":     [6, 4, false],
 	"WARDEN":      [7, 5, false],
+	"BAMBU":       [3, 3, true],
 }
 
 ## Children are spawned BY a parent's death, never drawn from the wave budget,
@@ -374,6 +375,7 @@ func _make(name: String) -> Enemy:
 		"BOTFLY":      return Botfly.new()
 		"BULWARK":     return Bulwark.new()
 		"WARDEN":      return Warden.new()
+		"BAMBU":       return Bambu.new()
 		"SHEPHERD":    return Shepherd.new()
 		"SIREN":       return Siren.new()
 		"REDD_MINI":   return ReddMini.new()

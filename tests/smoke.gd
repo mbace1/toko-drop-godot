@@ -24,6 +24,7 @@ func _init() -> void:
 	_test_splitta(root)
 	_test_splitter_cubes(root)
 	_test_toro(root)
+	_test_bambu(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -53,6 +54,7 @@ func _process(_delta: float) -> bool:
 		return false
 	_test_collisions()
 	_test_graze()
+	_test_bambu_wiring()
 	_test_adaptive_quality()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
@@ -1139,6 +1141,97 @@ func _test_toro(root: Node3D) -> void:
 		t2.update(1.0 / 60.0)
 	_check(t2._dash_dir == locked, "the dash line does not re-aim after the telegraph")
 
+
+## BAMBU: stationary, segmented HP, and the telegraph -> lob -> splashdown
+## cycle, including the "still standing in the ring when it lands" damage
+## rule main.gd's _collide_bambu_lobs() implements.
+func _test_bambu(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(0.0, 0.0, 0.0)
+
+	var b: Bambu = _place(root, Bambu.new(), Vector3(-6.0, 0.0, 0.0), target, null)
+	_check(b.hp == 3, "BAMBU spawns pre-grown at 3 segments/HP")
+	_check(is_equal_approx(b.radius, 1.8), "and a radius that tracks segments (3 x 0.6)")
+	_check(is_zero_approx(b.speed), "it never moves")
+
+	b.take_hit(1)
+	_check(b.hp == 2, "a hit costs HP")
+	_check(is_equal_approx(b.radius, 1.2), "and pops a segment, shrinking the radius")
+	b.take_hit(1)
+	b.take_hit(1)
+	_check(not b.alive, "the third hit kills it (3 segments, 3 hp)")
+	_check(is_equal_approx(b.radius, 0.6), "radius never drops below the floor (max(0.6, 0*0.6))")
+
+	# The attack cycle: WAITING -> TELEGRAPHING -> LOBBING -> back to WAITING,
+	# landing a splashdown exactly once per cycle.
+	var b2: Bambu = _place(root, Bambu.new(), Vector3(-6.0, 0.0, 0.0), target, null)
+	var seen := {}
+	var landed := 0
+	for i in 60 * 6:
+		b2.update(1.0 / 60.0)
+		seen[b2._state] = true
+		if b2.drain_landed() != null:
+			landed += 1
+	for st in [Bambu.LobState.WAITING, Bambu.LobState.TELEGRAPHING, Bambu.LobState.LOBBING]:
+		_check(seen.has(st), "BAMBU reaches lob state %d" % st)
+	_check(landed == 1, "exactly one splashdown lands in 6s (cooldown is 4s, first lob at 1.3+0.7+1.0=3s)")
+
+	# drain_landed() is one-shot: the SAME landing is never paid out twice.
+	# First cycle lands at ~3.0s (1.3 wait + 0.7 telegraph + 1.0 flight); the
+	# next is a 4.0s cooldown away, so 3.2s is well clear of both edges.
+	var b3: Bambu = _place(root, Bambu.new(), Vector3(-6.0, 0.0, 0.0), target, null)
+	var drains := 0
+	for i in int(60 * 3.2):
+		b3.update(1.0 / 60.0)
+		if b3.drain_landed() != null:
+			drains += 1
+	_check(drains == 1, "one splashdown lands and pays out exactly once (%d)" % drains)
+	_check(b3.drain_landed() == null, "and a second drain the same frame finds nothing")
+
+	# Dying mid-lob cancels the in-flight visual (main.js: "hide any in-flight
+	# lob when BAMBU dies mid-cycle") rather than leaving it stranded on screen.
+	var b4: Bambu = _place(root, Bambu.new(), Vector3(-6.0, 0.0, 0.0), target, null)
+	while b4._state == Bambu.LobState.WAITING:
+		b4.update(1.0 / 60.0)
+	b4.take_hit(99)
+	_check(not b4.alive, "it's dead")
+	_check(not b4._lob_ring.visible, "and the landing ring is hidden")
+	_check(not b4._lob_blob.visible, "and the blob is hidden")
+	_check(b4.drain_landed() == null, "and no splashdown pays out for a cancelled lob")
+
+## Wiring half of _test_bambu: main.gd actually draining and applying splash
+## damage needs a REAL main.tscn (player etc. only exist post-_ready()), so
+## this runs from _process(), same reason _test_collisions() does.
+func _test_bambu_wiring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+
+	var b5 := Bambu.new()
+	main.waves.enemies_root.add_child(b5)
+	b5.position = Vector3(-6.0, 0.0, 0.0)
+	b5.half_x = 19.0
+	b5.half_z = 11.0
+	b5.target = main.player
+	b5.init()
+	main.waves.enemies.append(b5)
+	# Force a splashdown centred on the player, as if it had just landed there.
+	b5._landed = Vector2(main.player.position.x, main.player.position.z)
+	main._collide_bambu_lobs()
+	_check(main.player.hp == Player.MAX_HP - 1,
+		"standing in a landed splashdown costs HP")
+	_check(b5.drain_landed() == null, "and main.gd actually drained it")
+
+	main.player.reset()
+	b5._landed = Vector2(main.player.position.x + 20.0, main.player.position.z)
+	main._collide_bambu_lobs()
+	_check(main.player.hp == Player.MAX_HP,
+		"a splashdown far from the player costs nothing")
+
+	main.queue_free()
 
 ## The campaign: grading, the tier-C gate, and ability unlocks.
 func _test_challenges(root: Node3D) -> void:
