@@ -30,16 +30,48 @@ nothing, while the game underneath had no portrait math to fall back on
 regardless. Changed to `"sensor"` so the real orientation reaches the game,
 which now knows what to do with either one.
 
-**Not yet independently confirmed**: the same report flagged on-screen touch
-sticks not appearing and dash not firing, and a visually small/misplaced
-HUD, when actually played in portrait on a phone. The touch stick / dash
-logic (`input_manager.gd`) already reads the live viewport size rather than
-a hardcoded landscape one, so the orientation-lock removal above may
-resolve it as a side effect (a fought/failed orientation lock is a
-plausible cause of scrambled touch coordinates too) — but this hasn't been
-re-tested on device yet, and this port still has no working screenshot
-capture in the dev environment to check visually either. Flagging rather
-than claiming fixed.
+**The HUD/touch layer, found and fixed the same day** — this port gained a
+working visual-verification path mid-session (Playwright + a portrait phone
+device profile, driven against a local export server; `tools/capture.gd`
+still doesn't work here) and used it to actually chase the remaining report
+(small HUD, sticks not appearing, dash not firing) rather than guess at it.
+Root cause, confirmed empirically by toggling `window/stretch/aspect`
+between `"expand"` and `"keep"` and comparing screenshots: `canvas_items` +
+`"expand"` stretch (right for the 3D scene — it's what lets the portrait
+arena above fill the whole screen) turns the 2D UI's own logical coordinate
+space into something like 1280 x 2600 in portrait, not the 1280x720 every
+HUD element is tuned against. A `position.y = -120` nudge that reads as
+"just above centre" in a 720-tall reference is imperceptible in one 2600
+tall, so content ended up bunched wherever its anchor happened to sit —
+menu text cut off at the very top edge, HUD readouts unreadable, hint text
+computed against the wrong reference and clipped by the top of the screen.
+Fixed with three separate, verified pieces:
+- `main.gd`'s `_update_hud_transform()` gives the (now correctly-labelled)
+  `hud` CanvasLayer its OWN `Transform2D` mapping a fixed 1280x720 design
+  space onto a centred, aspect-correct rectangle of whatever the real
+  screen is — the same trade `"keep"` makes for the whole game, applied to
+  the UI only, so the 3D scene keeps filling the real screen. Recomputed on
+  every resize (cosmetic, safe mid-run, unlike the arena orientation).
+- **TouchSticks got its OWN separate, untransformed CanvasLayer**
+  (`touch_layer`) — its stick RINGS have to track real finger positions
+  1:1 (`InputManager.Stick.origin`/`.delta` are real viewport pixels), so
+  routing them through the same fixed-1280x720 remap as the labels would
+  have drawn a ring somewhere the finger wasn't.
+- **`TouchSticks.size` wasn't reliable** for a top-level Control parented
+  directly under a bare CanvasLayer (no Control/SubViewportContainer
+  ancestor for `PRESET_FULL_RECT` to inherit a rect from) — confirmed with
+  a debug print showing the idle hint text computed against the right
+  numbers yet still rendering top-left; fixed by driving `size` explicitly
+  every frame (`_sync_size()`) instead of trusting anchoring to do it.
+- Two more real, independent bugs found by the SAME phone report and fixed
+  in the same pass: **`●`/`○`/`█`** (HP/lives pips, the heat bar) rendered
+  as tofu boxes — Godot's bundled default font doesn't include those
+  Unicode blocks and this port has no custom font loaded to fall back on;
+  swapped for plain ASCII (`@`/`o`/`#`) guaranteed to exist in any font.
+  **The feedback panel was opening on the very first title screen**, before
+  a single run had ever happened — `_show_menu()` called `_open_feedback()`
+  unconditionally; that call only belongs on an actual death/level-end
+  recap (the other two call sites), so it's removed from the menu path.
 
 **Core loop**
 - Twin-stick movement + mouse/gamepad aim, dash with i-frames, fire-rate

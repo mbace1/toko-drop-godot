@@ -20,10 +20,26 @@ var show_hints := true
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# NOT set_anchors_preset(PRESET_FULL_RECT): stretched anchors fight
+	# _sync_size()'s manual `size` every frame (Godot logs a warning —
+	# "size overridden after _ready()" — and re-imposes its own computed
+	# size right after). Anchors stay at the TOP_LEFT default; `size` is
+	# driven entirely and only by _sync_size().
+	_sync_size()
+
+## `size` for a top-level Control parented directly under a bare CanvasLayer
+## (no Control/SubViewportContainer ancestor to inherit a rect from) is not
+## reliably kept in sync with the real viewport by PRESET_FULL_RECT alone —
+## found 2026-08-26 (a real phone, then confirmed here): the idle hint text
+## collapsed toward (0, 0) instead of sitting at its intended ~78% mark,
+## which is exactly what a near-zero `size` would do to `r.x * frac`. Set it
+## explicitly rather than trust anchoring to do it for a CanvasLayer child.
+func _sync_size() -> void:
+	size = get_viewport().get_visible_rect().size
 
 func _process(_delta: float) -> void:
 	if input_mgr != null and input_mgr.using_touch:
+		_sync_size()
 		queue_redraw()
 
 func _draw() -> void:

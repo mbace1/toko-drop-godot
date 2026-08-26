@@ -152,6 +152,13 @@ var camera: Camera3D
 var audio: AudioKit
 var save: SaveService
 var sticks: TouchSticks
+## TouchSticks lives on its OWN untransformed CanvasLayer, deliberately NOT
+## the fixed-1280x720 `hud` one — main.js's touch positions (InputManager's
+## Stick.origin/delta) are real viewport pixels, and drawing them through
+## the same remap `hud` uses for labels would draw the ring somewhere the
+## finger isn't. TouchSticks' own math is proportional (fractions of its
+## own `size`), so it is already correct in the RAW viewport space.
+var touch_layer: CanvasLayer
 
 var rush: RushRules
 var _rush_label: Label
@@ -214,8 +221,15 @@ func _set_orientation(is_landscape: bool) -> void:
 ## a live rotation mid-run would teleport the arena under the player, so
 ## this only actually re-derives while at the menu.
 func _on_viewport_resized() -> void:
+	if hud == null:
+		return   # a resize before setup finishes — ignore it
+	# The HUD transform is pure cosmetic scaling, not a gameplay position —
+	# safe to recompute on every resize, mid-run included, unlike the arena/
+	# camera orientation below (which would teleport the arena under the
+	# player if it changed mid-run).
+	_update_hud_transform()
 	if camera == null or state != State.MENU:
-		return   # a resize before setup finishes, or mid-run — ignore it
+		return
 	if _detect_landscape() == landscape_mode:
 		return
 	_apply_orientation()
@@ -443,9 +457,38 @@ func _setup_camera() -> void:
 	camera.current = true
 	_cam_rest = camera.position
 
+## The HUD's own CanvasLayer transform, layered on top of the project's
+## canvas_items/expand stretch remap. That remap is right for the 3D scene
+## — it's what lets a portrait phone fill the WHOLE screen with the
+## portrait arena (see _apply_orientation() above) — but wrong for 2D:
+## every HUD element here is tuned against a 1280x720 reference, and
+## "expand" mode's logical canvas for a tall portrait window becomes
+## something like 1280 x 2600. A manual `position.y = -120` nudge that
+## reads as "just above centre" in a 720-tall reference becomes
+## imperceptible in one 2600 tall, and content ends up bunched wherever
+## its anchor happens to sit rather than spread across the visible
+## screen — found 2026-08-26 by a real phone showing the menu cut off at
+## the very top edge. This maps a FIXED 1280x720 design space onto a
+## centred, aspect-correct rectangle of whatever the real screen turns
+## out to be: confirmed by testing `window/stretch/aspect="keep"`
+## directly (a correct HUD, but a letterboxed 3D scene) — this gets the
+## same correct HUD without paying the letterbox on the 3D scene too.
+const HUD_BASE_SIZE := Vector2(1280.0, 720.0)
+
+func _update_hud_transform() -> void:
+	if hud == null:
+		return
+	var logical := get_viewport().get_visible_rect().size
+	if logical.x <= 0.0 or logical.y <= 0.0:
+		return
+	var k := minf(logical.x / HUD_BASE_SIZE.x, logical.y / HUD_BASE_SIZE.y)
+	var offset := (logical - HUD_BASE_SIZE * k) * 0.5
+	hud.transform = Transform2D(Vector2(k, 0.0), Vector2(0.0, k), offset)
+
 func _setup_hud() -> void:
 	hud = CanvasLayer.new()
 	add_child(hud)
+	_update_hud_transform()
 
 	# Top-left stack: WAVE, the progress bar, then the HP pips — the browser
 	# build's arrangement (js/main.js drawHud).
@@ -530,9 +573,11 @@ func _setup_hud() -> void:
 
 	_build_feedback_panel()
 
+	touch_layer = CanvasLayer.new()
+	add_child(touch_layer)
 	sticks = TouchSticks.new()
 	sticks.input_mgr = input_mgr
-	hud.add_child(sticks)
+	touch_layer.add_child(sticks)
 
 ## The death-screen question. Hidden until a run ends; never shown on the
 ## menu, because there is nothing to ask about yet.
@@ -1650,7 +1695,14 @@ func _show_menu() -> void:
 			break
 	_msg_label.text = _menu_text()
 	_msg_label.show()
-	_open_feedback()
+	# NOT _open_feedback() — this is the fresh title screen, not a death
+	# recap, and _open_feedback() asks a question keyed off whatever run
+	# JUST ended. Calling it here opened the full panel (question, chips,
+	# SEND/SKIP) on the very first boot, before a single run had happened —
+	# found 2026-08-26 on a real phone. Defensively reset rather than trust
+	# nothing else left it open.
+	_fb_panel.hide()
+	_msg_label.position.y = 0.0
 
 ## The title screen, built as text so it reflows on a phone without a layout
 ## pass. The selected mode row is marked with a caret, the same way the
@@ -1840,7 +1892,13 @@ func _update_hud() -> void:
 	_wave_bar.visible = in_run
 	if not in_run:
 		return
-	var pips := "●".repeat(maxi(rush.lives if not _base_mode() else player.hp, 0))
+	# Plain ASCII, not the Unicode dingbats (main.js uses circle glyphs
+	# freely — a DOM `<div>` inherits whatever font the OS/browser has).
+	# Godot's bundled default font does not include U+25CF/25CB/2588
+	# (found 2026-08-26 on a real phone: HP/lives pips rendered as tofu
+	# boxes) — this port has no custom font loaded to fall back on, so
+	# the safe fix is glyphs guaranteed to exist in ANY font at all.
+	var pips := "@".repeat(maxi(rush.lives if not _base_mode() else player.hp, 0))
 	if mode == Mode.CHALLENGE:
 		var clv := Challenges.get_level(challenge_i)
 		_hp_label.text = "LIVES " + pips
@@ -1853,12 +1911,12 @@ func _update_hud() -> void:
 		_wave_label.text = "LEVEL %d" % rush.level
 		_wave_bar.value = clampf(rush.level_t / rush.level_duration(rush.level), 0.0, 1.0)
 		var heat_pips := int(round(rush.heat * 10.0))
-		var bar := "█".repeat(heat_pips) + "·".repeat(10 - heat_pips)
+		var bar := "#".repeat(heat_pips) + "·".repeat(10 - heat_pips)
 		var heat_txt := "OVERHEAT" if rush.overheated_now else "HEAT " + bar
 		var ab := "  " + rush.ability_name() if rush.ability_ready() else ""
 		_rush_label.text = "%s   x%d%s" % [heat_txt, rush.multiplier, ab]
 	else:
-		_hp_label.text = "HP " + pips + "○".repeat(maxi(player.max_hp - player.hp, 0))
+		_hp_label.text = "HP " + pips + "o".repeat(maxi(player.max_hp - player.hp, 0))
 		_wave_label.text = "WAVE %d" % waves.wave
 		# The browser shows the streak with visible HEAT TIERS (gold at 5,
 		# orange at 10, red-hot at 20) so the scoring depth reads at a glance.
