@@ -670,10 +670,10 @@ list stays the port's own ordered backlog.
 Gameplay breadth first (each item is small and mostly mechanical), then the
 visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
 
-**This list drifted stale** — items 2-4 below described the port's state
-long before weapons, touch, and grazing existed, and read as done from the
-"Ported" section above; verify before trusting them as open work. Item 1 is
-closed as of 2026-08-26 — see below.
+**Re-audited 2026-08-26** (the previous pass had drifted stale — items
+2-4 described the port's state from before weapons, touch and debris
+existed, and read as done from the "Ported" section above; each is now
+checked directly against the code rather than trusted from memory).
 
 **Main.js classes surveyed 2026-08-26 and deliberately left unported**,
 so the next hunt doesn't re-open them as if they were missed:
@@ -697,25 +697,43 @@ so the next hunt doesn't re-open them as if they were missed:
    has never drawn from at all (`poolMelee`'s CLOSE COMBAT-only reskins,
    the TOKOTRON/SMASH-mode-exclusive types like TROOPER/THUG/PRISM/
    CUSTODIAN/GRUNT/TURRET/WRAITH) — a different scope, not a gap in this one.
-2. **Kill particles.** The pop and the revenge volley are in; the *debris*
-   is not — `TUNING.fx.killDroplets` 22 / `killChunks` 5, plus the splat
-   decal they leave. Worth doing as `GPUParticles3D` straight away rather
-   than as flat meshes, since `PORT_BRIEF.md` §3/§5 wants particles here
-   anyway.
-3. **Player weapon modes.** `player.js`'s SPREAD/BURST/HOMING/RAPID are
-   stubbed out — only SINGLE exists here.
-4. **Touch controls.** `input_manager.gd` has no touch path; the browser's
-   dual virtual-stick scheme (`js/input.js`) is the reference.
+2. ~~Kill particles.~~ **Done — checked 2026-08-26, was already in.**
+   `debris_pool.gd` is a `MultiMeshInstance3D` pool with CPU ballistic
+   integration + floor bounce, `burst()` called at every kill/hit site in
+   `main.gd` with the source's own counts (22 kill droplets, 5 chunks, 8 hit
+   droplets). Only the ground *splat decal* is still missing — that's
+   `SplatPool` above, cosmetic-only.
+3. ~~Player weapon modes.~~ **Done — checked 2026-08-26, was already in.**
+   `player.gd` has SPREAD/SPREAD2/BURST/BURST2/LASER/LASER2/RAPID/RAPID2,
+   `powerup_pool.gd` drops the pods (level-2 only from wave 4, 28% of the
+   time), matching `main.js` `WEAPON_PODS`. HOMING/HOMING2 are implemented
+   in `player.gd` but deliberately excluded from the drop table — that is
+   the source's own rule (`enemy.js` v88: homing became BOTFLY-exclusive),
+   not a gap; `powerup_pool.gd`'s header comment records it so it does not
+   get "fixed" by mistake.
+4. ~~Touch controls.~~ **Done — checked 2026-08-26, was already in.**
+   `input_manager.gd` fully implements the browser's dual virtual-stick
+   scheme (`js/input.js`): left-half move stick, right-half aim stick that
+   autofires and dashes on release, a top-centre pause strip, tap-to-dash,
+   plus the Rush-only boost pad/scheme toggle. See the HUD/touch section
+   above for the fixes that made it actually usable on a real phone.
 5. **Verlet tentacles** on one hero enemy (`PORT_BRIEF.md` §2b) — the
    landmark "alive" feature the whole brief is written around.
 6. **GPU drip particles + dew normal map** (`PORT_BRIEF.md` §3).
-7. **Trails** — `TubeTrail3D` / `Decal` (`PORT_BRIEF.md` §4).
+7. ~~Trails~~ — **Done, checked 2026-08-26.** `trail_pool.gd` exists and is
+   wired into `main.gd`.
 8. **Death FX (visual half)** — `SoftBody3D` split + `RigidBody3D` gel chunks
    (`PORT_BRIEF.md` §5).
 9. **Compositor passes** — chromatic aberration, heat shimmer
    (`PORT_BRIEF.md` §6).
 10. Screen-space refraction in `gel.gdshader` itself (currently approximated
     with plain alpha blending — see the shader's own header comment).
+
+The remaining open items (5, 6, 8, 9, 10) are all `PORT_BRIEF.md` visual
+landmarks — each is a real R&D task, not a mechanical port, and none of
+them change what a run can do. Gameplay breadth is now believed complete
+against `tuning.js`'s base-mode pool; the next *gameplay* gap, if one
+exists, is more likely to turn up by playing than by re-reading this list.
 
 ## Side-by-side against the shipped browser build (2026-08-24)
 
@@ -789,7 +807,11 @@ Still open, in the order they hurt:
   contact). Enemies currently rest with their mesh center offset up by
   `radius`, which is visually close enough for a first pass but not the
   real geometry.
-- No score/wave persistence (`localStorage` equivalent) — score resets to 0
-  every run, nothing is saved between sessions.
-- Camera is a fixed angled `Camera3D`, not a scene-relative rig; fine for a
-  9×9 arena, will need revisiting if the arena grows.
+- ~~No score/wave persistence~~ **Stale as of 2026-08-26 — this is done.**
+  `save_service.gd` writes `user://toko_drop.json` (the `user://`
+  equivalent of `localStorage`), keyed per mode bucket (`hi_score`, `runs`);
+  daily-run seeding and challenge-level grades ride on the same file.
+- Camera is a fixed angled `Camera3D`, not a scene-relative rig — now with
+  separate landscape/portrait presets (see the dual-arena fix above) rather
+  than one fixed frame, but still not scene-relative. Revisit if the arena
+  ever needs to change shape mid-run rather than only at the title screen.
