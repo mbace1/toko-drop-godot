@@ -25,6 +25,9 @@ func _init() -> void:
 	_test_splitter_cubes(root)
 	_test_toro(root)
 	_test_bambu(root)
+	_test_cloaker(root)
+	_test_magna(root)
+	_test_draper(root)
 	_test_audio_kit(root)
 	_test_save_service(root)
 	_test_rush_rules(root)
@@ -55,6 +58,7 @@ func _process(_delta: float) -> bool:
 	_test_collisions()
 	_test_graze()
 	_test_bambu_wiring()
+	_test_magna_wiring()
 	_test_adaptive_quality()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
@@ -1200,6 +1204,96 @@ func _test_bambu(root: Node3D) -> void:
 	_check(not b4._lob_blob.visible, "and the blob is hidden")
 	_check(b4.drain_landed() == null, "and no splashdown pays out for a cancelled lob")
 
+## CLOAKER: visible -> cloak -> decloak -> a 3-shot burst, still hittable the
+## whole time (enemy.js: "Still hittable — tracking pays").
+func _test_cloaker(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(0.0, 0.0, 0.0)
+	var bp := _make_pool(root)
+
+	var c: Cloaker = _place(root, Cloaker.new(), Vector3(-5.0, 0.0, 0.0), target, bp)
+	_check(c.hp == 3, "CLOAKER spawns at enemy.js's config hp:3")
+	_check(is_equal_approx(c.speed, 2.4), "and its config speed")
+	_check(c._state == Cloaker.CkState.VISIBLE, "starts VISIBLE")
+
+	var seen := {}
+	for i in 60 * 8:
+		c.update(1.0 / 60.0)
+		seen[c._state] = true
+	for st in [Cloaker.CkState.VISIBLE, Cloaker.CkState.CLOAK, Cloaker.CkState.DECLOAK]:
+		_check(seen.has(st), "CLOAKER reaches state %d" % st)
+	_check(bp.active.size() >= 3, "at least one decloak burst fired (%d bullets)" % bp.active.size())
+	for b in bp.active:
+		_check(not b.is_player, "the burst is enemy-owned")
+
+	var c2: Cloaker = _place(root, Cloaker.new(), Vector3(-5.0, 0.0, 0.0), target, bp)
+	c2.take_hit(99)
+	_check(not c2.alive, "still hittable no matter the cloak state (no invulnerability added)")
+
+## MAGNA: holds range rather than closing in, and its tether dies with it.
+## The actual pull on the PLAYER is cross-cutting (main.gd), tested in
+## _test_magna_wiring().
+func _test_magna(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(0.0, 0.0, 0.0)
+
+	var m: Magna = _place(root, Magna.new(), Vector3(-15.0, 0.0, 0.0), target, null)
+	# _place()'s default 9x9 test arena is smaller than MAGNA's own hold
+	# range (9.0) — a real arena is 19x11 (main.gd's HALF_X/HALF_Z), and the
+	# clamp must not be what stops it short of that range.
+	m.half_x = 19.0
+	m.half_z = 11.0
+	_check(m.hp == 4, "MAGNA spawns at enemy.js's config hp:4")
+	_check(is_equal_approx(m.speed, 0.9), "and its config speed")
+
+	var start_x := m.position.x
+	for i in 60 * 20:
+		m.update(1.0 / 60.0)
+	_check(m.position.x > start_x, "MAGNA closes distance")
+	var final_dist: float = absf(m.position.x - target.position.x)
+	_check(final_dist < 9.5 and final_dist > 8.5,
+		"and holds near keep-range+1 rather than closing all the way (%.2f)" % final_dist)
+
+	m.pull_active = true
+	m.die()
+	_check(not m.pull_active, "dying clears pull_active")
+	_check(not m._tether.visible, "and hides the tether")
+
+## DRAPER: holds range, faces the player, and fires a 15-slot curtain with
+## exactly one 2-slot gap.
+func _test_draper(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(0.0, 0.0, 0.0)
+	var bp := _make_pool(root)
+
+	var d: Draper = _place(root, Draper.new(), Vector3(-5.0, 0.0, 0.0), target, bp)
+	# Same reason as MAGNA above: DRAPER's own hold range (11.0 +/- 1.5) is
+	# bigger than _place()'s default 9x9 test arena.
+	d.half_x = 19.0
+	d.half_z = 11.0
+	_check(d.hp == 5, "DRAPER spawns at enemy.js's config hp:5")
+	_check(is_equal_approx(d.speed, 0.9), "and its config speed")
+
+	for i in 60 * 30:
+		d.update(1.0 / 60.0)
+	var dist: Vector2 = Vector2(d.position.x - target.position.x, d.position.z - target.position.z)
+	_check(dist.length() > Draper.WANT_RANGE - Draper.RANGE_BAND - 0.5
+		and dist.length() < Draper.WANT_RANGE + Draper.RANGE_BAND + 0.5,
+		"DRAPER holds near its keep range (%.2f)" % dist.length())
+
+	bp.clear()
+	for i in 60 * 8:
+		d.update(1.0 / 60.0)
+		if bp.active.size() > 0:
+			break
+	_check(bp.active.size() == Draper.CURTAIN_SLOTS - 2,
+		"the curtain fires 13 of 15 slots, the 2-slot gap open (%d)" % bp.active.size())
+	for b in bp.active:
+		_check(not b.is_player, "curtain bullets are enemy-owned")
+
 ## Wiring half of _test_bambu: main.gd actually draining and applying splash
 ## damage needs a REAL main.tscn (player etc. only exist post-_ready()), so
 ## this runs from _process(), same reason _test_collisions() does.
@@ -1230,6 +1324,46 @@ func _test_bambu_wiring() -> void:
 	main._collide_bambu_lobs()
 	_check(main.player.hp == Player.MAX_HP,
 		"a splashdown far from the player costs nothing")
+
+	main.queue_free()
+
+## MAGNA's actual pull on the player (main.gd's _apply_magna_pull) — cross-
+## cutting, so it needs the real player the same reason _test_bambu_wiring()
+## does.
+func _test_magna_wiring() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.CLASSIC
+	main.player.reset()
+	main.waves.clear()
+
+	var m := Magna.new()
+	main.waves.enemies_root.add_child(m)
+	m.position = Vector3(5.0, 0.0, 0.0)
+	m.half_x = 19.0
+	m.half_z = 11.0
+	m.target = main.player
+	m.init()
+	main.waves.enemies.append(m)
+
+	var start_x: float = main.player.position.x
+	main._apply_magna_pull(1.0 / 60.0)
+	_check(main.player.position.x > start_x, "MAGNA pulls the player toward it")
+	_check(m.pull_active, "and marks itself as actively pulling")
+
+	# Dashing grants immunity — the pull must stop entirely.
+	main.player.position.x = start_x
+	main.player.magna_immune_t = 1.0
+	main._apply_magna_pull(1.0 / 60.0)
+	_check(is_equal_approx(main.player.position.x, start_x), "dash immunity stops the pull")
+	_check(not m.pull_active, "and the tether goes inactive")
+
+	# Point-blank (inside MAGNA_MIN_RANGE) does not pull either.
+	main.player.magna_immune_t = 0.0
+	main.player.position.x = m.position.x + 0.5
+	var px: float = main.player.position.x
+	main._apply_magna_pull(1.0 / 60.0)
+	_check(is_equal_approx(main.player.position.x, px), "point-blank range does not pull")
 
 	main.queue_free()
 

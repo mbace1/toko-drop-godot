@@ -214,6 +214,34 @@ same number. Divergence: spawns pre-grown at full 3 segments rather than
 animating the browser's ~0.5s emerge-and-grow beat — the growth window is
 cosmetic and under a second in the source.
 
+**CLOAKER, MAGNA, DRAPER** (`scripts/cloaker.gd`/`magna.gd`/`draper.gd`) —
+the last 3 of the browser's full ~21-type roster (`tuning.js waves.pool`),
+closing it out:
+- **CLOAKER** (enemy.js v143) — visible -> cloak-and-flank (opacity 0.14,
+  shimmering, runs to a point ~90 degrees around the player) -> decloak tell
+  (strobing rim) -> a 3-shot burst, then back to visible. **Still hittable
+  the entire cloaked phase** — enemy.js's own comment is "tracking pays" —
+  so this needed no special collision handling at all; a lower `alpha_amt`
+  on the shared gel shader IS the whole mechanic, and the existing
+  radius-overlap collision does the rest for free.
+- **MAGNA** (main.js v144) — never fires; holds ~8 units and lets its PULL
+  do the chasing. Every living Magna within 11 units drags the player
+  (1.1/s each, combined cap 2.0/s), an amber tether line showing exactly
+  when it has hold. Dashing grants ~1.2s of pull immunity — momentum
+  breaks it (`Player.magna_immune_t`, decremented in `player.gd`, since it
+  is dash state the player already tracks every frame). The pull itself is
+  cross-cutting (it moves the PLAYER, is summed across every Magna, and
+  needs to know the player's dash state) so it lives in `main.gd`'s
+  `_apply_magna_pull()`, the same reason BAMBU's splashdown damage isn't
+  applied from inside `bambu.gd`.
+- **DRAPER** (enemy.js v171) — "wall-weaver": holds ~11 units, turns to
+  FACE the player (the loom itself is the tell — nothing else in the
+  roster turns to face you), strobes for 0.9s, then looms a 15-slot bullet
+  curtain marching straight ahead with one 2-slot gap to escape through.
+  The march direction locks to wherever it was facing when the strobe
+  ended, so the tell is the entire warning — it does not re-aim at the
+  last instant.
+
 **Daily Run** (`scripts/daily.gd`, main.js v130/v179) — a new MODE_ROWS
 entry under Challenges. Everyone on the same UTC date plays the same seed and
 the same one-in-four twist, no server needed, since both are pure functions
@@ -441,18 +469,18 @@ list stays the port's own ordered backlog.
 Gameplay breadth first (each item is small and mostly mechanical), then the
 visual landmarks from `PORT_BRIEF.md` §2 onward (each is a real R&D task):
 
-**This list drifted stale** — items 1-4 below described the port's state
-long before boss waves, variants, weapons, touch, or grazing existed. Left
-as-is except item 1 (corrected 2026-08-26) rather than re-auditing all ten
-in one pass; items 2-4 read as done from the "Ported" section above and
-should be verified before anyone trusts them as open work.
+**This list drifted stale** — items 2-4 below described the port's state
+long before weapons, touch, and grazing existed, and read as done from the
+"Ported" section above; verify before trusting them as open work. Item 1 is
+closed as of 2026-08-26 — see below.
 
-1. **3 enemy types left** of the browser's full `tuning.js` pool: CLOAKER
-   (ambusher, shimmer-flank, telegraphed burst, wave 9), MAGNA (magnet that
-   pulls you off your line, dash breaks it, wave 10), DRAPER (wall-weaver,
-   marching bullet curtains, wave 7). BAMBU (landing-ring lob, Part 5) and
-   TORO (wheel body + telegraph, Part 4) are both ported — see `bambu.gd`/
-   `toro.gd` and the "Ported" section above.
+1. ~~Enemy roster.~~ **Done, 2026-08-26.** The browser's full `tuning.js`
+   `waves.pool` (21 types) is now entirely ported — CLOAKER, MAGNA, and
+   DRAPER (this port's last three) closed it out; see the "Ported" section
+   above. Next roster work, if any, is the browser's OTHER pools this port
+   has never drawn from at all (`poolMelee`'s CLOSE COMBAT-only reskins,
+   the TOKOTRON/SMASH-mode-exclusive types like TROOPER/THUG/PRISM/
+   CUSTODIAN/GRUNT/TURRET/WRAITH) — a different scope, not a gap in this one.
 2. **Kill particles.** The pop and the revenge volley are in; the *debris*
    is not — `TUNING.fx.killDroplets` 22 / `killChunks` 5, plus the splat
    decal they leave. Worth doing as `GPUParticles3D` straight away rather

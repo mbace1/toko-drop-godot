@@ -94,6 +94,15 @@ var _built := false
 var invincible: bool:
 	get: return _dash_time > 0.0 or _mercy_t > 0.0 or rush_invuln
 
+var dashing: bool:
+	get: return _dash_time > 0.0
+
+## MAGNA's pull (main.js v144): dashing grants ~1.2s of pull immunity —
+## momentum breaks the hold. Lives here (not in main.gd) because it decays
+## off the same dash state main.gd has no other reason to poll every frame.
+const MAGNA_IMMUNE_DUR := 1.2
+var magna_immune_t := 0.0
+
 func _ready() -> void:
 	build()
 
@@ -203,6 +212,7 @@ func reset() -> void:
 	_dash_time = 0.0
 	_dash_cd = 0.0
 	_fire_t = 0.0
+	magna_immune_t = 0.0
 	_sq = 1.0
 	_sqv = 0.0
 	rush_speed_mult = 1.0
@@ -251,6 +261,10 @@ func dash(aim: Dictionary) -> void:
 func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, half_x: float, half_z: float) -> void:
 	if not alive:
 		return
+	if dashing:
+		magna_immune_t = MAGNA_IMMUNE_DUR
+	elif magna_immune_t > 0.0:
+		magna_immune_t -= delta
 	_step_burst(delta, bullets)
 	if _dash_cd > 0.0:
 		_dash_cd -= delta

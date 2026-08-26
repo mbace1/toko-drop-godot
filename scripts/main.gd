@@ -644,6 +644,7 @@ func _process_playing(delta: float) -> void:
 	_collide_enemy_bullets()
 	_collide_contact()
 	_collide_bambu_lobs()
+	_apply_magna_pull(delta)
 
 	if not player.alive:
 		_on_player_dead()
@@ -811,6 +812,42 @@ func _collide_bambu_lobs() -> void:
 		if dx * dx + dz * dz < rr * rr:
 			_note_killer("bambu lobber", Feedback.Cause.HAZARD)
 			_damage_player()
+
+## MAGNA pull (main.js v144, MAGNA_REACH 11 / MAGNA_PULL 1.1 per magna,
+## combined cap 2.0/s): every living Magna in reach drags the player toward
+## it. Dashing grants ~1.2s of immunity (player.magna_immune_t) — momentum
+## breaks the hold. This does not damage the player, so it is not gated on
+## `player.invincible` the way _collide_contact()/_collide_bambu_lobs() are;
+## a dashing player is IMMUNE to the pull specifically, not to everything.
+const MAGNA_REACH := 11.0
+const MAGNA_PULL := 1.1
+const MAGNA_PULL_CAP := 2.0
+const MAGNA_MIN_RANGE := 1.2
+
+func _apply_magna_pull(delta: float) -> void:
+	if not player.alive:
+		return
+	var pull := Vector2.ZERO
+	var immune := player.magna_immune_t > 0.0
+	for e in waves.enemies:
+		if not is_instance_valid(e) or not e.alive or not (e is Magna):
+			continue
+		var m := e as Magna
+		var mx := e.position.x - player.position.x
+		var mz := e.position.z - player.position.z
+		var md := sqrt(mx * mx + mz * mz)
+		var held := not immune and md < MAGNA_REACH and md > MAGNA_MIN_RANGE
+		m.pull_active = held
+		if held:
+			pull += Vector2(mx / md, mz / md) * MAGNA_PULL
+	var pl := pull.length()
+	if pl > MAGNA_PULL_CAP:
+		pull *= MAGNA_PULL_CAP / pl
+	if pull != Vector2.ZERO:
+		player.position.x = clampf(player.position.x + pull.x * delta,
+			-half_x + Player.RADIUS, half_x - Player.RADIUS)
+		player.position.z = clampf(player.position.z + pull.y * delta,
+			-half_z + Player.RADIUS, half_z - Player.RADIUS)
 
 ## Remembers the cause of the most recent hit. Whatever is stored when the
 ## last life goes is what the death screen asks about.
