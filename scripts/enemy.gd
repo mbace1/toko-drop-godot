@@ -108,6 +108,12 @@ var affix := ""
 ## (main.js: "a boss corpse is an arena event, not a duel").
 var is_boss := false
 var _boss_ring: MeshInstance3D
+## PORT_BRIEF.md §2b puts verlet tentacles on ONE hero enemy, and the boss
+## is that enemy: promotion already happens to exactly one body every 8th
+## wave, so the per-segment CPU cost is naturally rate-limited without
+## needing a separate cap. Swarm bodies stay bare (the brief's own answer
+## for those is a baked VAT, which is a later pass).
+var _tentacles: Array[Tentacle] = []
 
 func apply_boss() -> void:
 	is_boss = true
@@ -115,6 +121,38 @@ func apply_boss() -> void:
 	max_hp = hp
 	base_shape *= 1.5
 	_build_boss_ring()
+	_build_tentacles()
+
+## Five limbs spaced around the underside of the body — the brief asks for 4-6.
+## They are grown from a ring slightly inside the silhouette and just below the
+## equator, so they read as coming OUT of the blob rather than being stuck on.
+func _build_tentacles() -> void:
+	# Derived from the body's ACTUAL proportions, not from one radius. Bodies
+	# here are squat domes as often as they are spheres (`base_shape` is a
+	# non-uniform scale, and `mesh.position.y = radius * base_shape.y` is what
+	# rests them on the floor), and two earlier attempts each failed on a shape
+	# they were not tuned for:
+	#   - rooting them UNDER the body put every root at floor height, so the
+	#     floor clamp pinned the chain on frame one and the constraint solver
+	#     could only splay the beads outward — a stiff star, not a limb;
+	#   - rooting them near the AXIS at 0.45 of the width hid them completely
+	#     inside a wide squat boss, where only the root bead poked through the
+	#     top and the rest of every chain hung inside opaque gel.
+	# Rooting at the RIM, level with the body's own centre height, works on
+	# both: the limbs leave the silhouette and then fall.
+	var rx: float = radius * base_shape.x      # half width
+	var ry: float = radius * base_shape.y      # half height, and centre height
+	var count := 5
+	for i in count:
+		var a := TAU * float(i) / float(count)
+		var t := Tentacle.new()
+		add_child(t)
+		t.build(
+			Vector3(cos(a) * rx * 0.88, ry * 1.05, sin(a) * rx * 0.88),
+			maxf(0.09, rx * 0.13),
+			maxf(0.11, ry * 0.28),
+			color)
+		_tentacles.append(t)
 
 func _build_boss_ring() -> void:
 	var r: float = radius * base_shape.x * 1.7
@@ -227,6 +265,11 @@ func die() -> void:
 	if child_count > 0:
 		wants_children = true
 	_dying = true
+	# The corpse inflates and bursts; limbs left swinging off it read as a
+	# separate object that failed to clean up.
+	for tent in _tentacles:
+		tent.detach()
+	_tentacles.clear()
 	_death_t = DEATH_TIME
 
 ## Where this body's children should land, spread around where it fell.
@@ -321,6 +364,10 @@ func _apply_variant_look() -> void:
 
 func _update_common(delta: float) -> void:
 	_t += delta
+	# Stepped here rather than from a _physics_process of their own, so that
+	# pausing the game (which simply stops calling update()) freezes them too.
+	for tent in _tentacles:
+		tent.update(delta)
 	if surge_t > 0.0:
 		surge_t = maxf(0.0, surge_t - delta)
 	_emit_trail(delta)

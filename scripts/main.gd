@@ -48,7 +48,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "2.6"
+const VERSION := "2.7"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -1904,9 +1904,9 @@ func _on_player_dead() -> void:
 	# highest, and one line saying "best" hides that.
 	var stars: Array[String] = []
 	if best:
-		stars.append("★ BEST SCORE")
+		stars.append("* BEST SCORE")
 	if t > prev_best_time:
-		stars.append("★ BEST TIME")
+		stars.append("* BEST TIME")
 	if stars.is_empty():
 		out.append("best %d" % save.hi_score)
 	else:

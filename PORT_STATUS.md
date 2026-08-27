@@ -192,6 +192,17 @@ rectangular shadow it replaced "read as a pink box". A VBox stacks its
 children, so the logo sits in a small wrapper Control with the wash
 anchored behind it.
 
+**A third tofu bug, and a permanent guard against a fourth.** The death
+recap printed `U+2605` (a star) before "BEST TIME" and JetBrains Mono has
+no such glyph, so it drew as a box — found in a capture of a real death,
+on a screen no test covered and nobody had looked at. This port has now
+shipped tofu twice before (the HP pips and heat bar against Godot's
+default font, found on a real phone). `_test_font_glyphs` turns it from a
+rendering fact into a logic one via `Font.has_char()`: every non-ASCII
+codepoint the UI prints is asserted against the BUNDLED font, and the
+test also asserts that `U+2605` really is absent, so it can fail rather
+than passing on everything.
+
 **The four screens are covered by a test now** (`_test_screen_states`
 in `tests/smoke.gd`, 17 checks). The title, pause, death and level-recap
 screens share one CenterContainer, and the menu-only chrome is hidden on
@@ -813,8 +824,38 @@ so the next hunt doesn't re-open them as if they were missed:
    autofires and dashes on release, a top-centre pause strip, tap-to-dash,
    plus the Rush-only boost pad/scheme toggle. See the HUD/touch section
    above for the fixes that made it actually usable on a real phone.
-5. **Verlet tentacles** on one hero enemy (`PORT_BRIEF.md` §2b) — the
-   landmark "alive" feature the whole brief is written around.
+5. ~~Verlet tentacles~~ **Done, 2026-08-27** (`PORT_BRIEF.md` §2b) — the
+   landmark "alive" feature the brief is written around.
+   `scripts/tentacle.gd` is a verlet chain (8 segments, gravity, 3 relaxation
+   passes, floor clamp INSIDE the iteration so a limb piles and drags rather
+   than sliding through). The hero enemy is the **boss**: `apply_boss()`
+   already promotes exactly one body every 8th wave, so the per-segment cost
+   is rate-limited without a separate cap. Swarm bodies stay bare — the
+   brief's own answer for those is a baked VAT, which is item 9.
+   Two deliberate divergences from the brief's code sketch, both for reasons
+   this repo already had written down:
+   - **Stepped by an explicit `update(delta)`, never `_physics_process`**
+     (the sketch uses the latter). `CLAUDE.md`'s rule is that enemies are
+     driven by `WaveDirector`, and that is what makes pause free — a
+     `_physics_process` would keep the limbs swinging on the pause screen.
+   - **Drawn as one `MultiMeshInstance3D` of tapered beads**, not a skinned
+     `Skeleton3D` or a per-frame tube mesh (the brief offers both): one draw
+     call, no per-frame geometry allocation, and beads suit a body already
+     made of gel — `debris_pool.gd` renders the same way.
+   Three visual passes were needed and each failure is worth keeping, because
+   all three looked fine in code and only a capture showed them:
+   rooting the limbs UNDER the body put every root at floor height, so the
+   floor clamp pinned the chain on frame one and the solver could only splay
+   the beads into a stiff star; rooting them near the axis hid them entirely
+   inside a wide squat boss, with only the root bead poking through the top;
+   and a taper down to 0.34 shrank the tip beads below the segment spacing,
+   turning the limb into a dotted line. Roots now sit at the RIM, level with
+   the body's own centre height, derived from `base_shape` rather than from
+   one radius — bodies here are squat domes as often as spheres.
+   Covered by `_test_tentacles` (7 checks): the chain holds together, stays
+   pinned to its body, never sinks below the floor, and the tip LAGS a moving
+   root rather than teleporting with it — that lag being the drag the brief
+   actually asks for, and the one thing a still frame cannot show.
 6. **GPU drip particles + dew normal map** (`PORT_BRIEF.md` §3).
 7. ~~Trails~~ — **Done, checked 2026-08-26.** `trail_pool.gd` exists and is
    wired into `main.gd`.

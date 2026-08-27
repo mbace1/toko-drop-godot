@@ -71,6 +71,8 @@ func _process(_delta: float) -> bool:
 	_test_gates_wiring()
 	_test_orientation_wiring()
 	_test_screen_states()
+	_test_tentacles()
+	_test_font_glyphs()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1639,6 +1641,100 @@ func _test_kill_scoring() -> void:
 ## and each time the only check was a screenshot of ONE of the four screens.
 ## This asserts all of them, so the next restructure cannot quietly leave the
 ## death recap with a title over it or the menu with no chips.
+## PORT_BRIEF.md §2b's verlet tentacles, on the boss. The brief states the
+## behaviour in terms of what it should LOOK like ("pile and drag when it
+## stops, stretch and snap back when it moves"), which a screenshot cannot
+## confirm and a still frame certainly cannot. These are the invariants
+## underneath that: the chain stays connected, it is pinned to the body, it
+## never sinks through the floor, and it lags rather than teleporting.
+## Every non-ASCII character the UI prints must exist in the BUNDLED font.
+##
+## This port has now shipped tofu boxes twice. First the HP pips and heat bar
+## (U+25CF / U+25CB / U+2588) against Godot's default font, found on a real
+## phone. Then a star before "BEST TIME" on the death recap (U+2605) against
+## JetBrains Mono, found in a screenshot of a real death — a screen no test
+## covered and nobody had looked at. Both were invisible to every assertion in
+## this file, because a missing glyph is a rendering fact, not a logic one.
+##
+## `Font.has_char()` makes it a logic fact. The list is the audited set of
+## non-ASCII codepoints appearing in string literals under `scripts/`; adding a
+## new one to the UI without adding it here is fine — adding one the font
+## cannot draw is what this stops.
+func _test_font_glyphs() -> void:
+	var f := ThemeKit.mono()
+	_check(f != null, "the bundled monospace font resolves")
+
+	# codepoint -> where it is used, so a failure names the screen to look at.
+	var used := {
+		0x00B7: "the death recap's WAVE - TIME - PTS separator",
+		0x2014: "em dash, used across the menu and control hints",
+		0x2026: "ellipsis",
+		0x2192: "CLOAKER's state arrow",
+	}
+	for cp in used:
+		_check(f.has_char(cp),
+			"the font can draw %s (U+%04X)" % [used[cp], cp])
+
+	# The ASCII stand-ins that replaced earlier tofu must obviously survive.
+	for cp in [0x40, 0x6F, 0x23, 0x2A]:   # @ o # *
+		_check(f.has_char(cp),
+			"the font can draw the ASCII pip/marker U+%04X" % cp)
+
+	# And the glyphs that BURNED us are genuinely absent, so this test is
+	# actually discriminating rather than passing on everything.
+	_check(not f.has_char(0x2605),
+		"and U+2605 (a star) really is missing — the check can fail, not just pass")
+
+func _test_tentacles() -> void:
+	var host := Node3D.new()
+	get_root().add_child(host)
+	host.position = Vector3(0.0, 1.2, 0.0)
+
+	var t := Tentacle.new()
+	host.add_child(t)
+	t.build(Vector3.ZERO, 0.2, 0.35, Color(0.4, 1.0, 0.7))
+	_check(t.pos.size() == Tentacle.SEGMENTS,
+		"a tentacle builds its full segment count")
+
+	# Settle it.
+	for _i in 60:
+		t.update(1.0 / 60.0)
+
+	_check(t.pos[0].is_equal_approx(host.global_position),
+		"segment 0 stays pinned to the body it grows from")
+
+	var worst := 0.0
+	for i in range(Tentacle.SEGMENTS - 1):
+		var d: float = t.pos[i].distance_to(t.pos[i + 1])
+		worst = maxf(worst, absf(d - t.rest_len))
+	_check(worst < t.rest_len * 0.5,
+		"and the chain holds together — no segment stretches far past its rest length")
+
+	var below := false
+	for i in Tentacle.SEGMENTS:
+		if t.pos[i].y < -0.001:
+			below = true
+	_check(not below, "no segment sinks below the floor")
+
+	# Drag: yank the body sideways and the tip must LAG, not teleport with it.
+	var tip_before: Vector3 = t.pos[Tentacle.SEGMENTS - 1]
+	host.position += Vector3(4.0, 0.0, 0.0)
+	t.update(1.0 / 60.0)
+	_check(t.pos[0].is_equal_approx(host.global_position),
+		"moving the body moves the root immediately")
+	var tip_moved: float = t.pos[Tentacle.SEGMENTS - 1].distance_to(tip_before)
+	_check(tip_moved < 4.0,
+		"but the tip lags behind it — that lag IS the drag the brief asks for")
+
+	# And it catches up rather than trailing forever.
+	for _i in 120:
+		t.update(1.0 / 60.0)
+	_check(t.pos[Tentacle.SEGMENTS - 1].distance_to(host.global_position)
+			< Tentacle.SEGMENTS * t.rest_len + 0.5,
+		"and it settles back within the chain's own reach")
+
+	host.queue_free()
+
 func _test_screen_states() -> void:
 	var main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(main)
