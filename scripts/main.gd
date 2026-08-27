@@ -208,6 +208,8 @@ var _subtitle_label: Label
 var _cta_label: Label
 var _controls_label: Label
 var _menu_box: VBoxContainer
+var _menu_center: CenterContainer
+var _hud_root: Control
 
 ## main.js's own check, ported verbatim: the ACTUAL device/window aspect,
 ## not a stored preference — a game that opens portrait and gets rotated
@@ -501,10 +503,37 @@ func _update_hud_transform() -> void:
 	var k := minf(logical.x / HUD_BASE_SIZE.x, logical.y / HUD_BASE_SIZE.y)
 	var offset := (logical - HUD_BASE_SIZE * k) * 0.5
 	hud.transform = Transform2D(Vector2(k, 0.0), Vector2(0.0, k), offset)
+	# Re-assert the design rect: a resize can otherwise leave the root sized to
+	# whatever the viewport last was, which puts every anchored child back where
+	# this wrapper exists to stop them going.
+	if _hud_root != null:
+		_hud_root.position = Vector2.ZERO
+		_hud_root.size = HUD_BASE_SIZE
 
 func _setup_hud() -> void:
 	hud = CanvasLayer.new()
 	add_child(hud)
+
+	# EVERY HUD control hangs off this one fixed 1280x720 rect rather than off
+	# the CanvasLayer directly. A Control parented straight to a bare
+	# CanvasLayer resolves its anchors against the VIEWPORT, which in portrait
+	# is ~1280x2600 after the canvas_items/expand stretch — nothing like the
+	# 1280x720 reference `_update_hud_transform()` then maps onto the screen.
+	# So anchored elements landed wherever that mismatch put them: the menu sat
+	# about a third of the way down instead of centred, and the two bottom
+	# corner readouts (version/FPS, run seed) were pushed clean off the bottom
+	# of the screen — they have no hide path and appear in none of this port's
+	# screenshots, which is how it was noticed.
+	#
+	# Sizing it manually rather than anchoring it is the same lesson
+	# `touch_sticks.gd` already carries: under a bare CanvasLayer, a top-level
+	# Control's rect is not reliably maintained for you.
+	_hud_root = Control.new()
+	_hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_root.position = Vector2.ZERO
+	_hud_root.size = HUD_BASE_SIZE
+	hud.add_child(_hud_root)
+
 	_update_hud_transform()
 
 	# Top-left stack: WAVE, the progress bar, then the HP pips — the browser
@@ -512,7 +541,7 @@ func _setup_hud() -> void:
 	var left := VBoxContainer.new()
 	left.position = Vector2(16, 12)
 	left.add_theme_constant_override("separation", 4)
-	hud.add_child(left)
+	_hud_root.add_child(left)
 
 	_wave_label = _make_hud_label(20)
 	left.add_child(_wave_label)
@@ -544,7 +573,7 @@ func _setup_hud() -> void:
 	_score_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_score_label.position = Vector2(-16, 12)
 	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	hud.add_child(_score_label)
+	_hud_root.add_child(_score_label)
 
 	# Death wash. The browser floods the whole screen red on death and it is
 	# most of why dying LANDS; a text swap alone reads as a menu appearing.
@@ -552,7 +581,7 @@ func _setup_hud() -> void:
 	_death_wash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_death_wash.color = Color(0.55, 0.02, 0.05, 0.0)
 	_death_wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud.add_child(_death_wash)
+	_hud_root.add_child(_death_wash)
 
 	# main.js's title screen builds its hierarchy out of SIZE and OPACITY, not
 	# out of one wall of text: the subtitle is 13px at 0.5 alpha, the call to
@@ -568,14 +597,25 @@ func _setup_hud() -> void:
 	# A container cannot get it wrong. It also means the pause/death/recap
 	# screens still work unchanged — they hide the other four labels, the box
 	# is then just _msg_label, and it centres exactly as it did before.
+	# A CenterContainer does the centring, and nothing ever writes `position` on
+	# the menu again. That last part is the actual bug this replaced: the menu
+	# used to be a PRESET_CENTER control that several code paths reset with
+	# `position.y = 0`, and on a centre-anchored control that does not mean
+	# "back to the middle" — it pins the box to the TOP of the design rect and
+	# then grows it symmetrically about that, so the whole menu sat about a
+	# third of the way down a tall screen. Measured, not guessed: a debug print
+	# in the running Web build reported the box at y=-231 inside a 720-tall
+	# reference, i.e. centred on 0 rather than on 360.
+	_menu_center = CenterContainer.new()
+	_menu_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_menu_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_root.add_child(_menu_center)
+
 	_menu_box = VBoxContainer.new()
-	_menu_box.set_anchors_preset(Control.PRESET_CENTER)
-	_menu_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_menu_box.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_menu_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	_menu_box.add_theme_constant_override("separation", 10)
 	_menu_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud.add_child(_menu_box)
+	_menu_center.add_child(_menu_box)
 
 	_title_label = _make_label(56)
 	_title_label.text = "TOKO DROP"
@@ -616,7 +656,7 @@ func _setup_hud() -> void:
 	_corner_l.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_corner_l.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_corner_l.position = Vector2(16, -30)
-	hud.add_child(_corner_l)
+	_hud_root.add_child(_corner_l)
 
 	_corner_r = _make_hud_label(13)
 	_corner_r.add_theme_color_override("font_color", Color(0.45, 0.85, 1.0, 0.55))
@@ -625,7 +665,7 @@ func _setup_hud() -> void:
 	_corner_r.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_corner_r.position = Vector2(-16, -30)
 	_corner_r.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	hud.add_child(_corner_r)
+	_hud_root.add_child(_corner_r)
 
 	_toast = _make_label(24)
 	_toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -633,7 +673,7 @@ func _setup_hud() -> void:
 	_toast.position.y = 90.0
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast.hide()
-	hud.add_child(_toast)
+	_hud_root.add_child(_toast)
 
 	_build_feedback_panel()
 
@@ -653,7 +693,7 @@ func _build_feedback_panel() -> void:
 	_fb_panel.position = Vector2(0, -24)
 	_fb_panel.custom_minimum_size = Vector2(720, 0)
 	_fb_panel.hide()
-	hud.add_child(_fb_panel)
+	_hud_root.add_child(_fb_panel)
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
@@ -688,7 +728,7 @@ func _build_feedback_panel() -> void:
 	# SKIP sends nothing. Explicit consent by design.
 	skip.pressed.connect(func():
 		_fb_panel.hide()
-		_menu_box.position.y = 0.0)
+		_menu_center.offset_bottom = 0.0)
 	row.add_child(skip)
 
 	_fb_status = _make_label(14)
@@ -732,7 +772,10 @@ func _open_feedback() -> void:
 	# summary clear of it — the retry line was being printed underneath it.
 	# The shift goes on the BOX: _msg_label is a container child now, and a
 	# container overwrites any position you set on its children.
-	_menu_box.position.y = -120.0
+	# Shrink the centring area from the bottom instead of moving the box: the
+	# centre of a 240-shorter rect is exactly 120 higher, and nothing writes
+	# `position` on a container child (which a container would overwrite anyway).
+	_menu_center.offset_bottom = -240.0
 
 func _send_feedback() -> void:
 	var run := {
@@ -746,7 +789,7 @@ func _send_feedback() -> void:
 	_fb_status.text = "" if r == "" else "saved — thank you"
 	if r != "":
 		_fb_panel.hide()
-		_menu_box.position.y = 0.0
+		_menu_center.offset_bottom = 0.0
 
 ## Typography lives in `theme_kit.gd` (ThemeKit) so main.gd and touch_sticks.gd
 ## cannot drift into two different typefaces — see that file for why the font is
@@ -1792,7 +1835,7 @@ func _show_menu() -> void:
 	# found 2026-08-26 on a real phone. Defensively reset rather than trust
 	# nothing else left it open.
 	_fb_panel.hide()
-	_menu_box.position.y = 0.0
+	_menu_center.offset_bottom = 0.0
 
 ## The title screen, built as text so it reflows on a phone without a layout
 ## pass. The selected mode row is marked with a caret, the same way the
