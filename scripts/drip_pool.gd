@@ -69,14 +69,18 @@ func build() -> void:
 	m.radial_segments = 6
 	m.rings = 4
 
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.08
-	mat.metallic = 0.0
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	# Wet gel is brighter than the body it came off, not darker.
-	mat.albedo_color = Color(1.0, 1.0, 1.0, 0.85)
+	# The same gel the bodies are made of, so a droplet refracts and rims the
+	# way its parent does — `use_instance_color` lets one material carry every
+	# species' colour. Ripple/dew off; a droplet is too small for either.
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://shaders/gel.gdshader")
+	mat.set_shader_parameter("use_instance_color", 1.0)
+	mat.set_shader_parameter("wobble_amp", 0.0)
+	mat.set_shader_parameter("dew_amount", 0.0)
+	mat.set_shader_parameter("alpha_amt", 1.0)
+	mat.set_shader_parameter("sss_strength", 0.4)
+	mat.set_shader_parameter("roughness_amt", 0.04)
+	mat.set_shader_parameter("rim_strength", 0.6)
 
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D

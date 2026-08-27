@@ -22,6 +22,13 @@ render_mode depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
 
 // Base look — PORT_BRIEF.md §0 blob/cube MeshPhysicalMaterial params.
 uniform vec4  gel_color : source_color = vec4(0.0, 0.8, 0.67, 1.0);
+// When this material is shared by a MultiMesh whose instances each carry their
+// own colour — the death chunks and the drips, which come off bodies of every
+// species — the per-instance COLOR replaces `gel_color`. One material, one
+// draw call, and the gel still looks like the body it came off.
+// PORT_BRIEF.md §5 asks for death chunks to be real gel "so they refract and
+// bloom as they fly" rather than flat spheres.
+uniform float use_instance_color : hint_range(0.0, 1.0) = 0.0;
 uniform float emission_intensity : hint_range(0.0, 1.0) = 0.06;
 uniform float roughness_amt : hint_range(0.0, 1.0) = 0.07;
 uniform float specular_amt : hint_range(0.0, 1.0) = 0.85;
@@ -70,7 +77,16 @@ float dew_hash1(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
+// Carried explicitly from vertex to fragment. A MultiMesh's per-instance
+// colour arrives as COLOR in the VERTEX stage; relying on it being readable in
+// fragment made every death chunk render black — invisible against a dark
+// arena, with no error anywhere. The owner's own Godot notes already warn that
+// MultiMesh instance colours fail SILENTLY; this is the shader-side version of
+// that same trap.
+varying vec3 inst_col;
+
 void vertex() {
+	inst_col = COLOR.rgb;
 	vec3 p = VERTEX;
 	float b = (sin(p.y * 3.8 + wobble_time * 5.2) * 0.22
 	         + cos(p.x * 3.2 + wobble_time * 4.7) * 0.16
@@ -80,7 +96,8 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = gel_color.rgb;
+	vec3 gel = mix(gel_color.rgb, inst_col, use_instance_color);
+	ALBEDO = gel;
 	METALLIC = 0.0;
 	ROUGHNESS = roughness_amt;
 	SPECULAR = specular_amt;
@@ -124,14 +141,21 @@ void fragment() {
 	// through it in the body's own colour — the gummy-bear read, and the reason
 	// main.gd now puts a light behind the arena as well as above it.
 	SSS_STRENGTH = sss_strength;
-	SSS_TRANSMITTANCE_COLOR = vec4(gel_color.rgb, 1.0);
+	SSS_TRANSMITTANCE_COLOR = vec4(gel, 1.0);
 	SSS_TRANSMITTANCE_DEPTH = sss_depth;
 	SSS_TRANSMITTANCE_BOOST = sss_boost * thin;
 
 	// Cheap always-on wrap so the body reads translucent even facing the key
 	// light, where transmittance has nothing behind it to carry.
-	BACKLIGHT = gel_color.rgb * backlight_amt * (0.35 + 0.65 * thin);
+	BACKLIGHT = gel * backlight_amt * (0.35 + 0.65 * thin);
 
-	EMISSION = gel_color.rgb * emission_intensity
-	         + rim_color.rgb * pow(thin, rim_power) * rim_strength;
+	// The rim follows the instance colour too. Left on the white default it
+	// swamped the small chunks completely: on a body most of the surface faces
+	// you and `thin` is small, but on a 6cm chunk almost the whole surface is
+	// near-silhouette, so the fresnel term covers it and every chunk rendered
+	// white no matter what colour it was told to be. That looked exactly like
+	// "instance colour is not reaching the shader", and was not.
+	vec3 rim = mix(rim_color.rgb, mix(inst_col, vec3(1.0), 0.45), use_instance_color);
+	EMISSION = gel * emission_intensity
+	         + rim * pow(thin, rim_power) * rim_strength;
 }

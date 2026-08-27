@@ -51,13 +51,21 @@ func build() -> void:
 	m.radial_segments = 6
 	m.rings = 4
 
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.15
-	mat.metallic = 0.0
-	# Lit, not unlit: these are lumps of the same gel the bodies are made of,
-	# and unlit spheres of a flat colour read as confetti.
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	# PORT_BRIEF.md §5: death chunks should be real gel, "so they refract and
+	# bloom as they fly", not flat lit spheres. Same shader as the bodies, with
+	# `use_instance_color` on so one shared material can still carry a
+	# different colour per chunk — each burst comes off a different species.
+	# Ripple and dew are off (a 6cm chunk has no room for either) and SSS is
+	# turned down, because scattering cost scales with screen area and a burst
+	# puts a lot of small gel on screen at once.
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://shaders/gel.gdshader")
+	mat.set_shader_parameter("use_instance_color", 1.0)
+	mat.set_shader_parameter("wobble_amp", 0.0)
+	mat.set_shader_parameter("dew_amount", 0.0)
+	mat.set_shader_parameter("alpha_amt", 1.0)
+	mat.set_shader_parameter("sss_strength", 0.35)
+	mat.set_shader_parameter("rim_strength", 0.5)
 
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D

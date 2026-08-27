@@ -934,8 +934,34 @@ so the next hunt doesn't re-open them as if they were missed:
    nothing", which is exactly why the exaggerated pass came first.
 7. ~~Trails~~ — **Done, checked 2026-08-26.** `trail_pool.gd` exists and is
    wired into `main.gd`.
-8. **Death FX (visual half)** — `SoftBody3D` split + `RigidBody3D` gel chunks
-   (`PORT_BRIEF.md` §5).
+8. **Death FX (visual half)** (`PORT_BRIEF.md` §5) — **the material half is
+   done, 2026-08-27.** Death chunks and drips now use `gel.gdshader` itself
+   rather than a plain lit material, so they scatter, rim and bloom like the
+   bodies they came off — §5's "so they refract and bloom as they fly". The
+   shader grows a `use_instance_color` switch: a MultiMesh whose instances
+   each carry a colour can share ONE gel material, which keeps the whole
+   arena's debris at one draw call.
+   **Not done, and deliberately:** §5's `RigidBody3D` chunks and `SoftBody3D`
+   SPLITTA tear. `debris_pool.gd` already does ballistic motion with a floor
+   bounce for a few hundred chunks in one draw call; converting that to dozens
+   of rigid bodies per death would cost more and control less. The genuine gap
+   was the MATERIAL, and that is what got closed. Revisit the soft-body tear
+   only if SPLITTA's split actually needs to deform rather than scale.
+   Two traps paid for here, both of which looked like the same bug:
+   - a MultiMesh's per-instance colour is available as `COLOR` in the VERTEX
+     stage; the fragment stage needs it passed through an explicit `varying`.
+     The owner's own Godot notes already warn that MultiMesh instance colours
+     fail SILENTLY, and this is the shader-side face of that.
+   - with `rim_color` left on its white default, the fresnel rim SWAMPED every
+     chunk. On a body most of the surface faces the camera so the rim is a
+     thin edge; on a 6cm chunk almost the whole surface is near-silhouette, so
+     every chunk rendered white regardless of its colour — which looks exactly
+     like "instance colour never arrives", and is not. The rim follows the
+     instance colour now.
+   And one non-bug worth recording, because it burned three export cycles:
+   debris lives ~1s, so a screenshot taken a moment too late shows an empty
+   arena and reads as "nothing renders". It was only settled by bursting
+   debris EVERY FRAME so the timing could not hide it.
 9. **Compositor passes** — chromatic aberration, heat shimmer
    (`PORT_BRIEF.md` §6).
 10. Screen-space refraction in `gel.gdshader` itself (currently approximated
