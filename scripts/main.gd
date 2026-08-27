@@ -48,7 +48,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "2.4"
+const VERSION := "2.5"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -85,16 +85,16 @@ enum Mode { CLASSIC, ROGUELIKE, RUSH, CHALLENGE, DAILY }
 ## OFF-by-default toggle beneath it) — this restores that.
 const MODE_ROWS := [
 	{"mode": Mode.CLASSIC, "label": "CLASSIC MODE",
-	 "note": "the original run — dash, guns, a climbing streak", "ready": true},
+	 "note": "the original run — dash, guns, a climbing streak", "ready": true, "accent": Color(0.40, 0.80, 1.00)},
 	{"mode": Mode.ROGUELIKE, "label": "ROGUELIKE MODE",
-	 "note": "no upgrades — pure arcade survival", "ready": false},
+	 "note": "no upgrades — pure arcade survival", "ready": false, "accent": Color(0.00, 1.00, 0.80)},
 	{"mode": Mode.RUSH, "label": "RUSH MODE",
-	 "note": "boost to kill — shoot and you lose your shield", "ready": true},
+	 "note": "boost to kill — shoot and you lose your shield", "ready": true, "accent": Color(1.00, 0.53, 0.27)},
 	{"mode": Mode.CHALLENGE, "label": "CHALLENGES",
 	 "note": "levels, each with its own rule — reach C to open the next",
-	 "ready": true},
+	 "ready": true, "accent": Color(0.80, 0.53, 1.00)},
 	{"mode": Mode.DAILY, "label": "DAILY RUN",
-	 "note": "same seed as everyone today, worldwide — no upgrades", "ready": true},
+	 "note": "same seed as everyone today, worldwide — no upgrades", "ready": true, "accent": Color(1.00, 0.87, 0.40)},
 ]
 
 var state := State.MENU
@@ -209,6 +209,12 @@ var _cta_label: Label
 var _controls_label: Label
 var _menu_box: VBoxContainer
 var _menu_center: CenterContainer
+var _logo: TextureRect
+var _best_label: Label
+var _mode_list: VBoxContainer
+var _mode_chips: Array[PanelContainer] = []
+var _mode_chip_labels: Array[Label] = []
+var _mode_detail: Label
 var _hud_root: Control
 
 ## main.js's own check, ported verbatim: the ACTUAL device/window aspect,
@@ -493,6 +499,8 @@ func _setup_camera() -> void:
 ## directly (a correct HUD, but a letterboxed 3D scene) — this gets the
 ## same correct HUD without paying the letterbox on the 3D scene too.
 const HUD_BASE_SIZE := Vector2(1280.0, 720.0)
+## The browser build's own wordmark, carried across rather than restyled.
+const LOGO_PATH := "res://assets/art/logo.png"
 
 func _update_hud_transform() -> void:
 	if hud == null:
@@ -500,15 +508,26 @@ func _update_hud_transform() -> void:
 	var logical := get_viewport().get_visible_rect().size
 	if logical.x <= 0.0 or logical.y <= 0.0:
 		return
-	var k := minf(logical.x / HUD_BASE_SIZE.x, logical.y / HUD_BASE_SIZE.y)
-	var offset := (logical - HUD_BASE_SIZE * k) * 0.5
-	hud.transform = Transform2D(Vector2(k, 0.0), Vector2(0.0, k), offset)
+	# Fit on WIDTH ONLY, and let the design height follow the real aspect.
+	#
+	# This used to fit on `min(width, height)`, which on a portrait phone meant
+	# the entire UI was letterboxed into a 1280x720 band across the MIDDLE 28%
+	# of the screen: the menu could never be bigger than that band, and the two
+	# bottom corner readouts sat at 63% of screen height rather than at the
+	# bottom, because that is where the band ended. Measured, not guessed — a
+	# debug print gave viewport 1280x2607 against a 720-tall reference.
+	#
+	# Fitting on width keeps 1280 design units == the full screen width on any
+	# device (so every size in this file stays in one honest unit), while the
+	# height simply becomes however many of those units the screen is tall.
+	var k := logical.x / HUD_BASE_SIZE.x
+	hud.transform = Transform2D(Vector2(k, 0.0), Vector2(0.0, k), Vector2.ZERO)
 	# Re-assert the design rect: a resize can otherwise leave the root sized to
 	# whatever the viewport last was, which puts every anchored child back where
 	# this wrapper exists to stop them going.
 	if _hud_root != null:
 		_hud_root.position = Vector2.ZERO
-		_hud_root.size = HUD_BASE_SIZE
+		_hud_root.size = Vector2(HUD_BASE_SIZE.x, logical.y / k)
 
 func _setup_hud() -> void:
 	hud = CanvasLayer.new()
@@ -543,7 +562,7 @@ func _setup_hud() -> void:
 	left.add_theme_constant_override("separation", 4)
 	_hud_root.add_child(left)
 
-	_wave_label = _make_hud_label(20)
+	_wave_label = _make_hud_label(40)
 	left.add_child(_wave_label)
 
 	_wave_bar = ProgressBar.new()
@@ -559,16 +578,16 @@ func _setup_hud() -> void:
 	_wave_bar.add_theme_stylebox_override("fill", fill)
 	left.add_child(_wave_bar)
 
-	_hp_label = _make_hud_label(20)
+	_hp_label = _make_hud_label(40)
 	left.add_child(_hp_label)
 
 	# Rush's clock and chain sit UNDER the stack rather than fighting the
 	# centre for space (owner direction).
-	_rush_label = _make_hud_label(18)
+	_rush_label = _make_hud_label(34)
 	_rush_label.hide()
 	left.add_child(_rush_label)
 
-	_score_label = _make_hud_label(22)
+	_score_label = _make_hud_label(44)
 	_score_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_score_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_score_label.position = Vector2(-16, 12)
@@ -617,32 +636,90 @@ func _setup_hud() -> void:
 	_menu_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_menu_center.add_child(_menu_box)
 
-	_title_label = _make_label(56)
+	# The real hand-drawn wordmark, the same `logo.png` the browser build puts
+	# at the top of showTitle() — not text set in the body font. It is the one
+	# piece of the title screen that cannot be reproduced with typography, and
+	# it is this game's own art from the same project, so it travels rather
+	# than being approximated. Browser sizing is `min(72vw, 340px, 43vh)`;
+	# 72% of the design width is the equivalent here, since 1280 design units
+	# now span exactly the screen width.
+	_logo = TextureRect.new()
+	if ResourceLoader.exists(LOGO_PATH):
+		_logo.texture = load(LOGO_PATH)
+	_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_logo.custom_minimum_size = Vector2(920.0, 560.0)
+	_logo.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_logo.hide()
+	_menu_box.add_child(_logo)
+
+	# Kept as a fallback headline for the case where the art is missing, so a
+	# failed load is a plain title rather than a title screen with no title.
+	_title_label = _make_label(72)
 	_title_label.text = "TOKO DROP"
 	_title_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.267))
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title_label.hide()
 	_menu_box.add_child(_title_label)
 
-	_subtitle_label = _make_label(19)
+	_subtitle_label = _make_label(38)
 	_subtitle_label.text = "TWIN-STICK SWARM SURVIVAL"
 	_subtitle_label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.5))
 	_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_subtitle_label.hide()
 	_menu_box.add_child(_subtitle_label)
 
-	_cta_label = _make_label(24)
+	_cta_label = _make_label(46)
 	_cta_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.85))
 	_cta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cta_label.hide()
 	_menu_box.add_child(_cta_label)
 
-	_msg_label = _make_label(22)
+	_best_label = _make_label(36)
+	_best_label.add_theme_color_override("font_color", Color(1.0, 0.87, 0.27, 0.85))
+	_best_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_best_label.hide()
+	_menu_box.add_child(_best_label)
+
+	# The mode rows are the browser's bordered CHIPS, not a text list. In
+	# showTitle() each toggle is a real element with `border: 2px solid`, a
+	# translucent black fill, 8px radius and a colour that changes with its
+	# state; a caret in front of a line of text carries none of that. Godot's
+	# equivalent is a PanelContainer per row with its own StyleBoxFlat, built
+	# once here and re-tinted in `_refresh_menu()` rather than rebuilt.
+	_mode_list = VBoxContainer.new()
+	_mode_list.alignment = BoxContainer.ALIGNMENT_CENTER
+	_mode_list.add_theme_constant_override("separation", 6)
+	_mode_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_menu_box.add_child(_mode_list)
+
+	for i in MODE_ROWS.size():
+		var chip := PanelContainer.new()
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		var cl := _make_label(40)
+		cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		chip.add_child(cl)
+		_mode_list.add_child(chip)
+		_mode_chips.append(chip)
+		_mode_chip_labels.append(cl)
+
+	# One detail block, moved to sit directly under whichever chip is selected
+	# (move_child in _refresh_menu). Showing every row's detail at once
+	# overflowed the screen top and bottom, which is why only the selected
+	# row has ever carried it.
+	_mode_detail = _make_label(32)
+	_mode_detail.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.55))
+	_mode_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mode_list.add_child(_mode_detail)
+
+	_msg_label = _make_label(40)
 	_msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_menu_box.add_child(_msg_label)
 
-	_controls_label = _make_label(15)
+	_controls_label = _make_label(27)
 	_controls_label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.4))
 	_controls_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_controls_label.hide()
@@ -651,14 +728,14 @@ func _setup_hud() -> void:
 	# The corners the browser build uses: version and frame rate bottom-left,
 	# the run seed bottom-right.
 	# No glow on the corners: a 10px halo on 13px text swallows the glyphs.
-	_corner_l = _make_hud_label(13)
+	_corner_l = _make_hud_label(26)
 	_corner_l.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35, 0.55))
 	_corner_l.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_corner_l.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_corner_l.position = Vector2(16, -30)
 	_hud_root.add_child(_corner_l)
 
-	_corner_r = _make_hud_label(13)
+	_corner_r = _make_hud_label(26)
 	_corner_r.add_theme_color_override("font_color", Color(0.45, 0.85, 1.0, 0.55))
 	_corner_r.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_corner_r.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -667,7 +744,7 @@ func _setup_hud() -> void:
 	_corner_r.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_hud_root.add_child(_corner_r)
 
-	_toast = _make_label(24)
+	_toast = _make_label(52)
 	_toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_toast.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_toast.position.y = 90.0
@@ -839,20 +916,20 @@ func _process(delta: float) -> void:
 					challenge_i = (challenge_i + step + n) % n
 					if Challenges.unlocked(challenge_i, save):
 						break
-				_msg_label.text = _menu_text()
+				_refresh_menu()
 				return
 			if MODE_ROWS[_menu_row]["mode"] == Mode.RUSH \
 					and (Input.is_action_just_pressed("move_left") \
 					or Input.is_action_just_pressed("move_right")):
 				rush.cycle_ability(1 if Input.is_action_just_pressed("move_right") else -1)
-				_msg_label.text = _menu_text()
+				_refresh_menu()
 				return
 			if Input.is_action_just_pressed("move_down"):
 				_menu_row = mini(_menu_row + 1, MODE_ROWS.size() - 1)
-				_msg_label.text = _menu_text()
+				_refresh_menu()
 			elif Input.is_action_just_pressed("move_up"):
 				_menu_row = maxi(_menu_row - 1, 0)
-				_msg_label.text = _menu_text()
+				_refresh_menu()
 			elif input_mgr.dash_pressed() or Input.is_action_just_pressed("fire") \
 					or input_mgr.left.active or input_mgr.right.active:
 				var row: Dictionary = MODE_ROWS[_menu_row]
@@ -1811,9 +1888,25 @@ func _on_player_dead() -> void:
 ## box holding just _msg_label — which then centres exactly the way the single
 ## label used to, so pause/death/recap need no layout of their own.
 func _menu_chrome(on: bool) -> void:
-	for l in [_title_label, _subtitle_label, _cta_label, _controls_label]:
+	var have_logo: bool = _logo != null and _logo.texture != null
+	if _logo != null:
+		_logo.visible = on and have_logo
+	for l in [_subtitle_label, _cta_label, _controls_label]:
 		if l != null:
 			l.visible = on
+	# The text headline only stands in when the art failed to load.
+	if _title_label != null:
+		_title_label.visible = on and not have_logo
+	# The chip list and the best-score line are menu-only too. _msg_label is
+	# the opposite: it carries pause/death/recap text, so it is hidden ON the
+	# menu and shown everywhere else — the chips replaced what it used to say
+	# there.
+	if _mode_list != null:
+		_mode_list.visible = on
+	if _best_label != null:
+		_best_label.visible = on and save.hi_score > 0
+	if _msg_label != null:
+		_msg_label.visible = not on
 
 func _show_menu() -> void:
 	state = State.MENU
@@ -1826,8 +1919,7 @@ func _show_menu() -> void:
 	_menu_chrome(true)
 	_cta_label.text = "TAP, OR PRESS FIRE / DASH, TO START"
 	_controls_label.text = _controls_text()
-	_msg_label.text = _menu_text()
-	_msg_label.show()
+	_refresh_menu()
 	# NOT _open_feedback() — this is the fresh title screen, not a death
 	# recap, and _open_feedback() asks a question keyed off whatever run
 	# JUST ended. Calling it here opened the full panel (question, chips,
@@ -1840,52 +1932,105 @@ func _show_menu() -> void:
 ## The title screen, built as text so it reflows on a phone without a layout
 ## pass. The selected mode row is marked with a caret, the same way the
 ## browser hub marks its selection.
-func _menu_text() -> String:
-	var out := []
+## Repaints the mode chips, their state colours, and the detail block under the
+## selected one. Replaces the old `_menu_text()`, which built the whole list as
+## one string — a caret in front of a line cannot express the browser's
+## bordered, state-coloured toggles.
+func _refresh_menu() -> void:
 	save.mode = _menu_mode_key()
-	# Subtitle and the call to action are their OWN labels now (_subtitle_label
-	# / _cta_label) so they can carry the browser's own sizes; only the best
-	# score and the mode rows are left in this string.
+	_best_label.visible = save.hi_score > 0
 	if save.hi_score > 0:
-		out.append("BEST %d" % save.hi_score)
-		out.append("")
+		_best_label.text = "BEST %d" % save.hi_score
+
 	for i in MODE_ROWS.size():
 		var row: Dictionary = MODE_ROWS[i]
-		var caret := ">" if i == _menu_row else " "
-		var state_txt := "ON" if mode == row["mode"] else "OFF"
-		if not row["ready"]:
+		var ready_row: bool = row["ready"]
+		var picked := i == _menu_row
+		# ON means "this is what pressing start will play", which is the row the
+		# caret is on — NOT `mode`, the run that happened last. Those two came
+		# apart: walking the caret down to DAILY RUN left it reading OFF while
+		# start would have launched exactly that, so the menu was lying about
+		# its own button. Predates the chips; the chips just made it loud.
+		var on: bool = picked and ready_row
+		var state_txt := "ON" if on else "OFF"
+		if not ready_row:
 			state_txt = "SOON"
-		out.append("%s  %s: %s" % [caret, row["label"], state_txt])
-		# Detail lines belong to the SELECTED row only. Three modes each with a
-		# note, an ability line and a level line overflowed the screen top and
-		# bottom on the web build — the title was cut off.
-		if i != _menu_row:
-			continue
-		out.append("     %s" % row["note"])
-		if row["mode"] == Mode.CHALLENGE:
-			var lv := Challenges.get_level(challenge_i)
-			var rec = save.levels.get(String(lv["id"]), {})
-			var g := ""
-			var best := 0
-			if typeof(rec) == TYPE_DICTIONARY:
-				g = String(rec.get("grade", ""))
-				best = int(rec.get("best_score", 0))
-			var pick := "< %s >" if i == _menu_row else "  %s  "
-			var rn: String = Challenges.RULE_NAME[lv["rule"]]
-			var tag := ("%s   %s" % [lv["name"], rn]) if rn != "" else String(lv["name"])
-			out.append("     " + (pick % tag))
-			out.append("     %ds \u2014 %s" % [int(lv["duration"]), Challenges.RULE_BLURB[lv["rule"]]])
-			if best > 0:
-				out.append("     best %d%s" % [best, ("   GRADE " + g) if g != "" else ""])
-		if row["mode"] == Mode.RUSH:
-			# The < > only appear on the SELECTED row: arrows you cannot press
-			# yet read as a control that is broken.
-			var pick := "< %s >" if i == _menu_row else "  %s  "
-			out.append("     " + (pick % rush.ability_name()) + "  " + rush.ability_blurb())
-		if row["mode"] == Mode.DAILY:
-			var dm := Daily.mod_for(Daily.today())
-			out.append("     today: %s" % (dm.to_upper() if dm != "" else "no twist"))
-	return "\n".join(out)
+		_mode_chip_labels[i].text = "%s: %s" % [row["label"], state_txt]
+
+		# Colour carries three separate facts, the way the browser's chips do:
+		# which row the caret is on, whether that row is switched ON, and whether
+		# it is playable at all. A row that is merely SELECTED must not look
+		# switched on, or the menu lies about what pressing start will do.
+		var accent: Color = row["accent"]
+		var border: Color
+		var text: Color
+		if not ready_row:
+			border = Color(0.27, 0.27, 0.33, 0.8)
+			text = Color(0.47, 0.47, 0.67)
+		elif on:
+			border = accent
+			text = accent.lerp(Color.WHITE, 0.35)
+		else:
+			border = Color(0.27, 0.27, 0.33)
+			text = Color(0.47, 0.47, 0.67)
+		if picked:
+			border = border.lerp(Color.WHITE, 0.45)
+			text = text.lerp(Color.WHITE, 0.25)
+
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.0, 0.0, 0.0, 0.35)
+		sb.set_border_width_all(2)
+		sb.border_color = border
+		sb.set_corner_radius_all(8)
+		sb.content_margin_left = 18.0
+		sb.content_margin_right = 18.0
+		sb.content_margin_top = 6.0
+		sb.content_margin_bottom = 6.0
+		_mode_chips[i].add_theme_stylebox_override("panel", sb)
+		_mode_chip_labels[i].add_theme_color_override("font_color", text)
+		# The chips override the overlay's inherited neon glow, exactly as the
+		# browser's do (`text-shadow: ${on ? '0 0 12px <accent>' : 'none'}`).
+		# Without this the one orange halo sits on every chip and swamps the
+		# state colours the borders and text are trying to carry — the whole
+		# list went the same shade of orange in the first capture.
+		var glow: Color = Color(accent.r, accent.g, accent.b, 0.5) if on 			else Color(0, 0, 0, 0)
+		_mode_chip_labels[i].add_theme_color_override("font_shadow_color", glow)
+		_mode_chip_labels[i].add_theme_constant_override(
+			"shadow_outline_size", 8 if on else 0)
+
+	_mode_detail.text = _mode_detail_text(_menu_row)
+	# Sit the detail directly beneath the chip it belongs to.
+	_mode_list.move_child(_mode_detail, _menu_row + 1)
+
+## The selected row's own lines — its note, plus whatever that mode needs to
+## say about itself (the challenge level and its record, Rush's ability, the
+## day's twist).
+func _mode_detail_text(i: int) -> String:
+	var row: Dictionary = MODE_ROWS[i]
+	var out := [String(row["note"])]
+	if row["mode"] == Mode.CHALLENGE:
+		var lv := Challenges.get_level(challenge_i)
+		var rec = save.levels.get(String(lv["id"]), {})
+		var g := ""
+		var best := 0
+		if typeof(rec) == TYPE_DICTIONARY:
+			g = String(rec.get("grade", ""))
+			best = int(rec.get("best_score", 0))
+		var rn: String = Challenges.RULE_NAME[lv["rule"]]
+		var tag := ("%s   %s" % [lv["name"], rn]) if rn != "" else String(lv["name"])
+		out.append("< %s >" % tag)
+		out.append("%ds — %s" % [int(lv["duration"]), Challenges.RULE_BLURB[lv["rule"]]])
+		if best > 0:
+			out.append("best %d%s" % [best, ("   GRADE " + g) if g != "" else ""])
+	if row["mode"] == Mode.RUSH:
+		# The < > only appear on the SELECTED row: arrows you cannot press yet
+		# read as a control that is broken.
+		out.append("< %s >  %s" % [rush.ability_name(), rush.ability_blurb()])
+	if row["mode"] == Mode.DAILY:
+		var dm := Daily.mod_for(Daily.today())
+		out.append("today: %s" % (dm.to_upper() if dm != "" else "no twist"))
+	return "
+".join(out)
 
 ## The controls block — its own Label so it can carry the browser's much
 ## smaller, dimmer treatment (9.5px at 0.32 alpha in showTitle()) instead of

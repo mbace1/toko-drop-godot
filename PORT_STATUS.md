@@ -148,16 +148,44 @@ labels, leaving the box holding only `_msg_label`, so they centre
 exactly as before and needed no layout of their own (verified by
 screenshotting a real pause).
 
-**Still open on this screen**, and recorded so it is not re-discovered:
-the browser centres its overlay on the whole viewport (`top:50%`), while
-this port's menu sits around a third of the way down a tall phone
-screen, because the HUD CanvasLayer's fixed 1280x720 reference is
-centred inside a much taller logical viewport. That is pre-existing
-(unchanged since v2.3) and touching the HUD transform is exactly what
-was hard-won in the portrait fix above, so it was deliberately left
-alone rather than destabilised in the same pass. The mode rows are also
-still plain text with a `>` caret rather than the browser's bordered,
-state-coloured chips.
+**The HUD reference now fits on WIDTH, not on `min(width, height)`** —
+and this was the reason everything looked small. Fitting on the smaller
+axis letterboxed the entire UI into a 1280x720 band across the MIDDLE
+28% of a portrait phone: the menu could never be bigger than that band,
+and the two bottom corner readouts sat at 63% of screen height rather
+than at the bottom, because that is where the band ended. Measured, not
+guessed — a debug print in the running Web build gave viewport
+1280x2607 against a 720-tall reference. Fitting on width keeps 1280
+design units == the full screen width on any device (so every size in
+`main.gd` stays in one honest unit) and lets the height be however many
+of those units the screen is tall. Every font size was then re-derived
+from the browser's own: at this scale a design unit is ~0.32 CSS px on a
+412px-wide phone, so the browser's 13-16px overlay text is ~40-50 units,
+roughly double what this port had been using.
+
+**The mode rows are the browser's chips.** Each row is a PanelContainer
+with its own StyleBoxFlat (2px border, translucent black fill, 8px
+radius) built once and re-tinted per redraw, with the selected row's
+detail block moved to sit directly beneath it. Chips override the
+overlay's inherited neon glow exactly as the browser's do
+(`text-shadow: ${on ? '0 0 12px <accent>' : 'none'}`) — without that the
+one orange halo sat on every chip and swamped the state colours.
+
+Fixed in the same pass, and it predates the chips: **the ON/OFF badge
+was lying.** It followed `mode` (the run that happened last) while
+pressing start plays the row the CARET is on, so walking down to DAILY
+RUN left it reading OFF while start would have launched exactly that.
+ON now means "this is what start will play".
+
+**The wordmark is the real `logo.png`**, carried across from the browser
+build rather than set in the body font — it is the one part of the title
+screen typography cannot reproduce, and it is this game's own art from
+the same project. The text headline is kept as a fallback so a failed
+load is a plain title rather than a title screen with no title.
+
+**Still open on this screen**: the browser washes a purple/magenta
+radial gradient behind the logo (`showTitle()`), which this port does
+not draw yet.
 
 **Core loop**
 - Twin-stick movement + mouse/gamepad aim, dash with i-frames, fire-rate
