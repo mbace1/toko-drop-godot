@@ -184,6 +184,18 @@ func _render() -> void:
 	_core.multimesh.visible_instance_count = n
 	_shadow.multimesh.visible_instance_count = n
 
+## Kills every ENEMY bullet in flight and reports how many went. Shared by
+## CLEANSE FOAM (which pays per bullet cleared) and by ROGUELIKE's "clear the
+## air" card, so there is one definition of "an enemy bullet" rather than two.
+func clear_enemy_bullets() -> int:
+	var n := 0
+	for b in active:
+		if not b.alive or b.is_player:
+			continue
+		b.alive = false
+		n += 1
+	return n
+
 func clear() -> void:
 	for i in range(active.size() - 1, -1, -1):
 		_recycle_at(i)

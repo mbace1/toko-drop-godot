@@ -54,6 +54,16 @@ const BOOST_RIM := Color(0.45, 1.0, 1.0)     # invulnerable
 ## Set by main.gd each frame in Rush Mode. `rush_speed_mult` scales movement
 ## for the held boost; `rush_shotgun` swaps the weapon.
 var rush_speed_mult := 1.0
+
+## ROGUELIKE upgrade hooks (browser: `applyUpgrade`, js/main.js). The browser
+## keeps these as `_speedMult` / `_fireRateMult` / `_dashCDMult` /
+## `_dashDurMult` on its player and multiplies the base constants by them, so
+## the constants here stay the source of truth and an upgrade only ever scales
+## them. Reset by `reset()` — a run must never inherit the last run's cards.
+var up_speed_mult := 1.0
+var up_fire_rate_mult := 1.0
+var up_dash_cd_mult := 1.0
+var up_dash_dur_mult := 1.0
 var rush_shotgun := false
 var rush_boosting := false
 
@@ -119,8 +129,10 @@ func grant_fire_rate_boost(t: float) -> void:
 ## player.js: `_fireRateBoost > 0 ? 0.4 : 1` — the SAME multiplier however
 ## the shot got fired (shotgun, SINGLE, RAPID...), applied where each firing
 ## branch sets its own `_fire_t`.
+## Every fire-interval site multiplies by this, so a ROGUELIKE fire-rate card
+## and the timed FIRERATE pickup compose instead of one stomping the other.
 func _fire_rate_scale() -> float:
-	return 0.4 if _fire_rate_boost_t > 0.0 else 1.0
+	return (0.4 if _fire_rate_boost_t > 0.0 else 1.0) * up_fire_rate_mult
 
 func _ready() -> void:
 	build()
@@ -245,6 +257,11 @@ func reset() -> void:
 	mat.set_shader_parameter("rim_color", REST_RIM)
 	_show()
 	visible = true
+	# Cards do not survive a run.
+	up_speed_mult = 1.0
+	up_fire_rate_mult = 1.0
+	up_dash_cd_mult = 1.0
+	up_dash_dur_mult = 1.0
 
 func hit() -> void:
 	if invincible or not alive:
@@ -276,7 +293,7 @@ func dash(aim: Dictionary) -> void:
 		return
 	var valid: bool = aim["valid"]
 	_dash_dir = Vector2(aim["x"], aim["z"]) if valid else _last_aim
-	_dash_time = DASH_DUR
+	_dash_time = DASH_DUR * up_dash_dur_mult
 	_sqv += 0.6
 
 func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, half_x: float, half_z: float) -> void:
@@ -316,14 +333,14 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 		position.z += _dash_dir.y * DASH_SPEED * delta
 		_blink(_dash_time, DASH_BLINK_HZ)
 		if _dash_time <= 0.0:
-			_dash_cd = DASH_CD
+			_dash_cd = DASH_CD * up_dash_cd_mult
 			if _mercy_t <= 0.0:
 				_show()
 	else:
 		# Rush's boost is a HELD state, not a blink: it scales walking speed for
 		# as long as it is held, rather than firing a 0.18s burst.
-		position.x += move.x * SPEED * rush_speed_mult * delta
-		position.z += move.y * SPEED * rush_speed_mult * delta
+		position.x += move.x * SPEED * rush_speed_mult * up_speed_mult * delta
+		position.z += move.y * SPEED * rush_speed_mult * up_speed_mult * delta
 
 	if _mercy_t > 0.0:
 		_mercy_t -= delta

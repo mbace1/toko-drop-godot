@@ -74,6 +74,7 @@ func _process(_delta: float) -> bool:
 	_test_tentacles()
 	_test_font_glyphs()
 	_test_drips()
+	_test_roguelike()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1666,6 +1667,87 @@ func _test_kill_scoring() -> void:
 ## the lifecycle that produces it rather than any particular look: a droplet
 ## falls, it stops at the floor instead of through it, it turns into a
 ## spreading splat, and it eventually goes away instead of accumulating.
+## ROGUELIKE — ported from the browser, which is the LEAD build for gameplay.
+## Its rule is "upgrade cards every 3rd wave", and the cards' numbers are its
+## numbers (js/main.js `applyUpgrade`).
+func _test_roguelike() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	main.mode = main.Mode.ROGUELIKE
+	main.player.reset()
+
+	# The offer is drawn from the RUN'S stream, so a seed decides which cards
+	# you are shown — two players on one seed must see the same choices.
+	var a := RandomNumberGenerator.new()
+	a.seed = 12345
+	var b := RandomNumberGenerator.new()
+	b.seed = 12345
+	var oa := Upgrades.draw_offer(a, [])
+	var ob := Upgrades.draw_offer(b, [])
+	_check(oa.size() == Upgrades.OFFER_SIZE, "an offer holds three cards")
+	var same := true
+	for i in oa.size():
+		if oa[i]["id"] != ob[i]["id"]:
+			same = false
+	_check(same, "and the same seed offers the same cards")
+	var distinct := {}
+	for c in oa:
+		distinct[c["id"]] = true
+	_check(distinct.size() == oa.size(), "with no card repeated inside one offer")
+
+	# The card effects are the browser's numbers.
+	var p = main.player
+	var hp0: int = p.max_hp
+	Upgrades.apply("hp", p, main.bullets)
+	_check(p.max_hp == hp0 + 1, "VITALITY raises max HP by 1")
+
+	Upgrades.apply("speed", p, main.bullets)
+	_check(is_equal_approx(p.up_speed_mult, 1.2), "QUICK FEET is x1.2 move speed")
+
+	Upgrades.apply("firerate", p, main.bullets)
+	_check(is_equal_approx(p.up_fire_rate_mult, 0.8),
+		"TRIGGER is x0.8 fire interval")
+
+	# The floors the browser puts on the two dash cards.
+	for _i in 20:
+		Upgrades.apply("dashcd", p, main.bullets)
+	_check(p.up_dash_cd_mult >= 0.2 - 0.0001,
+		"dash cooldown stacks down to a floor of 0.2, never past it")
+	for _i in 20:
+		Upgrades.apply("longdash", p, main.bullets)
+	_check(p.up_dash_dur_mult <= 1.7 + 0.0001,
+		"and dash duration stacks up to a ceiling of 1.7")
+
+	# A cursed card really costs something.
+	var hp1: int = p.max_hp
+	Upgrades.apply("x_berserk", p, main.bullets)
+	_check(p.max_hp == hp1 - 1, "BERSERK pays for its fire rate with max HP")
+
+	# NUKE clears enemy fire but never the player's own.
+	main.bullets.clear()
+	main.bullets.spawn_dir(0.0, 0.0, 1.0, 0.0, false)
+	main.bullets.spawn_dir(0.0, 0.0, 1.0, 0.0, true)
+	Upgrades.apply("nuke", p, main.bullets)
+	var enemy_left := 0
+	var player_left := 0
+	for bl in main.bullets.active:
+		if not bl.alive:
+			continue
+		if bl.is_player:
+			player_left += 1
+		else:
+			enemy_left += 1
+	_check(enemy_left == 0, "CLEAR THE AIR wipes enemy bullets")
+	_check(player_left == 1, "and leaves the player's own alone")
+
+	# A new run must not inherit the last run's cards.
+	p.reset()
+	_check(is_equal_approx(p.up_speed_mult, 1.0)
+			and is_equal_approx(p.up_fire_rate_mult, 1.0),
+		"and a fresh run starts with no upgrades carried over")
+
+	main.queue_free()
+
 func _test_drips() -> void:
 	var d := DripPool.new()
 	get_root().add_child(d)
@@ -1911,6 +1993,11 @@ func _test_gates_wiring() -> void:
 
 	# Dash through a plain (non-RISK) gate: pays out one buff pickup.
 	var g0 = main.gates[0]
+	# Force it plain. A RISK gate on green pays TWO pods, and whether gates[0]
+	# spawned as RISK is a seeded 35% roll — so without this the assertion
+	# below fails intermittently. Caught 2026-08-27 as a one-in-several flake;
+	# the game was right and the test was assuming.
+	g0.risk = false
 	main.player.position = g0.position
 	main.player._dash_time = 0.5
 	main.pods.clear()

@@ -48,7 +48,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "3.0"
+const VERSION := "3.1"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -61,7 +61,7 @@ const VOID_COLOR := Color(0.051, 0.051, 0.102)
 
 const FLOOR_SHADER := preload("res://shaders/floor_grid.gdshader")
 
-enum State { MENU, PLAYING, PAUSED, DEAD }
+enum State { MENU, PLAYING, PAUSED, DEAD, CARDS }
 
 ## The front-page mode list, in the browser build's order: ROGUELIKE MODE
 ## first, RUSH MODE directly under it (owner direction, 2026-08-24).
@@ -87,7 +87,10 @@ const MODE_ROWS := [
 	{"mode": Mode.CLASSIC, "label": "CLASSIC MODE",
 	 "note": "the original run — dash, guns, a climbing streak", "ready": true, "accent": Color(0.40, 0.80, 1.00)},
 	{"mode": Mode.ROGUELIKE, "label": "ROGUELIKE MODE",
-	 "note": "no upgrades — pure arcade survival", "ready": false, "accent": Color(0.00, 1.00, 0.80)},
+	 # The browser's own text for mode A. This row previously read "no upgrades
+	 # — pure arcade survival", which is its text for the mode being OFF: the
+	 # row described the ABSENCE of the feature as though it were the feature.
+	 "note": "upgrade cards every 3rd wave", "ready": true, "accent": Color(0.00, 1.00, 0.80)},
 	{"mode": Mode.RUSH, "label": "RUSH MODE",
 	 "note": "boost to kill — shoot and you lose your shield", "ready": true, "accent": Color(1.00, 0.53, 0.27)},
 	{"mode": Mode.CHALLENGE, "label": "CHALLENGES",
@@ -210,6 +213,12 @@ var _cta_label: Label
 var _controls_label: Label
 var _menu_box: VBoxContainer
 var _menu_center: CenterContainer
+## ROGUELIKE card draft. The browser pauses the run and shows three
+## cards every 3rd wave; picking one resumes. `_cards` is the current
+## offer, `_taken` the run's collected ids (its `collectedUpgrades`).
+var _cards: Array = []
+var _taken: Array = []
+var _card_row := 0
 var _logo: TextureRect
 var _logo_glow: TextureRect
 var _logo_wrap: Control
@@ -950,6 +959,17 @@ func _process(delta: float) -> void:
 	match state:
 		State.PLAYING:
 			_process_playing(delta)
+		State.CARDS:
+			# The draft holds the run. Nothing else steps while it is open, so
+			# the arena is frozen behind it exactly as pause is.
+			if Input.is_action_just_pressed("move_down"):
+				_card_row = mini(_card_row + 1, _cards.size() - 1)
+				_render_cards()
+			elif Input.is_action_just_pressed("move_up"):
+				_card_row = maxi(_card_row - 1, 0)
+				_render_cards()
+			elif input_mgr.dash_pressed() or Input.is_action_just_pressed("fire"):
+				_take_card()
 		State.MENU, State.DEAD:
 			# Up/down walks the mode rows; anything else starts the run.
 			# Left/right picks the Rush ability, so the choice is made before
@@ -1307,12 +1327,7 @@ func _update_foam_zones(delta: float) -> void:
 			fz.queue_free()
 
 func _cleanse_foam(fz: FoamZone) -> void:
-	var n := 0
-	for b in bullets.active:
-		if not b.alive or b.is_player:
-			continue
-		b.alive = false
-		n += 1
+	var n := bullets.clear_enemy_bullets()
 	debris.burst(fz.position.x, fz.position.z, 10, Color(0.8, 0.965, 1.0), 0.1, 3.0, 2.5)
 	_add_score(500 + n * 10)   # main.js: "pays per bullet cleared"
 	add_shake(0.18)
@@ -1878,6 +1893,47 @@ func _on_wave_cleared(n: int) -> void:
 	_wave_peak = 0
 	_add_score(50 * n)
 	audio.play("wave")
+	# ROGUELIKE: the browser offers upgrade cards every 3rd wave and holds the
+	# run until you pick (js/main.js: `roguelikeMode && wave % 3 === 0`).
+	if mode == Mode.ROGUELIKE and n % Upgrades.EVERY_N_WAVES == 0:
+		_offer_cards()
+		return
+	waves.start_wave()
+
+## Opens the draft. The run does not advance until a card is taken — the next
+## wave starts from `_take_card`, not from here.
+func _offer_cards() -> void:
+	_cards = Upgrades.draw_offer(waves.rng, _taken)
+	if _cards.is_empty():
+		waves.start_wave()
+		return
+	_card_row = 0
+	state = State.CARDS
+	_render_cards()
+	_menu_chrome(false)
+	_mode_list.hide()
+	_msg_label.show()
+
+func _render_cards() -> void:
+	var out := ["CHOOSE AN UPGRADE", ""]
+	for i in _cards.size():
+		var c: Dictionary = _cards[i]
+		var caret := ">" if i == _card_row else " "
+		out.append("%s  %s" % [caret, c["name"]])
+		out.append("     %s" % c["blurb"])
+	out.append("")
+	out.append("up / down to choose, FIRE or DASH to take it")
+	_msg_label.text = "
+".join(out)
+
+func _take_card() -> void:
+	var c: Dictionary = _cards[_card_row]
+	_taken.append(c["id"])
+	Upgrades.apply(String(c["id"]), player, bullets)
+	_cards.clear()
+	_msg_label.hide()
+	state = State.PLAYING
+	audio.play("wave")
 	waves.start_wave()
 
 func _on_player_dead() -> void:
@@ -2221,7 +2277,10 @@ func _update_hud() -> void:
 		return
 	# The stat row belongs to a RUN. On the title screen it was reporting
 	# "WAVE 0" over the mode list, which reads as a game already in progress.
-	var in_run := state == State.PLAYING or state == State.PAUSED or state == State.DEAD
+	# CARDS counts as in-run: the ROGUELIKE draft holds the run open, and the
+	# browser keeps its HUD up behind the card screen. Without this the wave,
+	# score and HP all vanish the moment the draft opens.
+	var in_run := state != State.MENU
 	_hp_label.visible = in_run
 	_wave_label.visible = in_run
 	_score_label.visible = in_run

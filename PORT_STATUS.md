@@ -794,8 +794,26 @@ and Rush landed there as v224 the same day. **Audit the DEPLOYED tree, not a
 local `main`**, because for this project `main` is not where the game lives.
 
 What survives the correction:
-- **ROGUELIKE is still the one real follow-the-lead gap.** The browser has
-  shipped it; this port still shows it as "SOON". That is the mode to port.
+- ~~**ROGUELIKE is the one real follow-the-lead gap.**~~ **Ported
+  2026-08-27** (mode A). The browser's rule is "upgrade cards every 3rd
+  wave"; `scripts/upgrades.gd` carries the card catalogue with the browser's
+  own ids and numbers, `main.gd` gains a `State.CARDS` draft that holds the
+  run until you pick, and the mode row is playable.
+  **A labelling bug went with it:** the row read *"no upgrades — pure arcade
+  survival"*, which is the browser's text for the mode being **OFF**. The row
+  was describing the ABSENCE of the feature as though it were the feature.
+  **Ported: 8 of 20 cards.** The ones whose hooks exist here — hp, speed,
+  firerate, dashcd, longdash, nuke, and the cursed x_berserk / x_leadfeet.
+  The other twelve are listed in `Upgrades.PENDING` rather than dropped,
+  because they need systems this port does not have yet (bullet scale and
+  piercing on the pool; magnet/shield/dashboom player state; graze, vampire,
+  ripple, tiredlegs, minnow and the remaining cursed pair need scoring and
+  hit hooks). An unported card must never look implemented, so `PENDING` is
+  not drawn from.
+  **Not ported: mode B**, the browser's "cards + rare BONUS GAUNTLET runs".
+  Also found and fixed while wiring it: `State.CARDS` was not counted as
+  "in a run", so the whole HUD vanished the moment the draft opened — caught
+  by forcing the draft open and looking at it, not by any assertion.
 - **CHALLENGES is still Godot-only** — no `challengeMode`, no campaign
   machinery upstream at all — and it was designed in THIS repo
   (`design/CAMPAIGN_LEVELS.md`, `design/RUSH_TIERS_AND_LEVELS.md`). That is
