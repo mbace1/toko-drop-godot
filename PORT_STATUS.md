@@ -775,22 +775,37 @@ leads on gameplay; this build leads on look, feel and physics; a feature is
 never designed twice. Auditing this port against that rule turns up drift
 that PREDATES it, so it is recorded rather than quietly acted on:
 
-| mode | browser build | this port |
+**Corrected the same day — read the method note below before trusting any
+audit like this one.**
+
+| mode | browser build (deployed) | this port |
 |---|---|---|
 | CLASSIC | yes (default) | yes |
-| ROGUELIKE | **yes, shipped** (`roguelikeMode`, a 3-state OFF/A/B toggle, `main.js` ~1958) | **"SOON" — not ported** |
+| ROGUELIKE | **yes, shipped** (`roguelikeMode`, a 3-state OFF/A/B toggle) | **"SOON" — not ported** |
 | DAILY RUN | yes (`dailyMode`) | yes |
-| RUSH | **no — does not exist** | yes, fully built |
-| CHALLENGES | **no — does not exist** | yes, a whole campaign |
+| RUSH | **yes — shipped as v224**, "boost is the answer, the gun is the fallback" (PR #308) | yes |
+| CHALLENGES | **no — still does not exist** | yes, a whole campaign |
 
-So the port both LACKS a mode the lead build ships and CARRIES two modes the
-lead build has never had. RUSH and the CHALLENGE campaign were designed in
-THIS repo — `design/RUSH_MODE.md`, `design/RUSH_TIERS_AND_LEVELS.md`,
-`design/CAMPAIGN_LEVELS.md`, `design/RUSH_MODE_ACCEPTANCE.md` — which is
-exactly the "designed twice, in the wrong place" shape the new rule exists to
-prevent. Verified by grep, not assumed: `main.js` contains no `rushMode` and
-no challenge/campaign machinery at all; its only "RUSH" is an unrelated
-`'GREEN RUSH! DOUBLE PRIZE'` milestone banner.
+**Method note, and it is the point of this entry.** The first version of this
+table said RUSH did not exist upstream. That was wrong within the hour: it was
+grepped against a local clone of `mbace1/Suds-Jack` sitting on `main`, which
+was many commits behind, while the game actually ships from **`gh-pages`** —
+and Rush landed there as v224 the same day. **Audit the DEPLOYED tree, not a
+local `main`**, because for this project `main` is not where the game lives.
+
+What survives the correction:
+- **ROGUELIKE is still the one real follow-the-lead gap.** The browser has
+  shipped it; this port still shows it as "SOON". That is the mode to port.
+- **CHALLENGES is still Godot-only** — no `challengeMode`, no campaign
+  machinery upstream at all — and it was designed in THIS repo
+  (`design/CAMPAIGN_LEVELS.md`, `design/RUSH_TIERS_AND_LEVELS.md`). That is
+  the remaining piece sitting on the wrong side of the "never design a
+  feature twice" line, and it is the owner's to settle: migrate it upstream,
+  grandfather it as Godot-only and say so in both repos, or retire it.
+- **RUSH resolved itself the right way round** — the design went upstream and
+  shipped there. Whatever this port does with Rush from now on is a port of a
+  browser feature, not a second design, and the two should be reconciled
+  against v224 rather than assumed to match.
 
 **This is the owner's to settle, and nothing here should be extended until
 they do.** The three obvious options, none of them free:

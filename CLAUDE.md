@@ -32,14 +32,21 @@ So the honest test for any change here is: *is this a look/feel/physics
 push, or is it a new verb?* The first belongs here. The second belongs in
 `mbace1/Suds-Jack` first, and is ported back afterwards.
 
-**Known drift that predates this direction, and is the owner's to settle
-(see `PORT_STATUS.md`'s "Modes that exist only here"):** RUSH MODE and the
-CHALLENGE campaign were designed in THIS repo (`design/RUSH_MODE.md`,
-`design/RUSH_TIERS_AND_LEVELS.md`, `design/CAMPAIGN_LEVELS.md`) and do not
-exist in the browser build at all, while ROGUELIKE — which the browser has
-shipped — is still a "SOON" row here. That is precisely the shape this rule
-exists to prevent. Do not extend those modes further without asking; port
-ROGUELIKE and keep new verbs upstream.
+**When auditing this port against the browser, grep the DEPLOYED tree.**
+The game ships from `mbace1/Suds-Jack`'s **`gh-pages`** branch, not `main`,
+and a local clone sitting on `main` can be many commits behind. An audit
+here got this wrong once and reported a mode as missing upstream that had
+shipped there the same day — see `PORT_STATUS.md`'s "Modes that exist only
+here" for the corrected table.
+
+**Known drift, the owner's to settle:** the CHALLENGE campaign exists only
+in THIS repo (`design/CAMPAIGN_LEVELS.md`, `design/RUSH_TIERS_AND_LEVELS.md`)
+with no `challengeMode` upstream at all — the shape this rule exists to
+prevent. ROGUELIKE is the mirror image: shipped in the browser, still a
+"SOON" row here, and the one clear follow-the-lead port waiting. RUSH is
+settled — it went upstream and shipped as v224, so anything this port does
+with Rush now is a port, not a second design, and should be reconciled
+against that version rather than assumed to match.
 
 Read in this order before changing anything:
 
