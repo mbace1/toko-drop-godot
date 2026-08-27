@@ -107,6 +107,58 @@ been a first CLASSIC run). Both true, both in `main.gd`, both fixed
   subtitle, ahead of the mode-row list — main.js's own order (logo, subtitle,
   best score, tap-to-start, mode toggles, controls).
 
+**Typography and menu hierarchy** (2026-08-27) — found by serving BOTH
+builds locally and capturing them at the same Pixel-7 profile, rather
+than by reading either one's source. Two things were making the port
+read as a different game in a side-by-side:
+- **No font.** The browser sets `font-family: monospace` on its whole
+  overlay (`index.html` `#overlay`) and every screen is that face. This
+  port had no font resource at all, so it rendered in Godot's default
+  proportional sans. JetBrains Mono Regular (SIL OFL 1.1) is now bundled
+  at `assets/fonts/`, with `OFL.txt` beside it because that license
+  requires the license to travel with the font.
+  **`SystemFont` is a trap here** and was tried first: it resolves fine
+  on desktop and silently resolves to NOTHING in a Web export, because
+  the browser sandbox gives Godot no OS font access — so the one platform
+  this ships on was the one platform where it did nothing. Only exporting
+  and screenshotting showed that; a headless test cannot see it.
+- **No glow.** `#overlay` carries `text-shadow: 0 0 24px #ff4422, 0 0
+  60px #aa00ff`, which is most of why the browser's menus read as lit
+  signage. Ported as a soft zero-offset shadow.
+
+`scripts/theme_kit.gd` (ThemeKit) owns both so `main.gd` and
+`touch_sticks.gd` cannot drift into two typefaces. It deliberately has
+TWO looks because the browser does: overlay text glows, the in-game HUD
+does not — the HUD is painted on a separate `#canvas-ui` 2D context
+(`main.js` ~4136) in flat `rgba(255,255,255,0.55)` and never sees the
+overlay's CSS. Glowing the HUD made it read as hot orange signage over
+the arena; a screenshot of a real run is what caught it.
+
+**The menu is a container now.** The browser builds its title hierarchy
+out of SIZE and OPACITY (subtitle 13px/0.5, call-to-action 16px/0.85,
+mode chips 14px bold, hints 11px/0.45, controls 9.5px/0.32 — see
+`showTitle()`); this port had all of it in one Label at one size, which
+is what "still hard to read" was pointing at. It is now five Labels in a
+`VBoxContainer` — title, subtitle, CTA, the mode list, controls. Using a
+container rather than hand-placed offsets is the point: the previous
+pass positioned the title by reading the message body's height on every
+redraw, and every new line of menu text was another chance for that
+arithmetic to be wrong. Pause/death/recap screens hide the other four
+labels, leaving the box holding only `_msg_label`, so they centre
+exactly as before and needed no layout of their own (verified by
+screenshotting a real pause).
+
+**Still open on this screen**, and recorded so it is not re-discovered:
+the browser centres its overlay on the whole viewport (`top:50%`), while
+this port's menu sits around a third of the way down a tall phone
+screen, because the HUD CanvasLayer's fixed 1280x720 reference is
+centred inside a much taller logical viewport. That is pre-existing
+(unchanged since v2.3) and touching the HUD transform is exactly what
+was hard-won in the portrait fix above, so it was deliberately left
+alone rather than destabilised in the same pass. The mode rows are also
+still plain text with a `>` caret rather than the browser's bordered,
+state-coloured chips.
+
 **Core loop**
 - Twin-stick movement + mouse/gamepad aim, dash with i-frames, fire-rate
   gated shooting — `scripts/player.gd`, numbers from `js/player.js`

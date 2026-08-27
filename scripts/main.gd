@@ -204,6 +204,10 @@ var _wave_label: Label
 var _score_label: Label
 var _msg_label: Label
 var _title_label: Label
+var _subtitle_label: Label
+var _cta_label: Label
+var _controls_label: Label
+var _menu_box: VBoxContainer
 
 ## main.js's own check, ported verbatim: the ACTUAL device/window aspect,
 ## not a stored preference — a game that opens portrait and gets rotated
@@ -550,33 +554,59 @@ func _setup_hud() -> void:
 	_death_wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(_death_wash)
 
-	# main.js's title screen has real visual HIERARCHY — a huge glowing
-	# hand-drawn "TOKO DROP" logo, then much smaller plain text for
-	# everything else. This port's menu was one Label at one font size
-	# throughout, with no size/colour contrast at all — a real gap a real
-	# phone's "still hard to read" report pointed at (2026-08-27). A
-	# separate, big, warm-gold title label is the cheapest way to actually
-	# emulate that hierarchy without rebuilding the menu as BBCode/rich
-	# text (a bigger, riskier change to a control several other screens —
-	# pause, death, level-end — already depend on behaving exactly as a
-	# plain Label).
+	# main.js's title screen builds its hierarchy out of SIZE and OPACITY, not
+	# out of one wall of text: the subtitle is 13px at 0.5 alpha, the call to
+	# action 16px at 0.85, the mode chips 14px bold, each chip's hint 11px at
+	# 0.45, and the controls block 9.5px at 0.32 (showTitle(), js/main.js).
+	# This port had all of it in a single Label at one size and one colour,
+	# which is what a real phone's "still hard to read" report was pointing at.
+	#
+	# The five parts are five Labels stacked in a VBoxContainer rather than
+	# hand-positioned. That is deliberate: an earlier pass positioned the title
+	# against the message body by reading its height every redraw, and every
+	# new line of menu text was another chance for that arithmetic to be wrong.
+	# A container cannot get it wrong. It also means the pause/death/recap
+	# screens still work unchanged — they hide the other four labels, the box
+	# is then just _msg_label, and it centres exactly as it did before.
+	_menu_box = VBoxContainer.new()
+	_menu_box.set_anchors_preset(Control.PRESET_CENTER)
+	_menu_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_menu_box.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_menu_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_menu_box.add_theme_constant_override("separation", 10)
+	_menu_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(_menu_box)
+
 	_title_label = _make_label(56)
 	_title_label.text = "TOKO DROP"
 	_title_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.267))
-	_title_label.set_anchors_preset(Control.PRESET_CENTER)
-	_title_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_title_label.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title_label.hide()
-	hud.add_child(_title_label)
+	_menu_box.add_child(_title_label)
 
-	_msg_label = _make_label(28)
-	_msg_label.set_anchors_preset(Control.PRESET_CENTER)
-	_msg_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_msg_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_subtitle_label = _make_label(19)
+	_subtitle_label.text = "TWIN-STICK SWARM SURVIVAL"
+	_subtitle_label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.5))
+	_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_subtitle_label.hide()
+	_menu_box.add_child(_subtitle_label)
+
+	_cta_label = _make_label(24)
+	_cta_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.85))
+	_cta_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cta_label.hide()
+	_menu_box.add_child(_cta_label)
+
+	_msg_label = _make_label(22)
 	_msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	hud.add_child(_msg_label)
+	_menu_box.add_child(_msg_label)
+
+	_controls_label = _make_label(15)
+	_controls_label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.4))
+	_controls_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_controls_label.hide()
+	_menu_box.add_child(_controls_label)
 
 	# The corners the browser build uses: version and frame rate bottom-left,
 	# the run seed bottom-right.
@@ -658,7 +688,7 @@ func _build_feedback_panel() -> void:
 	# SKIP sends nothing. Explicit consent by design.
 	skip.pressed.connect(func():
 		_fb_panel.hide()
-		_msg_label.position.y = 0.0)
+		_menu_box.position.y = 0.0)
 	row.add_child(skip)
 
 	_fb_status = _make_label(14)
@@ -700,7 +730,9 @@ func _open_feedback() -> void:
 	_fb_panel.show()
 	# The panel owns the bottom of the screen while it is open, so lift the
 	# summary clear of it — the retry line was being printed underneath it.
-	_msg_label.position.y = -120.0
+	# The shift goes on the BOX: _msg_label is a container child now, and a
+	# container overwrites any position you set on its children.
+	_menu_box.position.y = -120.0
 
 func _send_feedback() -> void:
 	var run := {
@@ -714,7 +746,7 @@ func _send_feedback() -> void:
 	_fb_status.text = "" if r == "" else "saved — thank you"
 	if r != "":
 		_fb_panel.hide()
-		_msg_label.position.y = 0.0
+		_menu_box.position.y = 0.0
 
 ## Typography lives in `theme_kit.gd` (ThemeKit) so main.gd and touch_sticks.gd
 ## cannot drift into two different typefaces — see that file for why the font is
@@ -739,7 +771,7 @@ func _process(delta: float) -> void:
 	if input_mgr.pause_pressed():
 		if state == State.PLAYING:
 			state = State.PAUSED
-			_title_label.hide()
+			_menu_chrome(false)
 			_msg_label.text = "PAUSED\n\npress PAUSE to resume"
 			_msg_label.show()
 		elif state == State.PAUSED:
@@ -765,23 +797,19 @@ func _process(delta: float) -> void:
 					if Challenges.unlocked(challenge_i, save):
 						break
 				_msg_label.text = _menu_text()
-				_position_title()
 				return
 			if MODE_ROWS[_menu_row]["mode"] == Mode.RUSH \
 					and (Input.is_action_just_pressed("move_left") \
 					or Input.is_action_just_pressed("move_right")):
 				rush.cycle_ability(1 if Input.is_action_just_pressed("move_right") else -1)
 				_msg_label.text = _menu_text()
-				_position_title()
 				return
 			if Input.is_action_just_pressed("move_down"):
 				_menu_row = mini(_menu_row + 1, MODE_ROWS.size() - 1)
 				_msg_label.text = _menu_text()
-				_position_title()
 			elif Input.is_action_just_pressed("move_up"):
 				_menu_row = maxi(_menu_row - 1, 0)
 				_msg_label.text = _menu_text()
-				_position_title()
 			elif input_mgr.dash_pressed() or Input.is_action_just_pressed("fire") \
 					or input_mgr.left.active or input_mgr.right.active:
 				var row: Dictionary = MODE_ROWS[_menu_row]
@@ -1475,7 +1503,7 @@ func _start_game() -> void:
 	graze_count = 0
 	_weapon_name = "SINGLE"
 	waves.start_wave()
-	_title_label.hide()
+	_menu_chrome(false)
 	_msg_label.hide()
 
 ## Capture-only: fast-forward the director so tools/capture.gd can photograph
@@ -1580,7 +1608,7 @@ func _finish_challenge() -> void:
 		out.append("tier C or better opens the next level")
 	out.append("")
 	out.append("tap, or press FIRE / DASH, to try again")
-	_title_label.hide()
+	_menu_chrome(false)
 	_msg_label.text = "
 ".join(out)
 	_msg_label.show()
@@ -1730,25 +1758,19 @@ func _on_player_dead() -> void:
 	out.append("SEED %s" % waves.seed_text())
 	out.append("")
 	out.append("tap, or press FIRE / DASH, to retry")
-	_title_label.hide()
+	_menu_chrome(false)
 	_msg_label.text = "
 ".join(out)
 	_msg_label.show()
 	_open_feedback()
 
-## _title_label and _msg_label share ONE anchor point (hud's own centre)
-## the same way main.js's #overlay is a SINGLE centered div (index.html:
-## `top:50%; left:50%; transform:translate(-50%,-50%)`) — the title and the
-## menu text move together as one block. Two independent Controls can't
-## share a container without a bigger restructure, so this stacks them by
-## reading each other's actual (post-text) height every time the menu text
-## changes, rather than a fixed pixel guess that only matched one row count.
-func _position_title() -> void:
-	if _title_label == null or not _title_label.visible:
-		return
-	var msg_h := _msg_label.get_minimum_size().y
-	var title_h := _title_label.get_minimum_size().y
-	_title_label.position.y = -(msg_h * 0.5 + title_h * 0.5 + 24.0)
+## Every screen that is NOT the title hides the menu-only chrome, leaving the
+## box holding just _msg_label — which then centres exactly the way the single
+## label used to, so pause/death/recap need no layout of their own.
+func _menu_chrome(on: bool) -> void:
+	for l in [_title_label, _subtitle_label, _cta_label, _controls_label]:
+		if l != null:
+			l.visible = on
 
 func _show_menu() -> void:
 	state = State.MENU
@@ -1758,9 +1780,10 @@ func _show_menu() -> void:
 		if MODE_ROWS[r]["ready"]:
 			_menu_row = r
 			break
-	_title_label.show()
+	_menu_chrome(true)
+	_cta_label.text = "TAP, OR PRESS FIRE / DASH, TO START"
+	_controls_label.text = _controls_text()
 	_msg_label.text = _menu_text()
-	_position_title()
 	_msg_label.show()
 	# NOT _open_feedback() — this is the fresh title screen, not a death
 	# recap, and _open_feedback() asks a question keyed off whatever run
@@ -1769,19 +1792,20 @@ func _show_menu() -> void:
 	# found 2026-08-26 on a real phone. Defensively reset rather than trust
 	# nothing else left it open.
 	_fb_panel.hide()
-	_msg_label.position.y = 0.0
+	_menu_box.position.y = 0.0
 
 ## The title screen, built as text so it reflows on a phone without a layout
 ## pass. The selected mode row is marked with a caret, the same way the
 ## browser hub marks its selection.
 func _menu_text() -> String:
-	var out := ["twin-stick swarm survival", ""]
+	var out := []
 	save.mode = _menu_mode_key()
+	# Subtitle and the call to action are their OWN labels now (_subtitle_label
+	# / _cta_label) so they can carry the browser's own sizes; only the best
+	# score and the mode rows are left in this string.
 	if save.hi_score > 0:
-		out.append("best %d" % save.hi_score)
+		out.append("BEST %d" % save.hi_score)
 		out.append("")
-	out.append("tap, or press FIRE / DASH, to start")
-	out.append("")
 	for i in MODE_ROWS.size():
 		var row: Dictionary = MODE_ROWS[i]
 		var caret := ">" if i == _menu_row else " "
@@ -1818,13 +1842,19 @@ func _menu_text() -> String:
 		if row["mode"] == Mode.DAILY:
 			var dm := Daily.mod_for(Daily.today())
 			out.append("     today: %s" % (dm.to_upper() if dm != "" else "no twist"))
-	out.append("")
-	out.append("touch — left thumb moves, right thumb aims and fires")
-	out.append("rush — hold BOOST to kill on contact; firing drops your shield")
-	out.append("keys \u2014 WASD move, hold LMB to aim and fire, SPACE dash")
-	out.append("pad \u2014 sticks move and aim, A dash, Start pause")
-	out.append("")
 	return "\n".join(out)
+
+## The controls block — its own Label so it can carry the browser's much
+## smaller, dimmer treatment (9.5px at 0.32 alpha in showTitle()) instead of
+## sharing the mode list's size, which is what flattened this screen before.
+func _controls_text() -> String:
+	return "
+".join([
+		"touch — left thumb moves, right thumb aims and fires",
+		"rush — hold BOOST to kill on contact; firing drops your shield",
+		"keys \u2014 WASD move, hold LMB to aim and fire, SPACE dash",
+		"pad \u2014 sticks move and aim, A dash, Start pause",
+	])
 
 ## Which save bucket the CURRENT run belongs to, and which the menu should
 ## quote a best from. Helpers rather than inline ternaries so that no call
