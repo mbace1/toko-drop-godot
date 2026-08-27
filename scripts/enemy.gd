@@ -235,6 +235,13 @@ func setup(p_color: Color, p_radius: float, p_speed: float, p_hp: int, is_cube: 
 	mat.set_shader_parameter("gel_color", color)
 	mat.set_shader_parameter("rim_color", color.lightened(0.55))
 	mat.set_shader_parameter("wobble_amp", 0.0 if is_cube else 1.0)
+	# Dew on the JELL-O bodies only (PORT_BRIEF.md §3). The cube family is the
+	# same gel but reads as solid, and beads of condensation on a hard-edged
+	# block read as dirt rather than as something moist — the same reason the
+	# cubes do not drip.
+	mat.set_shader_parameter("dew_amount", 0.0 if is_cube else 0.42)
+	# Tiled in UV, so a bigger body must not get bigger beads.
+	mat.set_shader_parameter("dew_tiling", 13.0)
 	mat.set_shader_parameter("alpha_amt", _base_alpha)
 	mesh.material_override = mat
 	add_child(mesh)

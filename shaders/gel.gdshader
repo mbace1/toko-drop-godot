@@ -55,6 +55,21 @@ uniform float wobble_time : hint_range(0.0, 1000.0) = 0.0;
 uniform float wobble_amp : hint_range(0.0, 1.0) = 1.0;
 uniform float hit_wobble : hint_range(0.0, 1.0) = 0.0;
 
+// Dew — PORT_BRIEF.md §3's static half: "a static normal map of droplet bumps
+// (`fract`-tiled hemispheres) on the gel material gives the glistening dew
+// without particles". Generated in-shader rather than authored as a texture:
+// it is a lattice of hemispheres, which is cheaper to compute than to sample,
+// carries no asset, and can be tuned live from a uniform.
+//
+// `dew_amount` is 0 by default so nothing that does not opt in changes look.
+uniform float dew_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float dew_tiling : hint_range(1.0, 64.0) = 16.0;
+uniform float dew_size : hint_range(0.05, 0.5) = 0.30;
+
+float dew_hash1(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
 void vertex() {
 	vec3 p = VERTEX;
 	float b = (sin(p.y * 3.8 + wobble_time * 5.2) * 0.22
@@ -75,6 +90,32 @@ void fragment() {
 
 	CLEARCOAT = clearcoat_amt;
 	CLEARCOAT_ROUGHNESS = clearcoat_rough;
+
+	// Scatter droplet bumps across the surface. Each cell holds one hemisphere
+	// at a jittered offset with its own radius, so the lattice does not read as
+	// a grid. Outside a droplet the normal stays flat, so this can never
+	// disturb the silhouette shading it is sitting on top of.
+	if (dew_amount > 0.001) {
+		vec2 duv = UV * dew_tiling;
+		vec2 cell = floor(duv);
+		vec2 f = fract(duv) - 0.5;
+		vec2 jit = (vec2(dew_hash1(cell), dew_hash1(cell + 19.7)) - 0.5) * 0.55;
+		vec2 d = f - jit;
+		float rad = dew_size * (0.55 + 0.85 * dew_hash1(cell + 83.3));
+		float r = length(d) / max(rad, 0.001);
+		vec3 n = vec3(0.0, 0.0, 1.0);
+		float inside = 1.0 - smoothstep(0.82, 1.0, r);
+		if (r < 1.0) {
+			// Hemisphere: the further from the centre, the more the normal
+			// tips outward; height falls off as sqrt so the bead reads round.
+			n = normalize(vec3(d / max(rad, 0.001), sqrt(max(1.0 - r * r, 0.0)) + 0.35));
+		}
+		NORMAL_MAP = n * 0.5 + 0.5;
+		NORMAL_MAP_DEPTH = dew_amount;
+		// A bead of water is glossier than the body under it — that contrast
+		// IS the glisten. Without it the bumps read as texture, not as wet.
+		ROUGHNESS = mix(roughness_amt, roughness_amt * 0.25, inside * dew_amount);
+	}
 
 	// 0 through the middle of the body, 1 at the silhouette.
 	float thin = 1.0 - abs(dot(normalize(NORMAL), normalize(VIEW)));

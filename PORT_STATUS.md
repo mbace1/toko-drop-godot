@@ -880,8 +880,20 @@ so the next hunt doesn't re-open them as if they were missed:
    passing through the floor, becomes a splat, fades instead of piling up,
    and over-emitting recycles rather than growing the pool. That lifecycle
    is the whole feature and no single frame shows it.
-   **Still open from §3:** the *dew normal map* (static droplet bumps on the
-   gel material itself, for the glisten without motion).
+   **The dew is in too, so §3 is closed.** `gel.gdshader` grows a
+   `fract`-tiled lattice of hemisphere bumps perturbing `NORMAL_MAP`, with
+   droplets also made glossier than the body under them — that roughness
+   CONTRAST is the glisten; without it the bumps read as texture rather than
+   as wet. Generated in-shader rather than authored as a texture: cheaper to
+   compute than to sample, no asset, and tunable live from a uniform.
+   `dew_amount` defaults to 0 so nothing that does not opt in changes look;
+   blobs get 0.42, cubes stay at 0 for the same reason they stay dry.
+   Verified by EXAGGERATING it first (amount 1.0, tiling 7) and capturing the
+   Web build — at that setting the bumps are unmistakable, which is what
+   proved `NORMAL_MAP` survives `gl_compatibility` at all, and only then
+   dialled back to a glisten. At the shipping value the effect is subtle
+   enough that a screenshot alone could not have told "working" from "doing
+   nothing", which is exactly why the exaggerated pass came first.
 7. ~~Trails~~ — **Done, checked 2026-08-26.** `trail_pool.gd` exists and is
    wired into `main.gd`.
 8. **Death FX (visual half)** — `SoftBody3D` split + `RigidBody3D` gel chunks
