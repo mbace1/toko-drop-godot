@@ -510,7 +510,7 @@ func _setup_hud() -> void:
 	left.add_theme_constant_override("separation", 4)
 	hud.add_child(left)
 
-	_wave_label = _make_label(20)
+	_wave_label = _make_hud_label(20)
 	left.add_child(_wave_label)
 
 	_wave_bar = ProgressBar.new()
@@ -526,16 +526,16 @@ func _setup_hud() -> void:
 	_wave_bar.add_theme_stylebox_override("fill", fill)
 	left.add_child(_wave_bar)
 
-	_hp_label = _make_label(20)
+	_hp_label = _make_hud_label(20)
 	left.add_child(_hp_label)
 
 	# Rush's clock and chain sit UNDER the stack rather than fighting the
 	# centre for space (owner direction).
-	_rush_label = _make_label(18)
+	_rush_label = _make_hud_label(18)
 	_rush_label.hide()
 	left.add_child(_rush_label)
 
-	_score_label = _make_label(22)
+	_score_label = _make_hud_label(22)
 	_score_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_score_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_score_label.position = Vector2(-16, 12)
@@ -580,14 +580,15 @@ func _setup_hud() -> void:
 
 	# The corners the browser build uses: version and frame rate bottom-left,
 	# the run seed bottom-right.
-	_corner_l = _make_label(13)
+	# No glow on the corners: a 10px halo on 13px text swallows the glyphs.
+	_corner_l = _make_hud_label(13)
 	_corner_l.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35, 0.55))
 	_corner_l.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_corner_l.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_corner_l.position = Vector2(16, -30)
 	hud.add_child(_corner_l)
 
-	_corner_r = _make_label(13)
+	_corner_r = _make_hud_label(13)
 	_corner_r.add_theme_color_override("font_color", Color(0.45, 0.85, 1.0, 0.55))
 	_corner_r.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_corner_r.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -715,10 +716,19 @@ func _send_feedback() -> void:
 		_fb_panel.hide()
 		_msg_label.position.y = 0.0
 
+## Typography lives in `theme_kit.gd` (ThemeKit) so main.gd and touch_sticks.gd
+## cannot drift into two different typefaces — see that file for why the font is
+## bundled rather than asked for by name.
 func _make_label(font_size: int) -> Label:
 	var l := Label.new()
-	l.add_theme_font_size_override("font_size", font_size)
-	l.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0))
+	ThemeKit.style_label(l, font_size)
+	return l
+
+## The in-game readout (WAVE / SCORE / HP / the Rush line). Flat white,
+## no glow — see ThemeKit.style_hud_label for why it differs from the menu.
+func _make_hud_label(font_size: int) -> Label:
+	var l := Label.new()
+	ThemeKit.style_hud_label(l, font_size)
 	return l
 
 func _process(delta: float) -> void:

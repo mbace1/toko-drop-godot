@@ -60,7 +60,10 @@ func _draw() -> void:
 			draw_circle(at, 22.0, Color(1, 1, 1, 0.08))
 
 	if show_hints and not input_mgr.left.active and not input_mgr.right.active:
-		var f := get_theme_default_font()
+		# The same bundled monospace every Label uses — the stick hints sit on
+		# the same screen as the HUD and must not be the one thing on it left
+		# in Godot's default proportional sans.
+		var f: Font = ThemeKit.mono()
 		var fs := 18
 		_label(f, fs, Vector2(r.x * 0.22, r.y * 0.78 + 118.0), "MOVE")
 		_label(f, fs, Vector2(r.x * 0.78, r.y * 0.78 + 118.0), "AIM · RELEASE = DASH")
