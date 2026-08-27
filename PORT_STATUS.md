@@ -183,9 +183,25 @@ screen typography cannot reproduce, and it is this game's own art from
 the same project. The text headline is kept as a fallback so a failed
 load is a plain title rather than a title screen with no title.
 
-**Still open on this screen**: the browser washes a purple/magenta
-radial gradient behind the logo (`showTitle()`), which this port does
-not draw yet.
+**The wash behind the logo is in too** — `radial-gradient(ellipse 52%
+48% at 50% 50%, rgba(255,68,34,0.50), rgba(170,0,255,0.30) 55%,
+rgba(170,0,255,0) 74%)` at `inset: -34% -22%`, as a `GradientTexture2D`
+in `FILL_RADIAL` behind the wordmark. It is a RADIAL gradient rather
+than a drop shadow for the reason `showTitle()`'s own comment gives: the
+rectangular shadow it replaced "read as a pink box". A VBox stacks its
+children, so the logo sits in a small wrapper Control with the wash
+anchored behind it.
+
+**The four screens are covered by a test now** (`_test_screen_states`
+in `tests/smoke.gd`, 17 checks). The title, pause, death and level-recap
+screens share one CenterContainer, and the menu-only chrome is hidden on
+the others so the box collapses to just the message label. That had been
+restructured three times — hand-positioned labels, then a VBox, then a
+CenterContainer — and each time the only check was a screenshot of ONE
+of the four. The test asserts all of them plus the chip invariants
+(one chip per row, exactly one reads ON, and it is the row the caret is
+on), so the next restructure cannot quietly leave the death recap with a
+title over it.
 
 **Core loop**
 - Twin-stick movement + mouse/gamepad aim, dash with i-frames, fire-rate

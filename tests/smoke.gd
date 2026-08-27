@@ -70,6 +70,7 @@ func _process(_delta: float) -> bool:
 	_test_score_mult_wiring()
 	_test_gates_wiring()
 	_test_orientation_wiring()
+	_test_screen_states()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1630,6 +1631,56 @@ func _test_kill_scoring() -> void:
 ## The portrait/landscape dual-arena system (main.js ARENA_PRESETS), added
 ## 2026-08-26 after a real phone in portrait showed a landscape level, a
 ## landscape camera, and a landscape HUD regardless of the actual screen.
+## Which labels each SCREEN shows. The title, pause, death and level-recap
+## screens all share one CenterContainer, and the menu-only chrome (logo,
+## subtitle, call to action, mode chips, controls) is hidden on the others so
+## the box collapses to just the message label. That has now been restructured
+## three times — hand-positioned labels, then a VBox, then a CenterContainer —
+## and each time the only check was a screenshot of ONE of the four screens.
+## This asserts all of them, so the next restructure cannot quietly leave the
+## death recap with a title over it or the menu with no chips.
+func _test_screen_states() -> void:
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+
+	main._show_menu()
+	_check(main._logo_wrap.visible or main._title_label.visible,
+		"the menu shows a headline (logo, or the text fallback)")
+	_check(main._subtitle_label.visible, "and the subtitle")
+	_check(main._cta_label.visible, "and the call to action")
+	_check(main._mode_list.visible, "and the mode chips")
+	_check(main._controls_label.visible, "and the controls block")
+	_check(not main._msg_label.visible,
+		"but NOT the message label — the chips replaced what it said here")
+
+	# Every mode row got a chip, and exactly one reads ON.
+	_check(main._mode_chips.size() == main.MODE_ROWS.size(),
+		"one chip per mode row")
+	var on_count := 0
+	for i in main.MODE_ROWS.size():
+		if main._mode_chip_labels[i].text.ends_with(": ON"):
+			on_count += 1
+	_check(on_count == 1, "exactly one chip reads ON")
+	_check(main._mode_chip_labels[main._menu_row].text.ends_with(": ON"),
+		"and it is the row the caret is on — ON must mean what START will play")
+
+	# The death recap: chrome gone, message back.
+	main.mode = main.Mode.CLASSIC
+	main._on_player_dead()
+	_check(main.state == main.State.DEAD, "dying puts the game in the DEAD state")
+	_check(not main._logo_wrap.visible, "the death recap hides the logo")
+	_check(not main._cta_label.visible, "and the call to action")
+	_check(not main._mode_list.visible, "and the mode chips")
+	_check(main._msg_label.visible, "and shows the recap text instead")
+	_check(main._msg_label.text.length() > 0, "which is not empty")
+
+	# Back to the title, and everything comes back.
+	main._show_menu()
+	_check(main._mode_list.visible, "returning to the title restores the chips")
+	_check(not main._msg_label.visible, "and hides the recap text again")
+
+	main.queue_free()
+
 func _test_orientation_wiring() -> void:
 	var main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(main)

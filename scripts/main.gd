@@ -48,7 +48,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "2.5"
+const VERSION := "2.6"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -210,6 +210,8 @@ var _controls_label: Label
 var _menu_box: VBoxContainer
 var _menu_center: CenterContainer
 var _logo: TextureRect
+var _logo_glow: TextureRect
+var _logo_wrap: Control
 var _best_label: Label
 var _mode_list: VBoxContainer
 var _mode_chips: Array[PanelContainer] = []
@@ -643,16 +645,57 @@ func _setup_hud() -> void:
 	# than being approximated. Browser sizing is `min(72vw, 340px, 43vh)`;
 	# 72% of the design width is the equivalent here, since 1280 design units
 	# now span exactly the screen width.
+	# A wrapper so the neon wash can sit BEHIND the wordmark rather than beside
+	# it — a VBox stacks its children, so the glow cannot simply be a sibling.
+	_logo_wrap = Control.new()
+	_logo_wrap.custom_minimum_size = Vector2(920.0, 560.0)
+	_logo_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_logo_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_logo_wrap.hide()
+	_menu_box.add_child(_logo_wrap)
+
+	# main.js draws a soft oval wash behind the lettering:
+	#   radial-gradient(ellipse 52% 48% at 50% 50%,
+	#                   rgba(255,68,34,0.50), rgba(170,0,255,0.30) 55%,
+	#                   rgba(170,0,255,0) 74%)
+	# at `inset: -34% -22%`, i.e. spilling well past the logo box. Its own
+	# comment in showTitle() says why it is a RADIAL gradient and not a
+	# drop-shadow: the old rectangular shadow "read as a pink box".
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.267, 0.133, 0.50))
+	grad.set_offset(0, 0.0)
+	grad.set_color(1, Color(0.667, 0.0, 1.0, 0.0))
+	grad.set_offset(1, 0.74)
+	grad.add_point(0.55, Color(0.667, 0.0, 1.0, 0.30))
+	var wash := GradientTexture2D.new()
+	wash.gradient = grad
+	wash.fill = GradientTexture2D.FILL_RADIAL
+	wash.fill_from = Vector2(0.5, 0.5)
+	wash.fill_to = Vector2(1.0, 0.5)
+	wash.width = 256
+	wash.height = 256
+
+	_logo_glow = TextureRect.new()
+	_logo_glow.texture = wash
+	_logo_glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_logo_glow.stretch_mode = TextureRect.STRETCH_SCALE
+	_logo_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_logo_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# The browser's own inset, as a fraction of the box it spills out of.
+	_logo_glow.offset_left = -0.22 * 920.0
+	_logo_glow.offset_right = 0.22 * 920.0
+	_logo_glow.offset_top = -0.34 * 560.0
+	_logo_glow.offset_bottom = 0.34 * 560.0
+	_logo_wrap.add_child(_logo_glow)
+
 	_logo = TextureRect.new()
 	if ResourceLoader.exists(LOGO_PATH):
 		_logo.texture = load(LOGO_PATH)
 	_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_logo.custom_minimum_size = Vector2(920.0, 560.0)
-	_logo.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_logo.hide()
-	_menu_box.add_child(_logo)
+	_logo.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_logo_wrap.add_child(_logo)
 
 	# Kept as a fallback headline for the case where the art is missing, so a
 	# failed load is a plain title rather than a title screen with no title.
@@ -1889,8 +1932,8 @@ func _on_player_dead() -> void:
 ## label used to, so pause/death/recap need no layout of their own.
 func _menu_chrome(on: bool) -> void:
 	var have_logo: bool = _logo != null and _logo.texture != null
-	if _logo != null:
-		_logo.visible = on and have_logo
+	if _logo_wrap != null:
+		_logo_wrap.visible = on and have_logo
 	for l in [_subtitle_label, _cta_label, _controls_label]:
 		if l != null:
 			l.visible = on
