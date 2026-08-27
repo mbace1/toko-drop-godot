@@ -153,6 +153,7 @@ var half_z := 9.0
 var target: Node3D
 var bullets: BulletPool
 var trails: TrailPool
+var drips: DripPool
 var poison: PoisonField
 
 ## Challenge rule filters (design/CAMPAIGN_LEVELS.md archetypes). ARTILLERY
@@ -349,6 +350,7 @@ func _spawn(picks: Array) -> void:
 		e.target = target
 		e.bullets = bullets
 		e.trails = trails
+		e.drips = drips
 		if e is SludgeCube:
 			(e as SludgeCube).poison = poison
 		# Hand over the run's gameplay stream BEFORE init() — subclasses draw
@@ -439,6 +441,7 @@ func _split(parent: Enemy) -> void:
 		c.target = target
 		c.bullets = bullets
 		c.trails = trails
+		c.drips = drips
 		c.rng = rng          # children inherit the run's gameplay stream
 		c.init()
 		enemies.append(c)

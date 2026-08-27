@@ -856,7 +856,32 @@ so the next hunt doesn't re-open them as if they were missed:
    pinned to its body, never sinks below the floor, and the tip LAGS a moving
    root rather than teleporting with it — that lag being the drag the brief
    actually asks for, and the one thing a still frame cannot show.
-6. **GPU drip particles + dew normal map** (`PORT_BRIEF.md` §3).
+6. **Drip particles** — **half done, 2026-08-27.** `scripts/drip_pool.gd`
+   delivers §3's stated result ("droplets slide down the body, fall, splat
+   on the floor and spread"): gel lets go of the lower silhouette of every
+   BLOB-family body, falls, stretches as it goes, lands and spreads into a
+   flattening disc. Cubes stay dry — they are the same gel but read as
+   SOLID (flat faces, `wobble_amp` 0), and gel running off a hard edge reads
+   as a leak rather than as something moist.
+   **Deliberately NOT `GPUParticles3D`, which is what §3's snippet reaches
+   for**, and the reason is in that snippet's own performance note:
+   "thousands of particles at 60fps on mobile **via Vulkan**". The web build
+   runs `gl_compatibility` (WebGL2 — `project.godot` says so under
+   `[rendering]`), where the two things the snippet actually depends on,
+   `collision_mode = COLLISION_RIGID` and a collision sub-emitter, are not
+   the safe bet they are under Vulkan. Building the landmark "moist" feature
+   on a path that works on the desktop it is tested on and silently does
+   nothing in the browser it is played in is precisely the `SystemFont` bug
+   this port already shipped once. One shared CPU pool drawn as a single
+   MultiMesh instead — the pattern `debris_pool.gd` and `trail_pool.gd`
+   already use — which is one draw call for every droplet in the arena and
+   behaves identically on both renderers.
+   Covered by `_test_drips` (5 checks): a drip falls, lands rather than
+   passing through the floor, becomes a splat, fades instead of piling up,
+   and over-emitting recycles rather than growing the pool. That lifecycle
+   is the whole feature and no single frame shows it.
+   **Still open from §3:** the *dew normal map* (static droplet bumps on the
+   gel material itself, for the glisten without motion).
 7. ~~Trails~~ — **Done, checked 2026-08-26.** `trail_pool.gd` exists and is
    wired into `main.gd`.
 8. **Death FX (visual half)** — `SoftBody3D` split + `RigidBody3D` gel chunks

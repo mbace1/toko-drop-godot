@@ -39,6 +39,12 @@ var trail_interval := 0.0
 var trail_size := 0.45
 
 var trails: TrailPool       # set by WaveDirector; may be null
+var drips: DripPool         # set by WaveDirector; may be null
+## Only the blob family drips. The cubes are the same gel but read as
+## SOLID (flat faces, no ripple, wobble_amp 0), and gel running off a
+## hard-edged cube reads as a leak rather than as something moist.
+var is_blob := true
+var _drip_t := 0.0
 var target: Node3D          # the player — chasers steer toward this
 var bullets: BulletPool     # set by WaveDirector; null for melee-only types
 var half_x := 9.0
@@ -194,6 +200,7 @@ var _sqv := 0.0
 ## Builds the mesh + gel material. is_cube selects a BoxMesh (flat-faced,
 ## no ripple — TUNING cube family) vs a SphereMesh (blob family, rippling).
 func setup(p_color: Color, p_radius: float, p_speed: float, p_hp: int, is_cube: bool) -> void:
+	is_blob = not is_cube
 	color = p_color
 	radius = p_radius
 	speed = p_speed
@@ -371,6 +378,7 @@ func _update_common(delta: float) -> void:
 	if surge_t > 0.0:
 		surge_t = maxf(0.0, surge_t - delta)
 	_emit_trail(delta)
+	_emit_drip(delta)
 	if _hit_wobble > 0.0:
 		_hit_wobble = maxf(0.0, _hit_wobble - HIT_WOBBLE_DECAY * delta)
 
@@ -400,6 +408,30 @@ func _update_common(delta: float) -> void:
 ##
 ## The ghost spawns ONE BODY-RADIUS BEHIND the mover (main.js v100) — at the
 ## body's own position it is simply hidden inside it.
+## PORT_BRIEF.md §3's "moist / dew" read: gel lets go of the body and falls.
+## Rate is per-body and jittered so a crowd does not pulse in unison, and it
+## scales with the adaptive `quality` knob so a full arena sheds droplets
+## rather than the frame rate.
+func _emit_drip(delta: float) -> void:
+	if drips == null or not is_blob or not alive or _dying:
+		return
+	_drip_t -= delta
+	if _drip_t > 0.0:
+		return
+	# Cosmetic draw: global randf(), never the director's RNG.
+	_drip_t = (0.34 + randf() * 0.62) / maxf(0.25, quality)
+	var rx: float = radius * base_shape.x
+	var ry: float = radius * base_shape.y
+	var a := randf() * TAU
+	# Let go from the lower half of the silhouette, where gel would actually
+	# run to, rather than from the top or the centre.
+	drips.drip(
+		position.x + cos(a) * rx * 0.80,
+		ry * (0.35 + randf() * 0.35),
+		position.z + sin(a) * rx * 0.80,
+		color,
+		maxf(0.06, rx * 0.115))
+
 func _emit_trail(delta: float) -> void:
 	var here := Vector2(position.x, position.z)
 	if delta > 0.0:

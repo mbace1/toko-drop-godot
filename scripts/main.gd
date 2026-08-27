@@ -48,7 +48,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "2.7"
+const VERSION := "2.8"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -110,6 +110,7 @@ var _ch_rule: int = Challenges.Rule.NONE
 var player: Player
 var bullets: BulletPool
 var trails: TrailPool
+var drips: DripPool
 var poison: PoisonField
 var debris: DebrisPool
 var pods: PowerupPool
@@ -286,6 +287,10 @@ func _ready() -> void:
 	add_child(trails)
 	trails.build()
 
+	drips = DripPool.new()
+	add_child(drips)
+	drips.build()
+
 	poison = PoisonField.new()
 	add_child(poison)
 	poison.build()
@@ -316,6 +321,7 @@ func _ready() -> void:
 	waves.target = player
 	waves.bullets = bullets
 	waves.trails = trails
+	waves.drips = drips
 	waves.poison = poison
 	waves.enemies_root = enemies_root
 	waves.wave_cleared.connect(_on_wave_cleared)
@@ -1013,6 +1019,7 @@ func _process_playing(delta: float) -> void:
 	player.update(delta, move, aim, bullets, half_x, half_z)
 	bullets.update(delta, maxf(half_x, half_z), player.position)
 	trails.update(delta)
+	drips.update(delta)
 	poison.update(delta)
 	debris.update(delta)
 	pods.update(delta, player.position, _run_t)
@@ -1646,6 +1653,7 @@ func _start_game() -> void:
 	trails.clear()
 	poison.clear()
 	debris.clear()
+	drips.clear()
 	pods.clear()
 	cargo.clear()
 	_cargo_spawn_at = -1.0

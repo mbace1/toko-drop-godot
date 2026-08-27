@@ -73,6 +73,7 @@ func _process(_delta: float) -> bool:
 	_test_screen_states()
 	_test_tentacles()
 	_test_font_glyphs()
+	_test_drips()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1660,6 +1661,47 @@ func _test_kill_scoring() -> void:
 ## non-ASCII codepoints appearing in string literals under `scripts/`; adding a
 ## new one to the UI without adding it here is fine — adding one the font
 ## cannot draw is what this stops.
+## PORT_BRIEF.md §3's dripping gel. The brief describes the RESULT ("droplets
+## slide down the body, fall, splat on the floor and spread"), so these pin
+## the lifecycle that produces it rather than any particular look: a droplet
+## falls, it stops at the floor instead of through it, it turns into a
+## spreading splat, and it eventually goes away instead of accumulating.
+func _test_drips() -> void:
+	var d := DripPool.new()
+	get_root().add_child(d)
+	d.build()
+
+	d.drip(2.0, 1.5, -1.0, Color(0.3, 1.0, 0.6), 0.1)
+	_check(d.live_count() == 1, "a drip enters the pool")
+
+	# It falls.
+	var y0 := d.peek_y(0)
+	for _i in 6:
+		d.update(1.0 / 60.0)
+	_check(d.peek_y(0) < y0, "and it falls")
+
+	# It lands rather than passing through, and becomes a splat.
+	for _i in 240:
+		d.update(1.0 / 60.0)
+		if d.peek_state(0) == DripPool.STATE_SPLAT:
+			break
+	_check(d.peek_state(0) == DripPool.STATE_SPLAT,
+		"reaching the floor turns it into a splat")
+	_check(d.peek_y(0) >= 0.0, "and it never sinks below the floor")
+
+	# The splat clears itself, so drips cannot accumulate forever.
+	for _i in 120:
+		d.update(1.0 / 60.0)
+	_check(d.live_count() == 0, "and the splat fades out rather than piling up")
+
+	# The pool is bounded: far more drips than slots must not grow it.
+	for i in DripPool.POOL_SIZE * 2:
+		d.drip(0.0, 1.0, 0.0, Color.WHITE, 0.1)
+	_check(d.live_count() <= DripPool.POOL_SIZE,
+		"and the pool is bounded — over-emitting recycles instead of growing")
+
+	d.queue_free()
+
 func _test_font_glyphs() -> void:
 	var f := ThemeKit.mono()
 	_check(f != null, "the bundled monospace font resolves")
