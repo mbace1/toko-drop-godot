@@ -767,6 +767,44 @@ reads and do not need a second one)
   showing past its far edge, and no visible boundary at all on the line
   bodies are actually clamped against. Every one of those passed 55 checks.
 
+## Modes that exist only here — flagged 2026-08-27
+
+Owner direction that day: *"We should aim the push of graphics and physics
+here on Godot. Otherwise follow the lead of the JS version."* The JS build
+leads on gameplay; this build leads on look, feel and physics; a feature is
+never designed twice. Auditing this port against that rule turns up drift
+that PREDATES it, so it is recorded rather than quietly acted on:
+
+| mode | browser build | this port |
+|---|---|---|
+| CLASSIC | yes (default) | yes |
+| ROGUELIKE | **yes, shipped** (`roguelikeMode`, a 3-state OFF/A/B toggle, `main.js` ~1958) | **"SOON" — not ported** |
+| DAILY RUN | yes (`dailyMode`) | yes |
+| RUSH | **no — does not exist** | yes, fully built |
+| CHALLENGES | **no — does not exist** | yes, a whole campaign |
+
+So the port both LACKS a mode the lead build ships and CARRIES two modes the
+lead build has never had. RUSH and the CHALLENGE campaign were designed in
+THIS repo — `design/RUSH_MODE.md`, `design/RUSH_TIERS_AND_LEVELS.md`,
+`design/CAMPAIGN_LEVELS.md`, `design/RUSH_MODE_ACCEPTANCE.md` — which is
+exactly the "designed twice, in the wrong place" shape the new rule exists to
+prevent. Verified by grep, not assumed: `main.js` contains no `rushMode` and
+no challenge/campaign machinery at all; its only "RUSH" is an unrelated
+`'GREEN RUSH! DOUBLE PRIZE'` milestone banner.
+
+**This is the owner's to settle, and nothing here should be extended until
+they do.** The three obvious options, none of them free:
+1. Migrate Rush + Challenges upstream into the browser build, then port them
+   back the normal way — most work, but puts the design where the rule says
+   it belongs and gets them played by more people.
+2. Grandfather them as Godot-exclusive modes and say so out loud in both
+   repos, so nobody later "fixes" the browser build to match.
+3. Retire them here.
+
+Whichever is chosen, **porting ROGUELIKE is not blocked by it** — that one is
+a straight follow-the-lead port of a mode the browser already ships, and it
+is the one mode gap this port has in the direction the rule points.
+
 ## Not ported yet — in priority order
 
 Work that is *designed but not started* — including anything that lands in the

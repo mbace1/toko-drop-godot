@@ -11,6 +11,36 @@ https://mbace1.github.io/Suds-Jack/toko-drop/). That repository is the
 **source of truth for behaviour and numbers** — enemy stats, timings,
 formulas. This one owns the Godot implementation and its own visual choices.
 
+## Which build leads — owner direction, 2026-08-27
+
+> "We should aim the push of graphics and physics here on Godot. Otherwise
+> follow the lead of the JS version."
+
+This is the same rule the owner's global notes now state for every project
+with two builds, and it decides what belongs in this repo:
+
+- **The JS/web build LEADS.** New gameplay, new modes, new mechanics, new
+  content are designed, played and proved *there* first.
+- **This build FOLLOWS on gameplay** — it ports what landed.
+- **This build PUSHES on graphics and physics**, because that is the part
+  the web build cannot do: real SSS, verlet tentacles, GPU-scale particle
+  work, shaders, 3D presentation, controller feel, landscape framing.
+- **A feature is never designed twice.** If it is new gameplay, it goes
+  upstream first, even in a week when Godot is the build being worked on.
+
+So the honest test for any change here is: *is this a look/feel/physics
+push, or is it a new verb?* The first belongs here. The second belongs in
+`mbace1/Suds-Jack` first, and is ported back afterwards.
+
+**Known drift that predates this direction, and is the owner's to settle
+(see `PORT_STATUS.md`'s "Modes that exist only here"):** RUSH MODE and the
+CHALLENGE campaign were designed in THIS repo (`design/RUSH_MODE.md`,
+`design/RUSH_TIERS_AND_LEVELS.md`, `design/CAMPAIGN_LEVELS.md`) and do not
+exist in the browser build at all, while ROGUELIKE — which the browser has
+shipped — is still a "SOON" row here. That is precisely the shape this rule
+exists to prevent. Do not extend those modes further without asking; port
+ROGUELIKE and keep new verbs upstream.
+
 Read in this order before changing anything:
 
 1. **`PORT_STATUS.md`** — what's ported, what's next, in priority order.
