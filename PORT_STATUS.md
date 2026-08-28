@@ -870,6 +870,56 @@ its own roster"*. Ported here in full, since gameplay follows the browser.
 Covered by `_test_rush_v225` (10 checks), which sweeps 14 levels rather than
 sampling one wave: a single wave could field only the right four by luck.
 
+## The SDF bodies — two silhouette regressions closed (2026-08-28)
+
+Both were primitive swaps made early in the port and, as an outside read of
+the two geometry vocabularies pointed out, **neither had ever been recorded as
+a decision** — which is the actual failure here. The shapes were wrong AND the
+gap was invisible.
+
+- **The blob dome.** The browser builds ONE shared `BLOB_GEO` for all twelve
+  blob types: a dense unit sphere shrink-wrapped onto
+  `smax(length(p) - 1, -y - 0.7, 0.22)`, normals from the SDF gradient. It is
+  the only genuinely custom geometry in the whole browser project, and it is
+  what makes a blob read as a gel dome SITTING ON THE FLOOR rather than as a
+  ball. This port had a `SphereMesh` squashed by a non-uniform scale — right
+  proportions, wrong shape: a scaled sphere has no flat, rounded-off underside.
+- **The cube corners.** `RoundedBoxGeometry(s, s, s, 4, 0.18)` upstream; a
+  plain `BoxMesh` here, so the cube family had hard corners the original never
+  had.
+
+`scripts/gel_geo.gd` rebuilds both from the browser's own maths — `smin`/`smax`
+verbatim, the 24-step binary search between 0.05 and 2.4, the 0.003 gradient
+epsilon, detail 72. The dome is built once and shared, sized per body by scale,
+exactly as upstream does it.
+
+Consequences worth knowing:
+- **The dome's origin is its floor contact point**, so `mesh.position.y` is now
+  0 for blobs. That is the whole reason the browser translates the geometry;
+  keeping the old `radius` lift would have floated every body.
+- **`base_shape` stays a PROPORTION.** The unit dome's size rides on a separate
+  `_mesh_unit`, because the tentacle roots and the boss ring both read
+  `radius * base_shape.x` as a proportion and folding radius into it broke them.
+- **The cube is built at a coarser detail (40).** A UV sphere wrapped onto flat
+  faces gives them a radial vertex distribution the browser's box topology does
+  not have, which reads as a faint crosshatch under a glossy material. The
+  silhouette is carried by the rounded edges, not by face tessellation.
+
+One trap paid for: **triangle winding is silent.** Taking the index order from
+three.js's `SphereGeometry` incorrectly inverted every face, and the dome
+rendered as a hollow ring — no error, no warning, just an obviously wrong
+picture. The winding is now its order verbatim, with the names mapped in a
+comment.
+
+And one false alarm worth recording so it is not re-investigated: TORO also
+reads as a ring, and correctly — it sets `mesh.mesh = null` and draws only its
+rim-standing wheel. It is not a broken dome.
+
+Covered by `_test_gel_geo` (11 checks), which pins the two things the shapes
+exist for: nothing hangs below y=0 and the underside is a flat DISC of vertices
+rather than a sphere's single lowest point, and the cube's extreme corner sits
+measurably inside where a hard box's would be.
+
 ## Not ported yet — in priority order
 
 Work that is *designed but not started* — including anything that lands in the

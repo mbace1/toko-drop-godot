@@ -76,6 +76,7 @@ func _process(_delta: float) -> bool:
 	_test_drips()
 	_test_roguelike()
 	_test_rush_v225()
+	_test_gel_geo()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1674,6 +1675,55 @@ func _test_kill_scoring() -> void:
 ## v225 — RUSH gets its own arena and its own roster. Ported from the browser,
 ## which leads on gameplay. Three claims, all of which a screenshot of one wave
 ## could agree with by luck, so they are swept instead.
+## The SDF bodies. These pin the two things the shapes exist FOR — a flat
+## grounded underside on the blob, and rounded corners on the cube — because a
+## primitive swap that loses either is exactly what went unnoticed here before.
+func _test_gel_geo() -> void:
+	# The SDF itself, against the browser's own formula.
+	var sdf := func(p: Vector3) -> float:
+		return GelGeo.smax(p.length() - 1.0, -p.y - GelGeo.DOME_CUT, GelGeo.DOME_ROUND)
+	_check(sdf.call(Vector3.ZERO) < 0.0, "the dome field is solid at its centre")
+	_check(sdf.call(Vector3(0.0, 2.0, 0.0)) > 0.0, "and empty well above it")
+
+	var m := GelGeo.dome()
+	_check(m != null and m.get_surface_count() == 1, "the dome builds one surface")
+	_check(GelGeo.dome() == m, "and is cached — one mesh shared by every blob")
+
+	var arr := m.surface_get_arrays(0)
+	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	_check(verts.size() > 1000, "with a dense enough shell to hold the shape")
+
+	var lo := INF
+	var hi := -INF
+	var flat := 0
+	for v in verts:
+		lo = minf(lo, v.y)
+		hi = maxf(hi, v.y)
+		if absf(v.y) < 0.02:
+			flat += 1
+	# Origin at floor contact: nothing may hang below y=0, which is what lets a
+	# body rest on the floor without a compensating offset.
+	_check(lo > -0.05, "nothing hangs below the floor — the origin IS the contact point")
+	_check(hi > 1.0, "and the dome still stands about a radius tall")
+	# The defining feature: a real flat underside, not a squashed ball. A
+	# scaled sphere would have a single lowest point, not a disc of them.
+	_check(flat > 40, "the underside is a FLAT disc, not a sphere's single low point")
+
+	# The cube keeps its corners rounded: its extreme corner must sit measurably
+	# inside where a hard box's corner would be.
+	var bm := GelGeo.rounded_box(1.8, 0.18)
+	var barr := bm.surface_get_arrays(0)
+	var bverts: PackedVector3Array = barr[Mesh.ARRAY_VERTEX]
+	var far := 0.0
+	var face := 0.0
+	for v in bverts:
+		far = maxf(far, v.length())
+		face = maxf(face, absf(v.x))
+	_check(absf(face - 0.9) < 0.05, "the rounded box is the size it was asked for")
+	# A hard 1.8 cube's corner is at sqrt(3)*0.9 = 1.559.
+	_check(far < 1.50, "and its corners are rounded off, not square")
+	_check(GelGeo.rounded_box(1.8, 0.18) == bm, "boxes are cached per size too")
+
 func _test_rush_v225() -> void:
 	var w := WaveDirector.new()
 	get_root().add_child(w)

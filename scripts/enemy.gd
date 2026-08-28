@@ -120,6 +120,12 @@ var _boss_ring: MeshInstance3D
 ## needing a separate cap. Swarm bodies stay bare (the brief's own answer
 ## for those is a baked VAT, which is a later pass).
 var _tentacles: Array[Tentacle] = []
+## The dome from `gel_geo.gd` is a UNIT mesh shared by every blob, so it
+## carries the body radius here. Deliberately NOT folded into
+## `base_shape`: that is a PROPORTION (1.05/0.82/1.05), and the tentacle
+## roots and the boss ring both read it as one via `radius * base_shape.x`.
+## Cubes are built at their real size already, so theirs stays 1.
+var _mesh_unit := 1.0
 
 func apply_boss() -> void:
 	is_boss = true
@@ -207,28 +213,30 @@ func setup(p_color: Color, p_radius: float, p_speed: float, p_hp: int, is_cube: 
 	hp = p_hp
 	max_hp = p_hp
 
+	# The browser's own geometry, rebuilt from its SDF — see `gel_geo.gd`.
+	# Blobs share ONE dome mesh sized per body by scale (its `BLOB_GEO`);
+	# cubes get a rounded box, because `RoundedBoxGeometry(s, s, s, 4, 0.18)`
+	# is what the original uses and a plain box is a different silhouette.
 	var m: Mesh
 	if is_cube:
-		var bm := BoxMesh.new()
-		bm.size = Vector3.ONE * radius * 1.5
-		m = bm
+		m = GelGeo.rounded_box(radius * 1.8, 0.18)
 	else:
-		var sm := SphereMesh.new()
-		sm.radius = radius
-		sm.height = radius * 2.0
-		sm.radial_segments = 24
-		sm.rings = 14
-		m = sm
+		m = GelGeo.dome()
+		_mesh_unit = radius
 
 	mesh = MeshInstance3D.new()
 	mesh.mesh = m
-	mesh.position.y = radius
+	# The dome's origin is already its FLOOR CONTACT point, so it needs no lift
+	# — that is the whole reason the browser translates the geometry. The cube
+	# is centred, so it still does.
+	mesh.position.y = 0.0 if not is_cube else radius
 	# TUNING.blob.shape — "squat grounded baseline" {x:1.05, y:0.82, z:1.05}.
 	# The browser's blobs are flattened domes sitting ON the floor, not balls
 	# resting on one point; a plain sphere reads as a marble.
 	if not is_cube:
+		# TUNING.blob.shape — the browser's "squat grounded baseline". It scales
+		# the dome, which already sits on the floor; no vertical offset.
 		base_shape = Vector3(1.05, 0.82, 1.05)
-		mesh.position.y = radius * base_shape.y
 
 	mat = ShaderMaterial.new()
 	mat.shader = GEL_SHADER
@@ -308,7 +316,7 @@ func update_death(delta: float) -> bool:
 		return true
 	_death_t -= delta
 	var t := 1.0 - maxf(_death_t, 0.0) / DEATH_TIME
-	mesh.scale = base_shape * (1.0 + t * DEATH_GROWTH)
+	mesh.scale = base_shape * _mesh_unit * (1.0 + t * DEATH_GROWTH)
 	mat.set_shader_parameter("alpha_amt", (1.0 - t) * (1.0 - t) * _base_alpha)
 	# The pre-death thrash: strongest at onset, fading as it bursts.
 	mat.set_shader_parameter("hit_wobble", maxf(0.0, _death_t / DEATH_TIME))
@@ -396,7 +404,7 @@ func _update_common(delta: float) -> void:
 	# it composes with breathe/squash instead of stomping them (enemy.js
 	# applies it inside the blob scale block for the same reason).
 	var infl := 1.0 + _inflate
-	mesh.scale = Vector3(sxz * infl, _sq * infl, sxz * infl) * base_shape
+	mesh.scale = Vector3(sxz * infl, _sq * infl, sxz * infl) * base_shape * _mesh_unit
 
 	mat.set_shader_parameter("wobble_time", _t)
 	mat.set_shader_parameter("hit_wobble", _hit_wobble)
