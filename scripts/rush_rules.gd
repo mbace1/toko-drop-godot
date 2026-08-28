@@ -102,6 +102,24 @@ var multiplier := 1
 var mult_t := 0.0
 
 var lives := LIVES_START
+
+## v227 — the stamped ladder. One stamp per level SURVIVED, graded against PAR,
+## plus the two goals a level can keep clean.
+##
+## There are TWO goals, not three, and that is a correction the browser found
+## while implementing this (v227, `RUSH_DESIGN.md` §3.4). This repo's own
+## `design/RUSH_TIERS_AND_LEVELS.md` proposes three legs with an UNTOUCHED
+## goal — "finish leg I without taking a hit". That goal is ALWAYS TRUE by
+## construction in both builds: taking a hit calls `take_hit()`, which resets
+## `level_t` to 0, so a level clock can only ever reach its duration on a
+## hit-free attempt. Reaching a stamp at all already proves it. UNBROKEN and
+## NEVER LOCKED are the two genuinely independent axes — a hit-free level can
+## still let the chain lapse, or still panic into an overheat lockout.
+var level_kills := 0
+var chain_unbroken := true
+var never_locked := true
+var ladder: Array = []      # [{level, tier, kills, star}]
+var stars := 0
 var level := 1
 var level_t := 0.0
 var run_t := 0.0
@@ -144,6 +162,9 @@ func reset() -> void:
 	multiplier = 1
 	mult_t = 0.0
 	lives = LIVES_START
+	ladder.clear()
+	stars = 0
+	_fresh_attempt()
 	level = 1
 	level_t = 0.0
 	run_t = 0.0
@@ -186,6 +207,7 @@ func update(delta: float, want_boost: bool, firing: bool) -> void:
 	if not boost_blocked and heat >= HEAT_MAX:
 		boost_blocked = true
 		overheated_now = true
+		never_locked = false      # v227: this attempt cannot earn NEVER LOCKED
 		boosting = false
 		overheated.emit()
 	elif boost_blocked and heat <= OVERHEAT_CLEAR:
@@ -198,12 +220,16 @@ func update(delta: float, want_boost: bool, firing: bool) -> void:
 		mult_t -= delta
 		if mult_t <= 0.0:
 			multiplier = 1
+			chain_unbroken = false    # v227: letting it lapse costs UNBROKEN
 
 	if ability_charge < charge_time():
 		ability_charge = minf(charge_time(), ability_charge + delta)
 
 	level_t += delta
 	if level_t >= level_duration(level):
+		# Stamp the attempt just finished. Reaching here means the whole
+		# duration ran hit-free — see the note on the goals above.
+		_stamp_level()
 		level_t = 0.0
 		level += 1
 		level_changed.emit(level, true)
@@ -220,6 +246,15 @@ func speed_mult() -> float:
 ## can clear the overheat lock, so the roster FEEDS the mode's economy instead
 ## of just standing in front of it — the browser's `TUNING.rush.coolerVent`.
 const COOLER_VENT := 0.22
+
+## v227 TIERS — reference kills/second per grade. A level's PAR kill count is
+## the tier rate x that level's own duration. These are this repo's own tier
+## research, which the browser then shipped first (`TUNING.rush.tiers`, v227)
+## and flagged there as UNVALIDATED against real playtest data. They match, and
+## the browser's first playtest owns them from here — not this table.
+const TIERS := {"S": 2.0, "A": 1.4, "B": 0.9, "C": 0.5}
+## Highest first, so `tier_for` can return on the first match.
+const TIER_ORDER := ["S", "A", "B", "C"]
 
 func add_boost_kill(cooler := false) -> void:
 	kills += 1
@@ -253,7 +288,48 @@ func take_hit() -> bool:
 		level -= 1
 		level_t = 0.0
 		level_changed.emit(level, false)
+	else:
+		# Even at level 1 the clock restarts, which is what makes UNTOUCHED
+		# always-true and is why it is not one of the goals.
+		level_t = 0.0
+	# No stamp: a hit means this attempt never finished.
+	_fresh_attempt()
 	return lives <= 0
+
+## Every Rush kill counts toward the level's PAR — boost or gun alike.
+func add_kill() -> void:
+	level_kills += 1
+
+## What every fresh crack at a level starts from: entering Rush, and every
+## level up or level down after it.
+func _fresh_attempt() -> void:
+	level_kills = 0
+	chain_unbroken = true
+	never_locked = true
+
+## The highest tier whose PAR (rate x seconds) this kill count meets, or "" if
+## it does not reach C.
+func tier_for(kills: int, seconds: float) -> String:
+	for t in TIER_ORDER:
+		if float(kills) >= float(TIERS[t]) * seconds:
+			return t
+	return ""
+
+## The live HUD readout: how this attempt is pacing right now. Seconds is
+## floored at 1 so the first moment of a level cannot read as an instant S.
+func live_tier() -> String:
+	return tier_for(level_kills, maxf(1.0, level_t))
+
+func _stamp_level() -> void:
+	var t := tier_for(level_kills, level_duration(level))
+	if t != "":
+		var star := chain_unbroken and never_locked
+		ladder.append({
+			"level": level, "tier": t, "kills": level_kills, "star": star,
+		})
+		if star:
+			stars += 1
+	_fresh_attempt()
 
 func ability_ready() -> bool:
 	return ability_charge >= charge_time() and heat >= float(def()["min_heat"])

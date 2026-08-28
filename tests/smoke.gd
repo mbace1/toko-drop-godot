@@ -77,6 +77,7 @@ func _process(_delta: float) -> bool:
 	_test_roguelike()
 	_test_rush_v225()
 	_test_gel_geo()
+	_test_rush_tiers()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1678,6 +1679,77 @@ func _test_kill_scoring() -> void:
 ## The SDF bodies. These pin the two things the shapes exist FOR — a flat
 ## grounded underside on the blob, and rounded corners on the cube — because a
 ## primitive swap that loses either is exactly what went unnoticed here before.
+## v227 — RUSH's S/A/B/C tiers, the stamped ladder and the two goals. Ported
+## from the browser, which shipped this repo's own tier research first.
+func _test_rush_tiers() -> void:
+	var r := RushRules.new()
+	r.reset()
+
+	# PAR is rate x seconds. At 10s: C needs 5, B 9, A 14, S 20.
+	_check(r.tier_for(4, 10.0) == "", "below C is no tier at all")
+	_check(r.tier_for(5, 10.0) == "C", "5 kills in 10s is exactly C")
+	_check(r.tier_for(9, 10.0) == "B", "9 is B")
+	_check(r.tier_for(14, 10.0) == "A", "14 is A")
+	_check(r.tier_for(20, 10.0) == "S", "20 is S")
+	_check(r.tier_for(99, 10.0) == "S", "and S is the ceiling")
+
+	# The live readout floors seconds at 1, so the first instant of a level
+	# cannot read as an instant S off a single kill.
+	r.level_t = 0.0
+	r.level_kills = 1
+	# One kill against a floored 1 second is 1.0 kills/s, which genuinely paces
+	# at B. The floor's job is only to stop the opening instant reading as S
+	# off a single kill — not to report no tier at all.
+	_check(r.live_tier() != "S", "one kill at t=0 cannot read as an instant S")
+	_check(r.live_tier() == "B", "it paces at B, which is what 1 kill/s is")
+
+	# A clean level stamps with a star; the ladder records it.
+	r.reset()
+	r.level_kills = int(RushRules.TIERS["S"] * r.level_duration(1)) + 1
+	r._stamp_level()
+	_check(r.ladder.size() == 1, "surviving a level stamps the ladder")
+	_check(r.ladder[0]["tier"] == "S", "with the tier it earned")
+	_check(r.ladder[0]["star"], "and a star when both goals stayed clean")
+	_check(r.stars == 1, "which the star count tracks")
+	_check(r.level_kills == 0, "and the next attempt starts fresh")
+
+	# Tripping EITHER goal denies the star but keeps the stamp.
+	r.reset()
+	r.level_kills = int(RushRules.TIERS["S"] * r.level_duration(1)) + 1
+	r.never_locked = false
+	r._stamp_level()
+	_check(r.ladder.size() == 1 and not r.ladder[0]["star"],
+		"an overheat lockout keeps the stamp but denies the star")
+
+	r.reset()
+	r.level_kills = int(RushRules.TIERS["S"] * r.level_duration(1)) + 1
+	r.chain_unbroken = false
+	r._stamp_level()
+	_check(r.ladder.size() == 1 and not r.ladder[0]["star"],
+		"and so does letting the chain lapse — the two goals are independent")
+
+	# Below C earns no stamp at all.
+	r.reset()
+	r.level_kills = 0
+	r._stamp_level()
+	_check(r.ladder.is_empty(), "a level under C is not stamped")
+
+	# THE CORRECTION, pinned so it cannot be re-introduced: a hit resets the
+	# level clock, so "untouched" is always true on any attempt that reaches a
+	# stamp. That is why there are two goals and not three — the browser cut
+	# UNTOUCHED for exactly this reason (v227), and this repo's own
+	# design/RUSH_TIERS_AND_LEVELS.md still proposes it as a third leg.
+	r.reset()
+	r.level_t = 30.0
+	r.take_hit()
+	_check(is_zero_approx(r.level_t),
+		"a hit resets the level clock — which is what makes UNTOUCHED always true")
+	_check(r.level_kills == 0 and r.chain_unbroken and r.never_locked,
+		"and starts a fresh attempt")
+	_check(r.ladder.is_empty(), "a hit stamps nothing — the attempt never finished")
+
+	r.free()
+
 func _test_gel_geo() -> void:
 	# The SDF itself, against the browser's own formula.
 	var sdf := func(p: Vector3) -> float:

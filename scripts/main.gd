@@ -48,7 +48,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "3.3"
+const VERSION := "3.4"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -1103,6 +1103,9 @@ func _collide_player_bullets() -> void:
 			var was_max := e.max_hp
 			if e.take_hit(1):
 				if _rush_verbs():
+					# v227: every Rush kill counts toward the level's PAR,
+					# gun kills included — only the CHAIN is boost-only.
+					rush.add_kill()
 					_add_score(rush.award(100 * was_max))
 				else:
 					# main.js onKill(): "streak++; score += 100 * streak * ..." —
@@ -1195,6 +1198,7 @@ func _collide_contact() -> void:
 				var bmax := e.max_hp
 				if e.take_hit(99):
 					rush.add_boost_kill(e is YelaCube)
+					rush.add_kill()
 					_add_score(rush.award(100 * bmax))
 					audio.play_varied("kill")
 					debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.30)
@@ -1614,6 +1618,7 @@ func _fire_ability() -> void:
 			var m := e.max_hp
 			if e.take_hit(99):
 				rush.add_boost_kill(e is YelaCube)
+				rush.add_kill()
 				_add_score(rush.award(100 * m))
 
 func _start_game() -> void:
@@ -1979,6 +1984,17 @@ func _on_player_dead() -> void:
 		out.append("best %d" % save.hi_score)
 	else:
 		out.append("   ".join(stars))
+	# v227: RUSH's stamped ladder — one line per level survived, with its tier
+	# and whether it kept both goals clean. Only Rush has it, and only if a
+	# level was actually completed.
+	if mode == Mode.RUSH and not rush.ladder.is_empty():
+		out.append("")
+		for row in rush.ladder:
+			out.append("LEVEL %d   %s   %d kills%s" % [
+				row["level"], row["tier"], row["kills"],
+				"   *" if row["star"] else ""])
+		if rush.stars > 0:
+			out.append("%d clean" % rush.stars)
 	var recent := save.recent_line()
 	if recent != "":
 		out.append(recent)
@@ -2317,7 +2333,10 @@ func _update_hud() -> void:
 		_rush_label.text = ("x%d   %s" % [rush.multiplier, rn]) if rn != "" else "x%d" % rush.multiplier
 	elif mode == Mode.RUSH:
 		_hp_label.text = "LIVES " + pips
-		_wave_label.text = "LEVEL %d" % rush.level
+		# v227: the live tier sits with the level, so a run has feedback long
+		# before the level-up stamp lands.
+		var lt := rush.live_tier()
+		_wave_label.text = ("LEVEL %d   %s" % [rush.level, lt]) if lt != "" 			else "LEVEL %d" % rush.level
 		_wave_bar.value = clampf(rush.level_t / rush.level_duration(rush.level), 0.0, 1.0)
 		var heat_pips := int(round(rush.heat * 10.0))
 		var bar := "#".repeat(heat_pips) + "·".repeat(10 - heat_pips)

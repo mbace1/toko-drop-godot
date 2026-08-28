@@ -920,6 +920,45 @@ exist for: nothing hangs below y=0 and the underside is a flat DISC of vertices
 rather than a sphere's single lowest point, and the cube's extreme corner sits
 measurably inside where a hard box's would be.
 
+## Catching up with the browser: v226-v231 (2026-08-28)
+
+Six versions shipped upstream after v225. What each meant here:
+
+- **v227 — S/A/B/C tiers, the stamped ladder, per-level goals (Q-027).
+  PORTED.** `rush_rules.gd` gains `TIERS` (kills/second per grade; a level's
+  PAR is rate x its own duration), `tier_for`/`live_tier`, a `ladder` of one
+  stamp per level survived, and `stars`. The HUD shows the live tier beside
+  the level; the death recap prints the ladder. Every Rush kill counts toward
+  PAR, gun kills included — only the CHAIN is boost-only.
+  Note the direction of travel: the tier numbers are THIS repo's own research,
+  which the browser shipped first and flagged unvalidated. They match, and its
+  first playtest owns them from here.
+- **TWO goals, not three — a correction that lands on this repo's design.**
+  Implementing v227 upstream found that its three-goal proposal, which
+  explicitly mirrored `design/RUSH_TIERS_AND_LEVELS.md`'s three legs, does not
+  work: **UNTOUCHED is always true by construction.** Taking a hit resets the
+  level clock, so a level can only ever reach its duration on a hit-free
+  attempt — reaching a stamp already proves it. Verified true of THIS build
+  too (`take_hit()` sets `level_t = 0.0`), so the flaw is in the shared design,
+  not in one implementation. UNBROKEN and NEVER LOCKED are the two genuinely
+  independent axes. `_test_rush_tiers` pins the reset behaviour so the third
+  leg cannot be reintroduced by someone reading the design doc.
+  **`design/RUSH_TIERS_AND_LEVELS.md` still proposes the three-leg version and
+  has NOT been corrected** — left for the owner, since it is a design doc
+  rather than code.
+- **v226 — the dead lives counter (Q-025). NOT ported, deliberately.**
+  Upstream found `TUNING.rush.lives` fully wired to award and display lives
+  while nothing ever spent one, and removed the counter: Rush there now runs
+  on the player's own HP, and an "extra life" raises max HP. **This build does
+  not have that bug** — `rush.take_hit()` decrements `lives` and only ends the
+  run when it hits zero, reached from `main.gd`'s hit path, and a test already
+  asserts "a Rush run starts on lives, not HP". So the two builds now
+  genuinely disagree about whether Rush has lives, and porting v226 would mean
+  deleting a working mechanic to match a bug fix. **Owner's call.**
+- **v228 Arena pass 2, v229/v230 haptics + reduce-motion, v231 press kit** —
+  not yet assessed. v229/v230 are portable (Godot has
+  `Input.vibrate_handheld()`); v231 is not a game change.
+
 ## Not ported yet — in priority order
 
 Work that is *designed but not started* — including anything that lands in the
