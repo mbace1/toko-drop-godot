@@ -1,9 +1,26 @@
 # Rush — legs, goals, and S/A/B/C tiers
 
-**Status:** proposal. Thresholds are `PROPOSED` and derived from a stated model
-(§3) rather than picked by feel — **the model is the deliverable, not the
-numbers.** First playtest replaces the numbers; it should not need to replace
-the method.
+**Status:** proposal, PARTIALLY SUPERSEDED by what shipped, 2026-08-28. The
+S/A/B/C tier RATES below (§3) are exactly what both builds now use — that part
+landed unchanged. **The rest of the structure did not**: what shipped on both
+sides is graded per **level** (Rush's existing 60/90/+30s escalation), not per
+60s **leg** as this doc proposes, and carries only TWO goals (UNBROKEN /
+NEVER LOCKED — this doc's "NEVER LOCKED" was never written here, but is the
+same idea as this doc's overheat-adjacent goal), not the three below. §2's
+UNTOUCHED goal specifically is not just unbuilt, it is **wrong as written**:
+implementing this design found — independently, on both sides — that a hit
+already resets the level/leg clock to 0, so reaching any checkpoint at all
+already proves the attempt was hit-free. UNTOUCHED cannot be a *separate*
+goal; it is a precondition for reaching a stamp. Full account in
+`mbace1/toko-drop-godot`'s `scripts/rush_rules.gd` and
+`mbace1/Suds-Jack`'s `toko-drop/RUSH_DESIGN.md` §3.4 and `QUEUE.md` Q-027.
+This doc is left as the historical record of the original three-leg proposal
+rather than rewritten to match what shipped — the tier-rate MODEL (§3) is
+still the reusable part.
+
+Thresholds are `PROPOSED` and derived from a stated model (§3) rather than
+picked by feel — **the model is the deliverable, not the numbers.** First
+playtest replaces the numbers; it should not need to replace the method.
 
 Companion to [`RUSH_MODE.md`](RUSH_MODE.md). That doc gives the mode a clock and
 a score; this one gives the clock **structure** and the score **meaning**.

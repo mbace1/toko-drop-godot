@@ -39,14 +39,34 @@ here got this wrong once and reported a mode as missing upstream that had
 shipped there the same day — see `PORT_STATUS.md`'s "Modes that exist only
 here" for the corrected table.
 
-**Known drift, the owner's to settle:** the CHALLENGE campaign exists only
-in THIS repo (`design/CAMPAIGN_LEVELS.md`, `design/RUSH_TIERS_AND_LEVELS.md`)
-with no `challengeMode` upstream at all — the shape this rule exists to
-prevent. ROGUELIKE is the mirror image: shipped in the browser, still a
-"SOON" row here, and the one clear follow-the-lead port waiting. RUSH is
-settled — it went upstream and shipped as v224, so anything this port does
-with Rush now is a port, not a second design, and should be reconciled
-against that version rather than assumed to match.
+**RUSH is settled.** It went upstream and shipped as v224/v225/v227; this
+repo's job with Rush now is to port each landing, reconciled against that
+version rather than assumed to match. `PORT_STATUS.md` tracks the versions
+ported so far.
+
+**ROGUELIKE is settled too — ported, v3.1.** Was the one clear
+follow-the-lead gap (shipped in the browser, still "SOON" here); it no
+longer is.
+
+**CHALLENGES is settled — dropped, 2026-08-28, owner's call
+(`Suds-Jack` `QUEUE.md` Q-028).** It had existed only in this repo
+(`design/CAMPAIGN_LEVELS.md`, `design/RUSH_TIERS_AND_LEVELS.md`), which was
+exactly the shape this rule exists to prevent — designed on the port side
+instead of proposed upstream first. Shelved on both sides: no build here, no
+further Godot build-out. The design docs stay as a record, same shape as
+`sudsjack/`'s "SET DOWN" — do not resume without the owner asking in their
+own words.
+
+**Open, and it is a NEW one:** RUSH's four selectable abilities exist only
+here. And as of upstream v226, **RUSH's lives model has diverged rather than
+converged** — v226 removed the browser's `rush.lives` as dead code (it was
+never actually spent; the extra-life mechanic already worked through player
+HP directly), while this repo's `rush.lives` is a live, spent resource with a
+test asserting it. The two builds now genuinely disagree about whether Rush
+has a separate lives resource at all. Both recorded in
+`mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md` and
+[PR #311](https://github.com/mbace1/Suds-Jack/pull/311) — neither acted on
+unilaterally.
 
 Read in this order before changing anything:
 

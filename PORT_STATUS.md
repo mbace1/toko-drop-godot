@@ -814,29 +814,29 @@ What survives the correction:
   Also found and fixed while wiring it: `State.CARDS` was not counted as
   "in a run", so the whole HUD vanished the moment the draft opened — caught
   by forcing the draft open and looking at it, not by any assertion.
-- **CHALLENGES is still Godot-only** — no `challengeMode`, no campaign
-  machinery upstream at all — and it was designed in THIS repo
-  (`design/CAMPAIGN_LEVELS.md`, `design/RUSH_TIERS_AND_LEVELS.md`). That is
-  the remaining piece sitting on the wrong side of the "never design a
-  feature twice" line, and it is the owner's to settle: migrate it upstream,
-  grandfather it as Godot-only and say so in both repos, or retire it.
+- ~~**CHALLENGES is still Godot-only.**~~ **Settled — dropped, 2026-08-28,
+  owner's call** (`Suds-Jack` `QUEUE.md` Q-028). Shelved on both sides: no
+  build upstream, no further build-out here. `design/CAMPAIGN_LEVELS.md` and
+  `design/RUSH_TIERS_AND_LEVELS.md` stay as a record, same shape as
+  `sudsjack/`'s "SET DOWN" in the browser repo. Do not resume without the
+  owner asking in their own words.
 - **RUSH resolved itself the right way round** — the design went upstream and
   shipped there. Whatever this port does with Rush from now on is a port of a
   browser feature, not a second design, and the two should be reconciled
-  against v224 rather than assumed to match.
-
-**This is the owner's to settle, and nothing here should be extended until
-they do.** The three obvious options, none of them free:
-1. Migrate Rush + Challenges upstream into the browser build, then port them
-   back the normal way — most work, but puts the design where the rule says
-   it belongs and gets them played by more people.
-2. Grandfather them as Godot-exclusive modes and say so out loud in both
-   repos, so nobody later "fixes" the browser build to match.
-3. Retire them here.
-
-Whichever is chosen, **porting ROGUELIKE is not blocked by it** — that one is
-a straight follow-the-lead port of a mode the browser already ships, and it
-is the one mode gap this port has in the direction the rule points.
+  against the current version rather than assumed to match.
+- **RUSH abilities remain Godot-only** — the one genuine mode-drift item left
+  open. Same three shapes (migrate / grandfather-and-document / retire),
+  owner's call, tracked in `mbace1/Suds-Jack`'s
+  `toko-drop/PARITY_WITH_GODOT.md` and
+  [PR #311](https://github.com/mbace1/Suds-Jack/pull/311).
+- **RUSH lives — a NEW divergence, opened by upstream v226.** Upstream removed
+  `rush.lives` as dead code (`checkExtraLife()`'s caller already grew player
+  HP directly; the counter itself was never read — inert, not broken). This
+  port's `lives` is NOT dead code: `take_hit()` spends it and only ends the
+  run at zero, reached from the real hit path, with a test asserting it. So
+  the two builds now genuinely DISAGREE about whether Rush has a separate
+  lives resource — not an unported fix, a live design question. Recorded in
+  the same parity doc/PR above, not acted on unilaterally.
 
 ## v225 — RUSH's own arena and roster (ported 2026-08-28)
 

@@ -314,38 +314,6 @@ one MultiMesh. Lit rather than unlit: unlit spheres of a flat colour read as
 confetti rather than as bits of the same gel. Camera shake landed alongside
 it on main.js's trauma-squared model.
 
-### Q-017 — Par curve, live tier, and the final grade
-
-- status: Queued
-- repo: toko-drop-godot
-- size: M
-- blocked-by: Q-005 (heat feeds the score the tiers grade)
-- design: design/RUSH_TIERS_AND_LEVELS.md §3, §4
-- gate: smoke checks for par interpolation between checkpoints, for each tier
-  boundary landing on the right letter, and for the rule that dying before 3:00
-  yields no grade
-
-The thresholds are derived from the species table and four reference kill
-rates, not chosen by feel — keep them derived. If they turn out wrong, change
-the reference rates and recompute; do not hand-edit the table, or the next
-person cannot tell which numbers mean anything. Below C shows no letter.
-
-### Q-018 — Legs, checkpoints, goals and the star
-
-- status: Queued
-- repo: toko-drop-godot
-- size: M
-- blocked-by: Q-017
-- design: design/RUSH_TIERS_AND_LEVELS.md §2
-- gate: smoke checks that each leg goal is tracked independently and that a
-  stamp taken at a checkpoint is never revised; capture run for the summary
-
-Three 60s legs, each stamping the tier you stood at, each with one goal that is
-achievable in that leg and awkward in the others (UNTOUCHED, UNBROKEN, STILL
-STANDING). All three earns a ★ beside the grade — not a tier bump, because
-score buys letters and goals buy the star, and collapsing the two axes is what
-this item exists to avoid.
-
 ### Q-019 — Hazard scaffolding, and SLUDGE pools
 
 - status: **Partly landed** in `db7158d` — SLUDGE pools done, hazards open
@@ -406,61 +374,51 @@ corner restricts the arc you can be attacked from. A periodically live rail is
 the targeted answer, and it reuses the emissive rail material already built.
 Last of the three because it changes movement habits game-wide.
 
-### Q-022 — Level archetype scaffolding: a level as data
+## Landed
 
-- status: Queued
-- repo: toko-drop-godot
-- size: L
-- blocked-by: Q-002 (SEQUENCE needs the composition picker split out first)
-- design: design/CAMPAIGN_LEVELS.md §1, §2
-- gate: smoke checks that a level spec drives arena extents, HP, composition
-  and revenge parameters without touching the scripts that consume them; one
-  SEQUENCE level reproducible identically across attempts
+### Q-017 — Par curve, live tier, and the final grade
 
-A level is a parameter set + a spawn script + a goal, **not new code** — the
-archetype is the code, the level is the data. Most levers already exist as
-parameters (`half_x`/`half_z` threaded through player, enemies, bullets and
-the director; `MAX_HP`; `FIRE_RATE`; the `POOL` and the caps; the `REV_*`
-constants), which is what keeps this proposal small. Start with SEQUENCE and
-CLOSE QUARTERS: the first is the backbone, the second is the best
-value-per-line in the project because the arena is already a parameter.
-
-### Q-023 — Per-level grading and unlocks
-
-- status: Queued
+- status: **Landed, 2026-08-28, v3.4** — in the SIMPLER shape that shipped
+  upstream, not this item's own proposal
 - repo: toko-drop-godot
 - size: M
-- blocked-by: Q-022, Q-017 (shares the S/A/B/C vocabulary)
-- design: design/CAMPAIGN_LEVELS.md §3
-- gate: for a SEQUENCE level, the theoretical maximum computed from the spawn
-  script matches what a scripted perfect run actually scores — if those two
-  disagree, the thresholds are fiction
+- blocked-by: ~~Q-005~~ — landed in the browser's own shape instead of this
+  repo's, so the blocker never applied
+- design: design/RUSH_TIERS_AND_LEVELS.md §3, §4 (superseded — see the note at
+  that doc's own top) / `Suds-Jack`'s v227, `RUSH_DESIGN.md` §3
+- gate: `_test_rush_tiers` in `tests/smoke.gd`
 
-Keeps one grading language across the whole game rather than adding stars.
-**Do not reuse Rush's threshold formula**: it integrates a statistical curve
-over procedurally composed waves, and a hand-authored level has no such curve.
-Fixed spawn list ⇒ exact maximum ⇒ percentage thresholds; open composition ⇒
-measured from a reference run and recorded as a measurement.
+Landed by porting `Suds-Jack`'s v227 rather than building this item's own
+par-curve-with-interpolated-checkpoints design: `tier_for(kills, seconds)` is a
+flat rate x seconds comparison per LEVEL (Rush's existing 60/90/+30s
+escalation), not the leg-checkpoint interpolation this item specified. Same
+four reference rates (S 2.0 / A 1.4 / B 0.9 / C 0.5), same "derived, not
+hand-edited" rule, same "below C shows no letter". Closed by the simpler
+version landing rather than reopening the elaborate one.
 
-### Q-024 — Campaign vertical slice: six levels, one per archetype
 
-- status: Queued
+### Q-018 — Legs, checkpoints, goals and the star
+
+- status: **Landed, 2026-08-28, v3.4** — with TWO goals, not three; the third
+  turned out to be impossible as specified
 - repo: toko-drop-godot
-- size: L
-- blocked-by: Q-022, Q-023, Q-007 (re-scoped)
-- design: design/CAMPAIGN_LEVELS.md §4
-- gate: six levels playable end to end — select, grade, unlock, save — and
-  looked at on a touch viewport
+- size: M
+- blocked-by: ~~Q-017~~
+- design: design/RUSH_TIERS_AND_LEVELS.md §2 (superseded) /
+  `Suds-Jack`'s `RUSH_DESIGN.md` §3.4
+- gate: `_test_rush_tiers` (7 checks on the goals and the ladder)
 
-Deliberately a slice, not a campaign. Six levels of real play is enough to
-learn whether the archetype system and the threshold method hold up; committing
-to thirty up front means authoring content against a framework nothing has
-graded yet. This is a third mode on a port that is at 6/40 enemies with Rush
-itself unbuilt — sequence it against that honestly.
+Porting `Suds-Jack`'s v227 found — independently of that repo's own identical
+finding — that this item's UNTOUCHED goal cannot exist separately: a hit
+already resets the level clock to 0 (`take_hit()`), so reaching ANY level-up
+stamp already proves the attempt was hit-free. `chain_unbroken` and
+`never_locked` are the two goals that survived; a level keeping both clean
+earns a `★` in `rush.ladder`. Also landed per LEVEL rather than per 60s LEG —
+Rush's existing escalation, not a new structure. Recorded in both repos'
+parity notes (`Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md`,
+[PR #311](https://github.com/mbace1/Suds-Jack/pull/311)) as the case where a
+design flaw was caught the same way on both sides of the port.
 
----
-
-## Landed
 
 ### Q-002 — Extract wave composition from `start_wave()` into a reusable picker
 
@@ -547,3 +505,69 @@ aggregate budget properties.
 
 *(nothing yet — dropped items stay here with the reason, so the same idea does
 not get re-queued a month later without its history)*
+
+### Q-022 — Level archetype scaffolding: a level as data
+
+- status: **Dropped, 2026-08-28** — see Q-024's note; CHALLENGES itself was
+  dropped by the owner (`Suds-Jack` `QUEUE.md` Q-028)
+- repo: toko-drop-godot
+- size: L
+- blocked-by: Q-002 (SEQUENCE needs the composition picker split out first)
+- design: design/CAMPAIGN_LEVELS.md §1, §2
+- gate: smoke checks that a level spec drives arena extents, HP, composition
+  and revenge parameters without touching the scripts that consume them; one
+  SEQUENCE level reproducible identically across attempts
+
+A level is a parameter set + a spawn script + a goal, **not new code** — the
+archetype is the code, the level is the data. Most levers already exist as
+parameters (`half_x`/`half_z` threaded through player, enemies, bullets and
+the director; `MAX_HP`; `FIRE_RATE`; the `POOL` and the caps; the `REV_*`
+constants), which is what keeps this proposal small. Start with SEQUENCE and
+CLOSE QUARTERS: the first is the backbone, the second is the best
+value-per-line in the project because the arena is already a parameter.
+
+
+### Q-023 — Per-level grading and unlocks
+
+- status: **Dropped, 2026-08-28** — see Q-024's note
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-022, Q-017 (shares the S/A/B/C vocabulary)
+- design: design/CAMPAIGN_LEVELS.md §3
+- gate: for a SEQUENCE level, the theoretical maximum computed from the spawn
+  script matches what a scripted perfect run actually scores — if those two
+  disagree, the thresholds are fiction
+
+Keeps one grading language across the whole game rather than adding stars.
+**Do not reuse Rush's threshold formula**: it integrates a statistical curve
+over procedurally composed waves, and a hand-authored level has no such curve.
+Fixed spawn list ⇒ exact maximum ⇒ percentage thresholds; open composition ⇒
+measured from a reference run and recorded as a measurement.
+
+
+### Q-024 — Campaign vertical slice: six levels, one per archetype
+
+- status: **Dropped, 2026-08-28, owner's call.** CHALLENGES was the one mode
+  designed on the port side instead of proposed upstream first — exactly the
+  shape `CLAUDE.md`'s "a feature is never designed twice" rule exists to
+  prevent. Rather than migrate it upstream after the fact or leave it an open
+  question, the owner shelved it on both sides: no build here, no build
+  upstream (`Suds-Jack` `QUEUE.md` Q-028). `design/CAMPAIGN_LEVELS.md` and
+  `design/RUSH_TIERS_AND_LEVELS.md` stay as a record, same shape as
+  `sudsjack/`'s "SET DOWN" in the browser repo. Do not resume Q-022/023/024
+  without the owner asking in their own words.
+- repo: toko-drop-godot
+- size: L
+- blocked-by: Q-022, Q-023, Q-007 (re-scoped)
+- design: design/CAMPAIGN_LEVELS.md §4
+- gate: six levels playable end to end — select, grade, unlock, save — and
+  looked at on a touch viewport
+
+Deliberately a slice, not a campaign. Six levels of real play is enough to
+learn whether the archetype system and the threshold method hold up; committing
+to thirty up front means authoring content against a framework nothing has
+graded yet. This is a third mode on a port that is at 6/40 enemies with Rush
+itself unbuilt — sequence it against that honestly.
+
+---
+
