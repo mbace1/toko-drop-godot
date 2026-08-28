@@ -48,7 +48,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "3.1"
+const VERSION := "3.2"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -1194,7 +1194,7 @@ func _collide_contact() -> void:
 			if bdx * bdx + bdz * bdz < br * br:
 				var bmax := e.max_hp
 				if e.take_hit(99):
-					rush.add_boost_kill()
+					rush.add_boost_kill(e is YelaCube)
 					_add_score(rush.award(100 * bmax))
 					audio.play_varied("kill")
 					debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.30)
@@ -1613,7 +1613,7 @@ func _fire_ability() -> void:
 		if dx * dx + dz * dz < r * r:
 			var m := e.max_hp
 			if e.take_hit(99):
-				rush.add_boost_kill()
+				rush.add_boost_kill(e is YelaCube)
 				_add_score(rush.award(100 * m))
 
 func _start_game() -> void:
@@ -1647,6 +1647,10 @@ func _start_game() -> void:
 	_death_wash.color.a = 0.0
 	_fb_panel.hide()
 	input_mgr.set_rush(_rush_verbs())
+	# v225: RUSH runs its own four-body roster and no boss set pieces. Only
+	# RUSH itself — a CHALLENGE level uses the rush VERBS but is authored
+	# against the full ecology, so it keeps the main pool.
+	waves.rush_roster = mode == Mode.RUSH
 	waves.level_override = 0
 	save.mode = _cur_mode_key()   # every read below follows from this
 	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
@@ -2166,8 +2170,17 @@ func _rush_verbs() -> bool:
 ## which is Classic with a shared seed and (on 3 days out of 4) one twist
 ## layered on top. Everything gated to "base mode" (bosses, the wave-kind
 ## banner, the streak/HP HUD) belongs to both.
+## The modes that build the full arena — gates, vault crates, escort bots, foam
+## zones, the cargo convoy — and that count HP rather than Rush lives.
+##
+## This is the browser's `bareArena()` seen from the other side: there it is
+## `inCabinet() || rush.on`, i.e. Rush strips the furniture out and CLASSIC
+## keeps all of it (v225). ROGUELIKE belongs on the CLASSIC side — upstream it
+## is the classic game plus upgrade cards, not a stripped mode — and leaving it
+## out cost it both its furniture and its HP readout (it was showing Rush's
+## lives) for as long as the mode was playable here, which was one version.
 func _base_mode() -> bool:
-	return mode == Mode.CLASSIC or mode == Mode.DAILY
+	return mode == Mode.CLASSIC or mode == Mode.DAILY or mode == Mode.ROGUELIKE
 
 ## A pod changes the gun for the rest of the run, or until the next pod.
 func _on_pod_taken(mode_name: String, col: Color) -> void:

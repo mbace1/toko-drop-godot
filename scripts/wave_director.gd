@@ -26,6 +26,22 @@ signal wave_cleared(n: int)
 signal siren_screamed(at: Vector3)
 
 # name -> [min_wave, cost, is_shooter]
+## v225 RUSH ROSTER — the browser's `TUNING.rush.pool`. Rush does not draw from
+## the 21-type ecology at all: four bodies, shaped like Blade Rush's own named
+## roster (GLOBBO the chomper, YELA CUBE the cooler, SPLITTA the snake, SLUDGE
+## CUBE the asteroid) and NO SHOOTERS — a gun club would make standing still
+## the answer, which is the opposite of the mode.
+##
+## Only the minimum wave lives here; the COSTS are the same numbers `POOL`
+## already carries for these four, so they are not restated and cannot drift.
+## The one value that genuinely differs is SPLITTA's floor: 2 in Rush against
+## 3 in the main pool.
+const RUSH_POOL := {
+	"GLOBBO": 1, "YELA_CUBE": 1, "SPLITTA": 2, "SLUDGE_CUBE": 3,
+}
+## Set by main.gd for a Rush run. Swaps the roster and drops boss set pieces.
+var rush_roster := false
+
 const POOL := {
 	"GLOBBO":      [1, 1, false],
 	"YELA_CUBE":   [1, 1, false],
@@ -203,8 +219,10 @@ func kind_for(w: int) -> String:
 	# instead of 3rd — "the floor fights harder" on a shorter clock.
 	var spike_every: int = 3 if rhythm_tight else RHYTHM["spike_every"]
 	var swarm_every: int = 2 if rhythm_tight else RHYTHM["swarm_every"]
+	# v225: no boss set pieces in Rush — "a boss beat becomes a heavy one
+	# instead", so the beat still lands, as a spike.
 	if w % RHYTHM["boss_every"] == 0:
-		return "boss"
+		return "spike" if rush_roster else "boss"
 	if w % spike_every == 0:
 		return "spike"
 	if w >= RHYTHM["swarm_from"] and w % swarm_every == 0:
@@ -309,6 +327,15 @@ func compose(w: int, budget: float, shooter_cap: int, body_cap: int) -> Array:
 
 func _eligible_for(w: int) -> Array[String]:
 	var out: Array[String] = []
+	# Rush draws from its own four and ignores every other filter — they are
+	# all bodies, so only_shooters/only_melee have nothing to say here.
+	if rush_roster:
+		for name in RUSH_POOL.keys():
+			if int(RUSH_POOL[name]) <= w:
+				out.append(name)
+		if out.is_empty():
+			out.append("GLOBBO")
+		return out
 	for name in POOL.keys():
 		var min_wave: int = POOL[name][0]
 		if force_support and (name == "SHEPHERD" or name == "SIREN"):

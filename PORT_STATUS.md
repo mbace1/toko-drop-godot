@@ -838,6 +838,38 @@ Whichever is chosen, **porting ROGUELIKE is not blocked by it** — that one is
 a straight follow-the-lead port of a mode the browser already ships, and it
 is the one mode gap this port has in the direction the rule points.
 
+## v225 — RUSH's own arena and roster (ported 2026-08-28)
+
+Upstream shipped **v225** the day after v224: *"RUSH gets its own arena and
+its own roster"*. Ported here in full, since gameplay follows the browser.
+
+- **The bare arena.** Upstream this is one predicate, `bareArena()` =
+  `inCabinet() || rush.on`, switching off gates, bounties, vault crates,
+  escort bots, steam vents, drains, foam zones, bullet curtains and the cargo
+  convoy. This port already had the same split from the other side —
+  `_base_mode()`, the modes that DO build the furniture — so v225 needed no
+  new machinery for it. **But it exposed a bug of my own making:** ROGUELIKE
+  had been left out of `_base_mode()` when it was made playable one version
+  earlier, so it silently lost every piece of arena furniture AND showed
+  Rush's lives instead of HP. Upstream, roguelike is the classic game plus
+  cards, not a stripped mode. Fixed.
+- **The roster.** `WaveDirector.RUSH_POOL` — GLOBBO, YELA_CUBE, SPLITTA,
+  SLUDGE_CUBE and nothing else, no shooters, because "a gun club would make
+  standing still the answer, which is the opposite of the mode". Only the
+  minimum waves live in that table; the costs are the ones `POOL` already
+  carries for those four, so they cannot drift. The single number that really
+  differs is SPLITTA's floor — 2 in Rush against 3 in the main pool.
+- **The COOLER.** Boost-killing a YELA CUBE vents 0.22 heat and can clear the
+  overheat lock, so the roster feeds the mode's economy. Note the "can": one
+  vent off a FULL meter leaves 0.78, still far above the 0.35 hysteresis line,
+  and a test pins both directions. The lock is `boost_blocked`;
+  `overheated_now` is only the flag the HUD reads, and clearing one without
+  the other vents the heat while leaving boost unavailable.
+- **No boss set pieces** — a boss beat becomes a spike instead.
+
+Covered by `_test_rush_v225` (10 checks), which sweeps 14 levels rather than
+sampling one wave: a single wave could field only the right four by luck.
+
 ## Not ported yet — in priority order
 
 Work that is *designed but not started* — including anything that lands in the

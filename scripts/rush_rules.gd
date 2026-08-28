@@ -216,11 +216,27 @@ func speed_mult() -> float:
 	return BOOST_SPEED / 6.0 if boosting else 1.0
 
 ## A kill made by boosting through a body. Ordinary gunfire does not chain.
-func add_boost_kill() -> void:
+## v225: the COOLER earns its name. Boost-killing a YELA CUBE vents heat and
+## can clear the overheat lock, so the roster FEEDS the mode's economy instead
+## of just standing in front of it — the browser's `TUNING.rush.coolerVent`.
+const COOLER_VENT := 0.22
+
+func add_boost_kill(cooler := false) -> void:
 	kills += 1
 	var step := 2 if overcharged() else 1
 	multiplier = mini(MULT_MAX, multiplier + step)
 	mult_t = MULT_WINDOW
+	if cooler:
+		heat = maxf(0.0, heat - COOLER_VENT)
+		# Venting past the hysteresis line unlocks boost again — the same
+		# threshold the cooldown uses, so there is one definition of "clear".
+		# `boost_blocked` is the actual lock; `overheated_now` is only the flag
+		# the HUD reads. Clearing one without the other vents the heat and
+		# still leaves boost unavailable, which would make the COOLER look
+		# broken rather than useful.
+		if boost_blocked and heat <= OVERHEAT_CLEAR:
+			boost_blocked = false
+			overheated_now = false
 
 func refresh_chain() -> void:
 	if multiplier > 1:

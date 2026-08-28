@@ -75,6 +75,7 @@ func _process(_delta: float) -> bool:
 	_test_font_glyphs()
 	_test_drips()
 	_test_roguelike()
+	_test_rush_v225()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1670,6 +1671,88 @@ func _test_kill_scoring() -> void:
 ## ROGUELIKE — ported from the browser, which is the LEAD build for gameplay.
 ## Its rule is "upgrade cards every 3rd wave", and the cards' numbers are its
 ## numbers (js/main.js `applyUpgrade`).
+## v225 — RUSH gets its own arena and its own roster. Ported from the browser,
+## which leads on gameplay. Three claims, all of which a screenshot of one wave
+## could agree with by luck, so they are swept instead.
+func _test_rush_v225() -> void:
+	var w := WaveDirector.new()
+	get_root().add_child(w)
+	w.rng = RandomNumberGenerator.new()
+	w.rng.seed = 99
+	w.rush_roster = true
+
+	# A sweep of levels must field ONLY the four, and never a shooter.
+	var seen := {}
+	var shooters := 0
+	for lv in range(1, 15):
+		for name in w._eligible_for(lv):
+			seen[name] = true
+			if WaveDirector.POOL.has(name) and bool(WaveDirector.POOL[name][2]):
+				shooters += 1
+	_check(shooters == 0, "the RUSH roster fields no shooters at any level")
+	var only_four := true
+	for name in seen:
+		if not WaveDirector.RUSH_POOL.has(name):
+			only_four = false
+	_check(only_four, "and nothing outside its own four bodies")
+	_check(seen.size() == WaveDirector.RUSH_POOL.size(),
+		"and all four of them do appear across a 14-level sweep")
+
+	# SPLITTA's floor is 2 in Rush against 3 in the main pool — the one number
+	# that genuinely differs, so it is the one worth pinning.
+	_check(not w._eligible_for(1).has("SPLITTA"), "SPLITTA is absent at level 1")
+	_check(w._eligible_for(2).has("SPLITTA"),
+		"and present from level 2 — its RUSH floor, not the main pool's 3")
+
+	# No boss set pieces: a boss beat becomes a heavy one.
+	var boss_beats := 0
+	for lv in range(1, 33):
+		if w.kind_for(lv) == "boss":
+			boss_beats += 1
+	_check(boss_beats == 0, "no wave in RUSH is a boss set piece")
+	w.rush_roster = false
+	var classic_bosses := 0
+	for lv in range(1, 33):
+		if w.kind_for(lv) == "boss":
+			classic_bosses += 1
+	_check(classic_bosses > 0, "while CLASSIC still has them — the check discriminates")
+	w.queue_free()
+
+	# The COOLER vents heat and clears the lock.
+	var r := RushRules.new()
+	r.reset()
+	r.heat = 1.0
+	r.boost_blocked = true
+	r.overheated_now = true
+	r.add_boost_kill(true)
+	_check(is_equal_approx(r.heat, 1.0 - RushRules.COOLER_VENT),
+		"a COOLER boost-kill vents 0.22 heat")
+	# It CAN clear the lock, not DOES: one vent off a full meter leaves 0.78,
+	# still well above the 0.35 hysteresis line. Locking out for one kill and
+	# then releasing would defeat the hysteresis the mode is built on.
+	_check(r.boost_blocked,
+		"one vent off a FULL meter does not clear the lock — 0.78 is still hot")
+	# From just above the line it does, which is the "can" in v225's claim.
+	r.heat = 0.5
+	r.add_boost_kill(true)
+	_check(r.heat <= RushRules.OVERHEAT_CLEAR,
+		"venting from 0.5 drops under the clear line")
+	_check(not r.boost_blocked and not r.overheated_now,
+		"and THAT clears the overheat lock, not just the flag that displays it")
+
+	# A non-cooler kill does not.
+	var r2 := RushRules.new()
+	r2.reset()
+	r2.heat = 0.8
+	r2.add_boost_kill(false)
+	_check(is_equal_approx(r2.heat, 0.8), "an ordinary boost-kill vents nothing")
+	# RushRules is a Node. These two were never added to the tree, so they need
+	# free() rather than queue_free() — left alone they are orphans and Godot
+	# reports "resources still in use at exit", which is a leak this suite did
+	# not have before.
+	r.free()
+	r2.free()
+
 func _test_roguelike() -> void:
 	var main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(main)

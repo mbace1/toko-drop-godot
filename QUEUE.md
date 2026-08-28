@@ -210,16 +210,29 @@ minutes. Neither is testable headless; both need the real game running.
 
 ### Q-010 — Propose Rush upstream, or port the upstream mode down
 
-- status: Queued
-- repo: Suds-Jack
+- status: **Landed, 2026-08-28** — it turned out to be *both*, in that order
+- repo: Suds-Jack, then here
 - size: M
-- blocked-by: Q-001 — and its answer decides which of the two this item *is*
+- blocked-by: ~~Q-001~~ — answered
 - design: design/RUSH_MODE.md § Parity risk
-- gate: either a landed upstream change, or a recorded decision not to
+- gate: either a landed upstream change, or a recorded decision not to — **met
+  by a landed upstream change**
 
-The two builds diverging in *modes* is a far bigger split than diverging in
-materials, and the port has so far recorded every divergence deliberately. This
-item exists so that record keeps holding.
+Resolved the way the item hoped. The design went UP: the browser's **v224**
+("RUSH MODE — boost is the answer, the gun is the fallback") credits its own
+ruleset to this repo's `design/RUSH_MODE.md`, and shipped it. Its numbers and
+this port's then matched line for line without either being edited to suit the
+other — checked 2026-08-27, see `PORT_STATUS.md`.
+
+Then the port came DOWN: **v225** ("RUSH gets its own arena and its own
+roster") is upstream work this repo did not have, and is ported here as of
+v3.2 — the bare arena, the four-body roster, the COOLER's heat vent, and no
+boss set pieces.
+
+So Rush is now a normal follow-the-lead mode: upstream leads it, this repo
+ports it. The remaining Rush divergence is the four **abilities**, which exist
+only here — raised upstream in `Suds-Jack` PR #311 for a decision, not acted
+on unilaterally.
 
 
 ### Q-013 — Daily seed: derivation and entry
