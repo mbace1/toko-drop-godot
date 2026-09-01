@@ -104,30 +104,6 @@ once whether one question is answered or six.
 
 ## Queued
 
-
-### Q-003 — Rush director: virtual wave, standing pressure, gated refill
-
-- status: In progress — structure implemented in `scripts/rush_director.gd`
-  (`RushDirector extends WaveDirector`), full smoke coverage; not yet wired
-  into `main.gd` (no mode select, no HUD — that is Q-007/Q-008)
-- repo: toko-drop-godot
-- size: M
-- blocked-by: — (Q-002 landed; the mechanic needed no answer from Q-001 either
-  — same precedent as Q-002/006/011/012. `RUSH_DURATION`/`RUSH_WAVE_SECONDS`/
-  `RUSH_PRESSURE`/`RUSH_SPAWN_GAP`/`RUSH_SPAWN_SAFE`/`RUSH_TELEGRAPH_TIME`
-  remain `PROPOSED`, unverified against `tuning.js`, pending Q-001)
-- design: design/RUSH_MODE.md §3
-- gate: smoke checks for the virtual-wave mapping, the pressure ceiling, the
-  refill gap, and that the clock does not advance while paused — **met**
-
-Time-driven escalation reusing `budget_for()` / `shooter_cap_for()` /
-`body_cap_for()` unchanged. The clock (`elapsed`/`time_left`) accumulates only
-inside `update_rush(delta)`, never wall-clock — verified by a smoke check that
-nothing moves without that call. Refill trickles through a pipeline of
-telegraphed pending bodies (`_pending`) rather than landing all at once; the
-gap governs telegraph *starts*, and several may be in flight together
-(`RUSH_TIERS_AND_LEVELS.md` §5's "telegraphs must pipeline" finding).
-
 ### Q-004 — Edge-ring spawns with a floor telegraph
 
 - status: In progress — placement + telegraph-timing logic implemented and
@@ -150,34 +126,6 @@ not exist while its pending entry still has time left, and does exist the tick
 after) — 0.45s because that is SPITTOR's wind-up, a tell the player has
 already been taught. What is not yet built is the thing on screen the player
 actually sees during that 0.45s.
-
-### Q-005 — Heat multiplier and Rush scoring
-
-- status: In progress — mechanism implemented in `RushDirector` (`register_kill()`,
-  `multiplier()`, `_update_heat()`), full smoke coverage; not wired into
-  `main.gd`'s collision loop (Normal mode's inline scoring is untouched)
-- repo: toko-drop-godot
-- size: S
-- blocked-by: — (Q-003 landed in the same commit). The window (4.0s) and the
-  hit-does-not-break-the-chain rule are **SPECIFIED** — settled directly by the
-  project owner, not derived, and not sourced from `tuning.js`. The multiplier
-  curve itself (0.15 per heat, capped at +2.0) stays `PROPOSED` pending Q-001.
-- design: design/RUSH_MODE.md §4
-- gate: smoke checks for the window, the decay ramp and the cap — **met**,
-  including a check that a kill mid-decay restarts the hold rather than
-  resetting to zero first
-
-Replaces Normal's per-clear bonus, which Rush cannot have. **Settled: a hit
-never breaks the chain, only an idle timer does** — `RushDirector` has no
-method that reduces heat in response to damage, so this is structural, not a
-convention. Two real bugs surfaced and were fixed while landing this: scoring
-used `int()` truncation on a multiplier like ×1.15, which float imprecision
-can land a hair under (115 became 114) — now `round()`s; and the decay math
-assumed a call could never straddle the window→decay boundary in one step,
-which silently held heat for an oversized delta instead of decaying the
-correct partial amount — now splits the delta across the boundary. Both were
-caught by mutation-testing the new checks, not by inspection.
-
 
 ### Q-007 — Mode selection on the menu and death screen, touch-first
 
@@ -242,7 +190,6 @@ big and important enough that both codebases must end up with it — this is not
 mode, this item is the work of building one in the source repo, not merely
 recording a divergence and moving on. `CAMPAIGN_LEVELS.md` is held until this
 item and Q-001 both close — see that document's Status line.
-
 
 ### Q-013 — Daily seed: derivation and entry
 
@@ -461,6 +408,52 @@ signature mechanic, not borrowed from anywhere.
 
 ## Landed
 
+### Q-005 — Heat multiplier and Rush scoring
+
+- status: **Landed** in `30019c0` (structure + full smoke coverage; main.gd wiring — mode select, HUD — is separate, Q-007/Q-008)
+- repo: toko-drop-godot
+- size: S
+- blocked-by: — (Q-003 landed in the same commit). The window (4.0s) and the
+  hit-does-not-break-the-chain rule are **SPECIFIED** — settled directly by the
+  project owner, not derived, and not sourced from `tuning.js`. The multiplier
+  curve itself (0.15 per heat, capped at +2.0) stays `PROPOSED` pending Q-001.
+- design: design/RUSH_MODE.md §4
+- gate: smoke checks for the window, the decay ramp and the cap — **met**,
+  including a check that a kill mid-decay restarts the hold rather than
+  resetting to zero first
+
+Replaces Normal's per-clear bonus, which Rush cannot have. **Settled: a hit
+never breaks the chain, only an idle timer does** — `RushDirector` has no
+method that reduces heat in response to damage, so this is structural, not a
+convention. Two real bugs surfaced and were fixed while landing this: scoring
+used `int()` truncation on a multiplier like ×1.15, which float imprecision
+can land a hair under (115 became 114) — now `round()`s; and the decay math
+assumed a call could never straddle the window→decay boundary in one step,
+which silently held heat for an oversized delta instead of decaying the
+correct partial amount — now splits the delta across the boundary. Both were
+caught by mutation-testing the new checks, not by inspection.
+
+### Q-003 — Rush director: virtual wave, standing pressure, gated refill
+
+- status: **Landed** in `30019c0` (structure + full smoke coverage; main.gd wiring — mode select, HUD — is separate, Q-007/Q-008)
+- repo: toko-drop-godot
+- size: M
+- blocked-by: — (Q-002 landed; the mechanic needed no answer from Q-001 either
+  — same precedent as Q-002/006/011/012. `RUSH_DURATION`/`RUSH_WAVE_SECONDS`/
+  `RUSH_PRESSURE`/`RUSH_SPAWN_GAP`/`RUSH_SPAWN_SAFE`/`RUSH_TELEGRAPH_TIME`
+  remain `PROPOSED`, unverified against `tuning.js`, pending Q-001)
+- design: design/RUSH_MODE.md §3
+- gate: smoke checks for the virtual-wave mapping, the pressure ceiling, the
+  refill gap, and that the clock does not advance while paused — **met**
+
+Time-driven escalation reusing `budget_for()` / `shooter_cap_for()` /
+`body_cap_for()` unchanged. The clock (`elapsed`/`time_left`) accumulates only
+inside `update_rush(delta)`, never wall-clock — verified by a smoke check that
+nothing moves without that call. Refill trickles through a pipeline of
+telegraphed pending bodies (`_pending`) rather than landing all at once; the
+gap governs telegraph *starts*, and several may be in flight together
+(`RUSH_TIERS_AND_LEVELS.md` §5's "telegraphs must pipeline" finding).
+
 ### Q-002 — Extract wave composition from `start_wave()` into a reusable picker
 
 - status: **Landed** in `e6bf70a`
@@ -538,7 +531,6 @@ reintroduces Q-011's bug. `audio_kit.gd` already owns a private RNG and is the
 pattern to copy. Worth landing even if the daily seed is never built: it also
 lets the smoke gate assert on specific compositions instead of only on
 aggregate budget properties.
-
 
 ---
 
