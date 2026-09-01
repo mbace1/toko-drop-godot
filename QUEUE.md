@@ -129,7 +129,7 @@ actually sees during that 0.45s.
 
 ### Q-007 — Mode selection on the menu and death screen, touch-first
 
-- status: In progress — chips built and wired (`_select_mode()`, `_start_game()`
+- status: In progress (`65229d8`) — chips built and wired (`_select_mode()`, `_start_game()`
   installing the right director class, `ui_left`/`ui_right` toggle, touch
   exclusion via `InputManager.suppress_rects`), state transitions verified by
   `tests/smoke_main.gd`; **no capture run** — chip layout/hit-testing on a real
@@ -156,7 +156,7 @@ half-done.
 
 ### Q-008 — Rush HUD: clock with drain bar, multiplier, SURGE flash
 
-- status: In progress — implemented in `_update_hud()`/`_process_playing()`
+- status: In progress (`65229d8`) — implemented in `_update_hud()`/`_process_playing()`
   (clock replacing WAVE, a drain bar sized off `time_left`, multiplier
   replacing BEST, a SURGE flash on each virtual-wave boundary); the
   score/multiplier *math* driving it is exercised by `tests/smoke_main.gd`,
