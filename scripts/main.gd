@@ -26,13 +26,23 @@ const VOID_COLOR := Color(0.051, 0.051, 0.102)
 const FLOOR_SHADER := preload("res://shaders/floor_grid.gdshader")
 
 enum State { MENU, PLAYING, PAUSED, DEAD }
+enum Mode { NORMAL, RUSH }
 
 var state := State.MENU
+
+## The mode selected on the menu, and of whatever run is in progress or just
+## finished. Defaults NORMAL so tools/capture.gd's existing `_start_game()`
+## call (no args) keeps booting a Normal run exactly as it always has.
+## Deliberately kept as two distinct director CLASSES (_install_waves() below)
+## rather than one director with mode branches sprinkled through it — Rush
+## stays a genuinely separate mode, not a hybrid bolted onto Normal's.
+var mode := Mode.NORMAL
 var score := 0
 
 var player: Player
 var bullets: BulletPool
 var waves: WaveDirector
+var enemies_root: Node3D
 var input_mgr: InputManager
 var camera: Camera3D
 var audio: AudioKit
@@ -46,6 +56,20 @@ var _wave_label: Label
 var _score_label: Label
 var _msg_label: Label
 
+## Rush's drain bar sits next to the clock in the top row rather than behind
+## it — animating a Control's on-screen SIZE inside an HBoxContainer means
+## driving its custom_minimum_size each frame, not its .size directly, which
+## the container's own layout pass would just overwrite.
+var _drain_bar: ColorRect
+var _drain_bar_max_w := 120.0
+
+var _mode_wrap: CenterContainer
+var _mode_normal_btn: Button
+var _mode_rush_btn: Button
+
+var _surge_label: Label
+var _surge_t := 0.0
+
 func _ready() -> void:
 	_setup_world()
 	_setup_camera()
@@ -58,18 +82,11 @@ func _ready() -> void:
 	add_child(bullets)
 	bullets.build()
 
-	var enemies_root := Node3D.new()
+	enemies_root = Node3D.new()
 	enemies_root.name = "Enemies"
 	add_child(enemies_root)
 
-	waves = WaveDirector.new()
-	add_child(waves)
-	waves.half_x = HALF_X
-	waves.half_z = HALF_Z
-	waves.target = player
-	waves.bullets = bullets
-	waves.enemies_root = enemies_root
-	waves.wave_cleared.connect(_on_wave_cleared)
+	_install_waves(WaveDirector.new())
 
 	input_mgr = InputManager.new()
 	input_mgr.camera = camera
@@ -86,6 +103,29 @@ func _ready() -> void:
 
 	_setup_hud()
 	_show_menu()
+
+## Swaps the active director for a new instance of the right class — a plain
+## WaveDirector for Normal, a RushDirector for Rush — rather than one director
+## carrying a mode flag through every method. `waves` stays typed as the base
+## class throughout, since everything Normal and Rush share (enemies, corpses,
+## _step_bodies()) lives there; only the caller needs to know which subclass
+## it is holding, and only where the two modes genuinely diverge.
+func _install_waves(new_waves: WaveDirector) -> void:
+	if waves != null and is_instance_valid(waves):
+		waves.clear()
+		waves.queue_free()
+	waves = new_waves
+	add_child(waves)
+	waves.half_x = HALF_X
+	waves.half_z = HALF_Z
+	waves.target = player
+	waves.bullets = bullets
+	waves.enemies_root = enemies_root
+	# RushDirector never clears in the Normal sense (main.gd drives it through
+	# update_rush(), not update()), so it never emits wave_cleared — connecting
+	# it there would just be dead wiring.
+	if not (waves is RushDirector):
+		waves.wave_cleared.connect(_on_wave_cleared)
 
 func _setup_world() -> void:
 	var env_node := WorldEnvironment.new()
@@ -245,6 +285,13 @@ func _setup_hud() -> void:
 	spacer1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(spacer1)
 
+	_drain_bar = ColorRect.new()
+	_drain_bar.color = Color(0.3, 0.55, 1.0, 0.55)
+	_drain_bar.custom_minimum_size = Vector2(0, 6)
+	_drain_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_drain_bar.visible = false
+	top.add_child(_drain_bar)
+
 	_wave_label = _make_label(22)
 	top.add_child(_wave_label)
 
@@ -271,16 +318,86 @@ func _setup_hud() -> void:
 	sticks.input_mgr = input_mgr
 	hud.add_child(sticks)
 
+	# Mode-select chips — RUSH_MODE.md §6: hit-tested ahead of the "any touch
+	# starts a run" fallback (via input_mgr.suppress_rects, kept live in
+	# _process()), a CenterContainer so they stay centred regardless of their
+	# own size rather than needing hand-computed offsets.
+	_mode_wrap = CenterContainer.new()
+	_mode_wrap.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_mode_wrap.position.y = 230.0
+	_mode_wrap.custom_minimum_size.y = 60.0
+	hud.add_child(_mode_wrap)
+
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", 16)
+	_mode_wrap.add_child(mode_row)
+
+	_mode_normal_btn = _make_mode_button("NORMAL")
+	_mode_rush_btn = _make_mode_button("RUSH")
+	_mode_normal_btn.pressed.connect(func(): _select_mode(Mode.NORMAL, true))
+	_mode_rush_btn.pressed.connect(func(): _select_mode(Mode.RUSH, true))
+	mode_row.add_child(_mode_normal_btn)
+	mode_row.add_child(_mode_rush_btn)
+
+	_surge_label = _make_label(26)
+	_surge_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	_surge_label.text = "SURGE"
+	_surge_label.visible = false
+	_surge_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_surge_label.position = Vector2(-40.0, 70.0)
+	hud.add_child(_surge_label)
+
 func _make_label(font_size: int) -> Label:
 	var l := Label.new()
 	l.add_theme_font_size_override("font_size", font_size)
 	l.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0))
 	return l
 
+func _make_mode_button(text: String) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(120.0, 44.0)
+	b.add_theme_font_size_override("font_size", 18)
+	return b
+
+## A tap on a chip both selects and starts that mode (RUSH_MODE.md §6); the
+## keyboard/gamepad path (_process()'s ui_left/ui_right) only selects, so
+## start_now is false there.
+func _select_mode(m: Mode, start_now: bool) -> void:
+	mode = m
+	_refresh_mode_buttons()
+	if start_now:
+		_start_game()
+	elif state == State.MENU:
+		_show_menu()   # rebuild the best-score line for the newly selected mode
+
+func _refresh_mode_buttons() -> void:
+	_mode_normal_btn.modulate = Color(1, 1, 1, 1) if mode == Mode.NORMAL else Color(1, 1, 1, 0.55)
+	_mode_rush_btn.modulate = Color(1, 1, 1, 1) if mode == Mode.RUSH else Color(1, 1, 1, 0.55)
+
+## The best for whichever mode is currently SELECTED — read directly from the
+## save's per-mode bucket rather than through save.hi_score, which tracks the
+## mode of the run last STARTED, not the menu's current selection (those two
+## can disagree for the few frames between toggling the chip and pressing go).
+func _current_best() -> int:
+	var key := SaveService.MODE_RUSH if mode == Mode.RUSH else SaveService.MODE_NORMAL
+	return int(save._bucket(key).get("hi_score", 0))
+
 func _process(delta: float) -> void:
 	# The floor pulses on its own clock even on the menu — a still first screen
 	# reads as a broken page.
 	_floor_mat.set_shader_parameter("u_time", Time.get_ticks_msec() / 1000.0)
+
+	var chips_visible := state == State.MENU or state == State.DEAD
+	_mode_wrap.visible = chips_visible
+	# Kept live rather than set once: chip layout isn't final until a frame
+	# after _setup_hud(), and this only matters while the chips are shown.
+	# (A ternary here infers a plain untyped Array, which GDScript refuses to
+	# assign onto an Array[Rect2] property — hence the explicit typed local.)
+	var suppress: Array[Rect2] = []
+	if chips_visible:
+		suppress = [_mode_normal_btn.get_global_rect(), _mode_rush_btn.get_global_rect()]
+	input_mgr.suppress_rects = suppress
 
 	if input_mgr.pause_pressed():
 		if state == State.PLAYING:
@@ -295,8 +412,17 @@ func _process(delta: float) -> void:
 		State.PLAYING:
 			_process_playing(delta)
 		State.MENU, State.DEAD:
+			# Only two modes, so either direction just toggles — RUSH_MODE.md §6's
+			# "keyboard gets left/right to move the selection", satisfied minimally.
+			if Input.is_action_just_pressed("ui_left") or Input.is_action_just_pressed("ui_right"):
+				_select_mode(Mode.RUSH if mode == Mode.NORMAL else Mode.NORMAL, false)
+
 			# A touch anywhere starts a run: on a phone there is no FIRE key, and
-			# the dash edge only fires on RELEASE of the aim stick.
+			# the dash edge only fires on RELEASE of the aim stick. A chip's own
+			# tap is excluded via input_mgr.suppress_rects above and starts the
+			# game itself (_select_mode), so by the time this runs `state` has
+			# already left MENU/DEAD on that frame — this fallback only ever
+			# fires for a press that hit neither chip.
 			if input_mgr.dash_pressed() or Input.is_action_just_pressed("fire") \
 					or input_mgr.left.active or input_mgr.right.active:
 				_start_game()
@@ -306,6 +432,7 @@ func _process(delta: float) -> void:
 func _process_playing(delta: float) -> void:
 	var move := input_mgr.get_move_dir()
 	var aim := input_mgr.get_aim_dir(player.position)
+	var rd: RushDirector = (waves as RushDirector) if mode == Mode.RUSH else null
 
 	if input_mgr.dash_pressed():
 		var was_ready := player.can_dash()
@@ -315,7 +442,15 @@ func _process_playing(delta: float) -> void:
 
 	player.update(delta, move, aim, bullets, HALF_X, HALF_Z)
 	bullets.update(delta, maxf(HALF_X, HALF_Z))
-	waves.update(delta)
+
+	if rd != null:
+		var vw_before := rd.virtual_wave_for(rd.elapsed)
+		rd.update_rush(delta, player.position)
+		if rd.virtual_wave_for(rd.elapsed) > vw_before:
+			_surge_t = 0.6   # a SURGE flash is the escalation beat Normal gets
+			audio.play("wave")   # for free every time the arena empties and refills
+	else:
+		waves.update(delta)
 
 	# Player bullets vs. enemies.
 	for e in waves.enemies:
@@ -332,7 +467,7 @@ func _process_playing(delta: float) -> void:
 				var was_max := e.max_hp
 				if e.take_hit(1):
 					audio.play_varied("kill")
-					score += 100 * was_max   # tougher bodies are worth more
+					score += rd.register_kill(was_max) if rd != null else 100 * was_max   # tougher bodies are worth more
 				else:
 					audio.play_varied("hit")
 
@@ -367,24 +502,50 @@ func _process_playing(delta: float) -> void:
 
 	if not player.alive:
 		_on_player_dead()
+	elif rd != null and rd.is_over():
+		_on_rush_timeout()
+
+	_surge_t = maxf(0.0, _surge_t - delta)
+	_surge_label.visible = _surge_t > 0.0
 
 func _start_game() -> void:
 	state = State.PLAYING
 	score = 0
 	input_mgr.reset()
-	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
+	save.mode = SaveService.MODE_RUSH if mode == Mode.RUSH else SaveService.MODE_NORMAL
+	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only, per mode
+
 	player.reset()
-	waves.clear()
+	if mode == Mode.RUSH:
+		var rd := RushDirector.new()
+		_install_waves(rd)
+		rd.start_rush()
+	else:
+		_install_waves(WaveDirector.new())
+		waves.start_wave()
+
 	bullets.clear()
-	waves.start_wave()
+	_surge_t = 0.0
+	_surge_label.visible = false
 	_msg_label.hide()
 
 ## Capture-only: fast-forward the director so tools/capture.gd can photograph
-## later waves. Never called by the game itself.
+## later waves. Never called by the game itself. Normal mode only — `waves`
+## must already be a plain WaveDirector, i.e. a Normal run is what's running.
 func _capture_seek_wave(n: int) -> void:
 	waves.clear()
 	waves.wave = maxi(n - 1, 0)
 	waves.start_wave()
+
+## Capture-only, Rush's counterpart to _capture_seek_wave(): starts a Rush run
+## and fast-forwards its clock so a later leg can be photographed. Never
+## called by the game itself.
+func _capture_seek_rush(elapsed_seconds: float) -> void:
+	mode = Mode.RUSH
+	_start_game()
+	var rd := waves as RushDirector
+	rd.elapsed = elapsed_seconds
+	rd.time_left = maxf(0.0, RushDirector.RUSH_DURATION - elapsed_seconds)
 
 func _on_wave_cleared(n: int) -> void:
 	score += 50 * n
@@ -392,12 +553,30 @@ func _on_wave_cleared(n: int) -> void:
 	waves.start_wave()
 
 func _on_player_dead() -> void:
+	_end_run("YOU DIED")
+
+func _on_rush_timeout() -> void:
+	_end_run("TIME'S UP")
+
+## Shared by both ways a run ends — a third hit, or (Rush only) the clock
+## running out. The state transition, sound and save write are the same
+## either way; only what gets recorded and printed differs.
+func _end_run(headline: String) -> void:
 	state = State.DEAD
 	audio.play("dead")
 	input_mgr.reset()   # a finger still down must not steer the next run
-	var best := save.record(score, waves.wave)
-	var out := ["YOU DIED", "", "score %d — wave %d" % [score, waves.wave]]
+
+	var out := [headline, ""]
+	var best: bool
+	if mode == Mode.RUSH:
+		var rd := waves as RushDirector
+		best = save.record(score, 0, {"kills": rd.kills, "heat_peak": rd.heat_peak})
+		out.append("score %d — %d kills" % [score, rd.kills])
+	else:
+		best = save.record(score, waves.wave)
+		out.append("score %d — wave %d" % [score, waves.wave])
 	out.append("NEW BEST!" if best else "best %d" % save.hi_score)
+
 	var recent := save.recent_line()
 	if recent != "":
 		out.append(recent)
@@ -411,15 +590,33 @@ func _show_menu() -> void:
 	_msg_label.text = "TOKO DROP\n\ntwin-stick swarm survival\n\n" \
 		+ "touch — left thumb moves, right thumb aims, release to dash\n" \
 		+ "keys — WASD move, hold LMB to aim and fire, SPACE dash, ESC pause\n" \
-		+ "pad — sticks move and aim, A dash, Start pause\n\n" \
-		+ ("best %d\n\n" % save.hi_score if save.hi_score > 0 else "") \
+		+ "pad — sticks move and aim, A dash, Start pause\n" \
+		+ "choose a mode above — arrows / d-pad switch it too\n\n" \
+		+ _menu_best_line() \
 		+ "tap, or press FIRE / DASH, to start"
 	_msg_label.show()
+	_refresh_mode_buttons()
+
+func _menu_best_line() -> String:
+	var best := _current_best()
+	return ("best %d\n\n" % best) if best > 0 else ""
 
 func _update_hud() -> void:
 	if player == null:
 		return
 	_hp_label.text = "HP " + "●".repeat(maxi(player.hp, 0)) + "○".repeat(maxi(player.max_hp - player.hp, 0))
-	_wave_label.text = "WAVE %d" % waves.wave
-	_score_label.text = ("SCORE %d" % score) if save.hi_score <= 0 \
-		else ("SCORE %d   BEST %d" % [score, save.hi_score])
+
+	if mode == Mode.RUSH:
+		var rd := waves as RushDirector
+		var secs := int(ceil(rd.time_left))
+		_wave_label.text = "%d:%02d" % [secs / 60, secs % 60]
+		_drain_bar.custom_minimum_size.x = _drain_bar_max_w \
+			* clampf(rd.time_left / RushDirector.RUSH_DURATION, 0.0, 1.0)
+		_drain_bar.visible = true
+		_score_label.text = "SCORE %d   x%.1f" % [score, rd.multiplier()]
+	else:
+		_wave_label.text = "WAVE %d" % waves.wave
+		_drain_bar.visible = false
+		var best := _current_best()
+		_score_label.text = ("SCORE %d" % score) if best <= 0 \
+			else ("SCORE %d   BEST %d" % [score, best])

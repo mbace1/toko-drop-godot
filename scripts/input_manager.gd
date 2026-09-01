@@ -45,6 +45,13 @@ var left := Stick.new()
 var right := Stick.new()
 var using_touch := false
 
+## Screen-space rects (viewport pixel coords, the same space InputEventScreenTouch
+## delivers) where a press should be ignored entirely rather than planting a
+## stick — the mode-select chips on the menu, so a tap that selects RUSH does
+## not also plant an aim stick under the player's thumb. Populated by whoever
+## owns that UI (main.gd); empty by default, so nothing changes for anyone else.
+var suppress_rects: Array[Rect2] = []
+
 var _dash_queued := false
 var _pause_queued := false
 
@@ -56,6 +63,9 @@ func _input(event: InputEvent) -> void:
 
 func _on_touch(e: InputEventScreenTouch) -> void:
 	if e.pressed:
+		for r in suppress_rects:
+			if r.has_point(e.position):
+				return
 		using_touch = true
 		# Pause strip along the top centre — the one place a touch is not a stick.
 		if e.position.y < PAUSE_ZONE_H and absf(e.position.x - _screen_mid()) < PAUSE_ZONE_W * 0.5:

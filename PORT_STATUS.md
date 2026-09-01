@@ -87,14 +87,34 @@ target is `PORT_BRIEF.md`.
   the per-clear score bonus Rush cannot have — settled by the project owner to
   break only on an idle timer, never on taking a hit, which is a structural
   guarantee (`RushDirector` has no method that reduces heat from damage, so
-  there is nothing to call). **Not wired into `main.gd`** — no mode select, no
-  HUD, no menu integration. Landing this surfaced two real bugs, both caught by
+  there is nothing to call). Landing this surfaced two real bugs, both caught by
   mutation-testing the new checks rather than by inspection: score used
   `int()` truncation on a multiplier like ×1.15, which float imprecision can
   land a hair under (dropping a point off the score); and the heat-decay math
   assumed a single call could never straddle the window→decay boundary, so an
   oversized step silently held heat instead of decaying the right partial
   amount. `design/RUSH_MODE.md` §3–§4, `QUEUE.md` Q-003/Q-004/Q-005.
+- **RushDirector wired into `main.gd`.** Two mode chips on the menu/death
+  screen (`NORMAL`/`RUSH`, keyboard/gamepad `ui_left`/`ui_right` toggle too),
+  the collision loop branching to `RushDirector.register_kill()` for Rush
+  instead of Normal's inline `100 × max_hp`, and a shared `_end_run()` that
+  both a third hit and Rush's clock reaching zero funnel through — each
+  printing its own recap (Rush's never shows a wave number, which would be a
+  lie) and recording into its own save bucket. `_install_waves()` swaps the
+  active director for a fresh instance of the right *class* per run — a plain
+  `WaveDirector` for Normal, a `RushDirector` for Rush — rather than one
+  director carrying a mode flag through every method, so Rush stays a
+  genuinely separate mode rather than a hybrid bolted onto Normal's. A touch
+  on a chip is excluded from `InputManager`'s stick-planting via a small
+  `suppress_rects` list, so tapping RUSH does not also plant an aim stick
+  under the same thumb.
+  **Verified: state transitions and the scoring wiring itself** — a bullet run
+  through the real collision loop raises both `score` and `RushDirector.kills`
+  — via `tests/smoke_main.gd` (below). **Not verified: how any of it looks.**
+  No capture run exists for the mode chips, the drain bar, or the SURGE flash
+  — this port's HUD has a recorded history of passing every headless check
+  while being visibly broken on screen, and nothing here should be assumed
+  correct until it has actually been looked at.
 
 **Enemies** (6 of ~40 in the live roster — `js/tuning.js` names all 40)
 - GLOBBO — chaser blob. Two behaviours stack: the lunging speed-pulse
@@ -190,6 +210,15 @@ target is `PORT_BRIEF.md`.
   "shooting does not move the swarm". The RushDirector heat/scoring checks are
   the same discipline and are how the two bugs noted above were actually
   found, not just fixed. A gate that cannot fail is not a gate.
+- `tests/smoke_main.gd` — 22 checks, a second headless gate specifically for
+  `main.gd` itself, which `tests/smoke.gd` deliberately stays out of (`main.gd`
+  relies on deferred `_ready()`, unlike everything else, which is built not
+  to). Drives real runs through `main.gd`'s own `_start_game()`/
+  `_process_playing()`/`_end_run()` for both modes — including one full pass
+  of a bullet through the real collision loop confirming it actually calls
+  `RushDirector.register_kill()` rather than a parallel, easier-to-break score
+  path, mutation-tested the same way. State only: it proves the wiring is
+  correct, not that the HUD it drives looks right — see the note above.
 - `tools/capture.gd` — screenshots the REAL game on a GPU. This is the other
   half of the gate and it is not optional: the source repo's own recorded
   diagnosis is that its games stall at prototype feel because "the smoke

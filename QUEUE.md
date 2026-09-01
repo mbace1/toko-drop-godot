@@ -129,34 +129,54 @@ actually sees during that 0.45s.
 
 ### Q-007 — Mode selection on the menu and death screen, touch-first
 
-- status: Queued
+- status: In progress — chips built and wired (`_select_mode()`, `_start_game()`
+  installing the right director class, `ui_left`/`ui_right` toggle, touch
+  exclusion via `InputManager.suppress_rects`), state transitions verified by
+  `tests/smoke_main.gd`; **no capture run** — chip layout/hit-testing on a real
+  touch viewport is unverified, and last-played-mode persistence was dropped
+  from this pass (see below)
 - repo: toko-drop-godot
-- size: M — **re-scope before building** if the campaign (Q-022) is wanted:
-  two chips becomes three modes plus a level grid with per-level grades, which
-  is a different screen with its own touch answer
-- blocked-by: Q-006 (last-played mode is persisted)
+- size: M — **re-scope before building further** if the campaign (Q-022) is
+  wanted: two chips becomes three modes plus a level grid with per-level
+  grades, a different screen with its own touch answer
+- blocked-by: — (Q-006 landed)
 - design: design/RUSH_MODE.md §6
-- gate: capture run on a touch-sized viewport; the start-anywhere fallback must
-  still work for a first-time player who taps nothing in particular
+- gate: capture run on a touch-sized viewport — **outstanding**; the
+  start-anywhere fallback still works for a tap that hits neither chip —
+  **met**, verified structurally (state only, not visually)
 
 Today any touch anywhere starts a run, because on a phone there is no FIRE key.
 Two modes means selecting without breaking that: hit-tested mode chips ahead of
-the fallback, last mode persisted and pre-selected, keyboard and gamepad
-bindings alongside.
+the fallback (via `suppress_rects`, so a chip tap doesn't also plant a stick
+under the same thumb), keyboard/gamepad `ui_left`/`ui_right` alongside.
+**Scoped out of this pass, not forgotten:** last-played-mode persistence
+across launches — `mode` resets to Normal every boot. Cheap to add to
+`SaveService` later; deliberately left out here rather than silently
+half-done.
 
 ### Q-008 — Rush HUD: clock with drain bar, multiplier, SURGE flash
 
-- status: Queued
+- status: In progress — implemented in `_update_hud()`/`_process_playing()`
+  (clock replacing WAVE, a drain bar sized off `time_left`, multiplier
+  replacing BEST, a SURGE flash on each virtual-wave boundary); the
+  score/multiplier *math* driving it is exercised by `tests/smoke_main.gd`,
+  but the HUD itself has **no capture run** — read the gate below again before
+  treating any of this as done
 - repo: toko-drop-godot
 - size: S
-- blocked-by: Q-003, Q-005
+- blocked-by: — (Q-003, Q-005 landed)
 - design: design/RUSH_MODE.md §5
 - gate: capture run — the HUD is the single thing in this port with a recorded
-  history of passing every headless check while being visibly broken on screen
+  history of passing every headless check while being visibly broken on
+  screen, and that history is exactly why this item stays In progress rather
+  than Landed on headless-green alone
 
 Clock replaces WAVE, multiplier replaces BEST, and the escalation beat that
-Normal gets for free (an arena emptying and refilling) has to be announced
-explicitly.
+Normal gets for free (an arena emptying and refilling) is announced with a
+SURGE flash. The drain bar sits beside the clock rather than behind it — a
+first-pass layout choice, not a considered one; the exact placement, whether
+the SURGE flash's position collides with anything, and whether the chips read
+as chips at all are all open until someone with a GPU actually looks at it.
 
 ### Q-009 — Sustained-load pass: revenge pool guard, corpse count, touch endurance
 

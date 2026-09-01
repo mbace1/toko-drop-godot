@@ -73,6 +73,21 @@ composer, the seeded gameplay random stream, and the Rush director's
 escalation/spawn/heat mechanics — 132 checks. Run it before every commit that
 touches `scripts/`.
 
+```
+godot --headless --script tests/smoke_main.gd
+```
+
+A second, separate headless gate — `main.gd` itself, which the first
+deliberately stays out of (`main.gd` relies on deferred `_ready()`, unlike
+everything the first gate exercises, which is built specifically not to need
+it — see "Design note" below). Drives real runs through `main.gd`'s own
+`_start_game()` / `_process_playing()` / `_end_run()` for both Normal and
+Rush — including a bullet through the *real* collision loop, confirming Rush
+scoring actually reaches `RushDirector.register_kill()` rather than a
+parallel, easier-to-break path — 22 checks. State only: it proves the wiring
+is correct, not that the HUD it drives looks right on screen. Run it whenever
+`main.gd` changes.
+
 ## Layout
 
 ```
@@ -102,9 +117,11 @@ scripts/
   wave_director.gd        budget-based wave composition, shooter cap,
                           corpse pops and revenge volleys
   rush_director.gd         RushDirector — Rush mode's director (extends
-                          WaveDirector); structural only, not wired into
-                          main.gd yet — see PORT_STATUS.md
+                          WaveDirector), wired into main.gd (mode select,
+                          collision-loop scoring, run-ending) but not yet
+                          capture-verified — see PORT_STATUS.md
 tests/smoke.gd         headless gate — see "Testing" above
+tests/smoke_main.gd    a second headless gate, for main.gd itself — see "Testing" above
 tools/capture.gd      screenshots the real game — see "Looking at it" above
 PORT_BRIEF.md         inherited visual/material brief (Godot-side canon for shaders/lighting)
 PORT_STATUS.md        living doc: what's ported, what's next, in priority order
