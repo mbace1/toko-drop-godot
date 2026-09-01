@@ -74,6 +74,27 @@ target is `PORT_BRIEF.md`.
   `start_wave()` so a second *cadence* can spend the same ported table without
   forking it (Rush holds a standing pressure rather than spending a whole wave
   at once). Pure refactor; the existing wave checks pass unmodified.
+- **`RushDirector` (`scripts/rush_director.gd`) — Rush mode's director,
+  structurally.** `extends WaveDirector`, reusing `compose()` /
+  `budget_for()` / `shooter_cap_for()` / `body_cap_for()` unchanged rather than
+  forking a second table. Escalation runs off elapsed time through a *virtual
+  wave*; spawning trickles through a pipeline of telegraphed pending bodies on
+  the arena edge (never the 0.6× wave ellipse — a body appearing mid-dash with
+  no wave boundary to warn you is an unavoidable hit); the clock only ever
+  advances inside `update_rush(delta)`, so pausing (not calling it) is free,
+  same as every other system in this port; a kill banks earned time capped at
+  the run's base duration; and a heat multiplier (`register_kill()`) replaces
+  the per-clear score bonus Rush cannot have — settled by the project owner to
+  break only on an idle timer, never on taking a hit, which is a structural
+  guarantee (`RushDirector` has no method that reduces heat from damage, so
+  there is nothing to call). **Not wired into `main.gd`** — no mode select, no
+  HUD, no menu integration. Landing this surfaced two real bugs, both caught by
+  mutation-testing the new checks rather than by inspection: score used
+  `int()` truncation on a multiplier like ×1.15, which float imprecision can
+  land a hair under (dropping a point off the score); and the heat-decay math
+  assumed a single call could never straddle the window→decay boundary, so an
+  oversized step silently held heat instead of decaying the right partial
+  amount. `design/RUSH_MODE.md` §3–§4, `QUEUE.md` Q-003/Q-004/Q-005.
 
 **Enemies** (6 of ~40 in the live roster — `js/tuning.js` names all 40)
 - GLOBBO — chaser blob. Two behaviours stack: the lunging speed-pulse
@@ -163,10 +184,12 @@ target is `PORT_BRIEF.md`.
   §6**, "biggest single jump, near-free".
 
 **Testing**
-- `tests/smoke.gd` — 106 checks, bare `SceneTree`, no GPU. Run before every
+- `tests/smoke.gd` — 132 checks, bare `SceneTree`, no GPU. Run before every
   commit touching `scripts/`. The determinism checks are mutation-tested:
   reverting `compose()` to the global rng fails exactly two of them, including
-  "shooting does not move the swarm". A gate that cannot fail is not a gate.
+  "shooting does not move the swarm". The RushDirector heat/scoring checks are
+  the same discipline and are how the two bugs noted above were actually
+  found, not just fixed. A gate that cannot fail is not a gate.
 - `tools/capture.gd` — screenshots the REAL game on a GPU. This is the other
   half of the gate and it is not optional: the source repo's own recorded
   diagnosis is that its games stall at prototype feel because "the smoke

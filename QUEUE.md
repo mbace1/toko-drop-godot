@@ -107,49 +107,76 @@ once whether one question is answered or six.
 
 ### Q-003 — Rush director: virtual wave, standing pressure, gated refill
 
-- status: Queued
+- status: In progress — structure implemented in `scripts/rush_director.gd`
+  (`RushDirector extends WaveDirector`), full smoke coverage; not yet wired
+  into `main.gd` (no mode select, no HUD — that is Q-007/Q-008)
 - repo: toko-drop-godot
 - size: M
-- blocked-by: Q-001 (constants), Q-002 (picker)
+- blocked-by: — (Q-002 landed; the mechanic needed no answer from Q-001 either
+  — same precedent as Q-002/006/011/012. `RUSH_DURATION`/`RUSH_WAVE_SECONDS`/
+  `RUSH_PRESSURE`/`RUSH_SPAWN_GAP`/`RUSH_SPAWN_SAFE`/`RUSH_TELEGRAPH_TIME`
+  remain `PROPOSED`, unverified against `tuning.js`, pending Q-001)
 - design: design/RUSH_MODE.md §3
 - gate: smoke checks for the virtual-wave mapping, the pressure ceiling, the
-  refill gap, and that the clock does not advance while paused
+  refill gap, and that the clock does not advance while paused — **met**
 
 Time-driven escalation reusing `budget_for()` / `shooter_cap_for()` /
-`body_cap_for()` unchanged. The clock accumulates from the director's own
-`delta`, never wall-clock — a Rush timer driven by `Time.get_ticks_msec()`
-would keep draining through a pause, and that is both a cheat and the kind of
-bug a headless test can actually catch.
+`body_cap_for()` unchanged. The clock (`elapsed`/`time_left`) accumulates only
+inside `update_rush(delta)`, never wall-clock — verified by a smoke check that
+nothing moves without that call. Refill trickles through a pipeline of
+telegraphed pending bodies (`_pending`) rather than landing all at once; the
+gap governs telegraph *starts*, and several may be in flight together
+(`RUSH_TIERS_AND_LEVELS.md` §5's "telegraphs must pipeline" finding).
 
 ### Q-004 — Edge-ring spawns with a floor telegraph
 
-- status: Queued
+- status: In progress — placement + telegraph-timing logic implemented and
+  smoke-tested (`RushDirector._pick_edge_position()`, the `_pending` timer);
+  the VISUAL half (a floor-shader ping at the spawn point) is not built, and
+  no `tools/capture.gd` run exists yet — the gate is explicitly half-visual,
+  so this cannot move to Landed without it
 - repo: toko-drop-godot
 - size: M
-- blocked-by: Q-003
+- blocked-by: — (Q-003's structure it depends on is in progress in the same commit)
 - design: design/RUSH_MODE.md §3.4
-- gate: smoke check that no Rush spawn lands inside the safe radius, plus a
-  `tools/capture.gd` run showing the telegraph — this one is visual, so the
-  screenshot is half the gate
+- gate: smoke check that no Rush spawn lands inside the safe radius — **met**;
+  a `tools/capture.gd` run showing the telegraph — **outstanding**
 
 Trickle spawns cannot use the wave ellipse: a body appearing at 0.6× extents
 mid-run with no wave boundary to warn you is an unavoidable hit. Edge ring, a
-minimum distance from the player, and a 0.45s ring pulse on the floor grid
-before the body exists — 0.45s because that is SPITTOR's wind-up, a tell the
-player has already been taught.
+minimum distance from the player (tested including a cornered player), and a
+0.45s wind-up before the body enters `enemies` (tested: the tracked body does
+not exist while its pending entry still has time left, and does exist the tick
+after) — 0.45s because that is SPITTOR's wind-up, a tell the player has
+already been taught. What is not yet built is the thing on screen the player
+actually sees during that 0.45s.
 
 ### Q-005 — Heat multiplier and Rush scoring
 
-- status: Queued
+- status: In progress — mechanism implemented in `RushDirector` (`register_kill()`,
+  `multiplier()`, `_update_heat()`), full smoke coverage; not wired into
+  `main.gd`'s collision loop (Normal mode's inline scoring is untouched)
 - repo: toko-drop-godot
 - size: S
-- blocked-by: Q-001 (constants), Q-003
+- blocked-by: — (Q-003 landed in the same commit). The window (4.0s) and the
+  hit-does-not-break-the-chain rule are **SPECIFIED** — settled directly by the
+  project owner, not derived, and not sourced from `tuning.js`. The multiplier
+  curve itself (0.15 per heat, capped at +2.0) stays `PROPOSED` pending Q-001.
 - design: design/RUSH_MODE.md §4
-- gate: smoke checks for the window, the decay ramp and the cap
+- gate: smoke checks for the window, the decay ramp and the cap — **met**,
+  including a check that a kill mid-decay restarts the hold rather than
+  resetting to zero first
 
-Replaces Normal's per-clear bonus, which Rush cannot have. Open question 2 in
-the design doc (does a hit break the chain?) is still unsettled and is cheap to
-flip after the fact — do not let it hold the item.
+Replaces Normal's per-clear bonus, which Rush cannot have. **Settled: a hit
+never breaks the chain, only an idle timer does** — `RushDirector` has no
+method that reduces heat in response to damage, so this is structural, not a
+convention. Two real bugs surfaced and were fixed while landing this: scoring
+used `int()` truncation on a multiplier like ×1.15, which float imprecision
+can land a hair under (115 became 114) — now `round()`s; and the decay math
+assumed a call could never straddle the window→decay boundary in one step,
+which silently held heat for an oversized delta instead of decaying the
+correct partial amount — now splits the delta across the boundary. Both were
+caught by mutation-testing the new checks, not by inspection.
 
 
 ### Q-007 — Mode selection on the menu and death screen, touch-first
@@ -198,18 +225,23 @@ turns `REV_POOL_GUARD 240` from a theoretical safety net into load-bearing
 code. Same for the touch sticks under a finger that never lifts for three
 minutes. Neither is testable headless; both need the real game running.
 
-### Q-010 — Propose Rush upstream, or port the upstream mode down
+### Q-010 — Rush must exist in both repos — port it upstream if it isn't already there
 
 - status: Queued
 - repo: Suds-Jack
 - size: M
-- blocked-by: Q-001 — and its answer decides which of the two this item *is*
+- blocked-by: Q-001 — its answer decides whether this is "confirm what's
+  already there" or "build it"
 - design: design/RUSH_MODE.md § Parity risk
-- gate: either a landed upstream change, or a recorded decision not to
+- gate: Rush lives in `mbace1/Suds-Jack` `toko-drop/`, confirmed working there,
+  or Q-001 confirms it already did
 
-The two builds diverging in *modes* is a far bigger split than diverging in
-materials, and the port has so far recorded every divergence deliberately. This
-item exists so that record keeps holding.
+**Directive, not a proposal.** The project owner was explicit: Rush is judged
+big and important enough that both codebases must end up with it — this is not
+"suggest it upstream and see." If Q-001 finds no existing Rush/time-attack
+mode, this item is the work of building one in the source repo, not merely
+recording a divergence and moving on. `CAMPAIGN_LEVELS.md` is held until this
+item and Q-001 both close — see that document's Status line.
 
 
 ### Q-013 — Daily seed: derivation and entry
@@ -318,7 +350,9 @@ this item exists to avoid.
 - design: design/HAZARDS.md §3, §4a
 - gate: smoke checks that a hazard updates only when called (so pause freezes
   it), that it never enters `enemies` and so cannot hold up a wave clear, and
-  that the slow applies and lifts on the arena's flat circle test
+  that the blink-then-damage timing (telegraph, then an active/damaging
+  window, on the arena's flat circle test) is correct — **settled: damage,
+  not denial**, per the project owner (HAZARDS.md §7 Q2)
 
 The arena is an empty box — no cover, no geometry, no environmental threat, so
 every square of floor is identical and position means nothing beyond distance
@@ -362,45 +396,54 @@ corner restricts the arc you can be attacked from. A periodically live rail is
 the targeted answer, and it reuses the emissive rail material already built.
 Last of the three because it changes movement habits game-wide.
 
-### Q-022 — Level archetype scaffolding: a level as data
+### Q-022 — Level scaffolding: bespoke levels driven by shared parameters
 
-- status: Queued
+- status: Blocked — **held until Rush reaches parity across both repos**
+  (Q-001 answered, and Q-010's cross-repo Rush work landed), per the project
+  owner: do not spend effort on a third mode while Rush is still unreconciled
+  with its own source of truth
 - repo: toko-drop-godot
 - size: L
-- blocked-by: Q-002 (SEQUENCE needs the composition picker split out first)
+- blocked-by: Q-001, Q-010, Q-002 (SEQUENCE needs the composition picker split
+  out first — already landed)
 - design: design/CAMPAIGN_LEVELS.md §1, §2
 - gate: smoke checks that a level spec drives arena extents, HP, composition
   and revenge parameters without touching the scripts that consume them; one
-  SEQUENCE level reproducible identically across attempts
+  bespoke level reproducible identically across attempts
 
-A level is a parameter set + a spawn script + a goal, **not new code** — the
-archetype is the code, the level is the data. Most levers already exist as
-parameters (`half_x`/`half_z` threaded through player, enemies, bullets and
-the director; `MAX_HP`; `FIRE_RATE`; the `POOL` and the caps; the `REV_*`
-constants), which is what keeps this proposal small. Start with SEQUENCE and
-CLOSE QUARTERS: the first is the backbone, the second is the best
-value-per-line in the project because the arena is already a parameter.
+A level is a bespoke spawn script + its own time allocation + its own goals —
+**not** a shared template instantiated with different parameters (revised from
+an earlier "archetype" framing per the project owner: "every level is
+different with a designed challenge and an allocated time with goals").  What
+*is* reusable is the vocabulary of twists a level's script can draw on —
+`half_x`/`half_z`, `MAX_HP`, `FIRE_RATE`, the `POOL`/caps, the `REV_*`
+constants — already threaded through this codebase as parameters, which is
+what keeps individually-authored levels cheap. Start with a CLOSE-QUARTERS-twist
+level: best value-per-line in the project, since the arena is already a
+parameter.
 
 ### Q-023 — Per-level grading and unlocks
 
-- status: Queued
+- status: Blocked — same hold as Q-022
 - repo: toko-drop-godot
 - size: M
 - blocked-by: Q-022, Q-017 (shares the S/A/B/C vocabulary)
 - design: design/CAMPAIGN_LEVELS.md §3
-- gate: for a SEQUENCE level, the theoretical maximum computed from the spawn
+- gate: for a level, the theoretical maximum computed from its own spawn
   script matches what a scripted perfect run actually scores — if those two
   disagree, the thresholds are fiction
 
 Keeps one grading language across the whole game rather than adding stars.
 **Do not reuse Rush's threshold formula**: it integrates a statistical curve
-over procedurally composed waves, and a hand-authored level has no such curve.
-Fixed spawn list ⇒ exact maximum ⇒ percentage thresholds; open composition ⇒
-measured from a reference run and recorded as a measurement.
+over procedurally composed waves, and a bespoke level has no such curve. With
+every level bespoke by default (Q-022), every level has an exactly knowable
+maximum and its thresholds are a percentage of it; only a level that
+deliberately chooses open composition as its own challenge needs a
+measured-from-a-reference-run threshold instead.
 
-### Q-024 — Campaign vertical slice: six levels, one per archetype
+### Q-024 — Campaign vertical slice: six levels, one per twist
 
-- status: Queued
+- status: Blocked — same hold as Q-022
 - repo: toko-drop-godot
 - size: L
 - blocked-by: Q-022, Q-023, Q-007 (re-scoped)
@@ -409,10 +452,10 @@ measured from a reference run and recorded as a measurement.
   looked at on a touch viewport
 
 Deliberately a slice, not a campaign. Six levels of real play is enough to
-learn whether the archetype system and the threshold method hold up; committing
-to thirty up front means authoring content against a framework nothing has
-graded yet. This is a third mode on a port that is at 6/40 enemies with Rush
-itself unbuilt — sequence it against that honestly.
+learn whether the per-level threshold method holds up; committing to thirty up
+front means authoring content against a framework nothing has graded yet. One
+of the six should be built around amplified revenge volleys — Toko Drop's own
+signature mechanic, not borrowed from anywhere.
 
 ---
 

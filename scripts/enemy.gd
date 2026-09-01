@@ -36,6 +36,12 @@ var bullets: BulletPool     # set by WaveDirector; null for melee-only types
 var half_x := 9.0
 var half_z := 9.0
 
+## The WaveDirector.POOL key this body was spawned as (e.g. "GLOBBO"). Set by
+## the director alongside target/bullets/rng — lets a caller price a living
+## body back out of POOL, which RushDirector needs for standing-pressure
+## accounting (WaveDirector.cost_of / is_shooter_type).
+var type_name := ""
+
 ## GAMEPLAY randomness only. WaveDirector hands every body the run's shared
 ## generator in _spawn(), which is what lets one seed reproduce one swarm; a
 ## body built outside the director (tests, tools) keeps this private one and

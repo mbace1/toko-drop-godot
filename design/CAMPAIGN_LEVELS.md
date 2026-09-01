@@ -1,9 +1,18 @@
 # Campaign levels — rule-variant challenges
 
-**Status:** proposal. Answers `RUSH_TIERS_AND_LEVELS.md` §6 Q5, which asked
-whether "levels" meant legs inside one run or a separate stage-select mode.
-**It is the separate mode**, in the shape Geometry Wars uses: a list of short,
-hand-authored levels, each with one rule twist and a graded score.
+**Status:** proposal, **on hold.** Directed by the project owner: Rush is
+large enough that it needs to exist correctly in both `mbace1/Suds-Jack` and
+this port before campaign work starts — do not spend effort on a third mode
+while the second is still unreconciled with its own source of truth. Nothing
+in this document is queued to build until that parity is confirmed (`Q-001`
+resolved, and `Q-010`'s cross-repo Rush work landed). It stays written now so
+the design is ready the moment that gate opens, and so `Q-006`'s save shape
+and `Q-007`'s mode-select scope already account for it (§4).
+
+Answers `RUSH_TIERS_AND_LEVELS.md` §6 Q5, which asked whether "levels" meant
+legs inside one run or a separate stage-select mode. **It is the separate
+mode**, in the shape Geometry Wars uses: a list of short, hand-authored
+levels, each with one rule twist and a graded score.
 
 ## 1. Why this is the cheapest content in the project
 
@@ -35,44 +44,53 @@ rather than baked in, which is what makes this proposal small:
 | revenge | `REV_*` constants in `wave_director.gd` | corpse-density levels |
 | hazards | once `Q-019`–`Q-021` land | surge-timing levels |
 
-## 2. Level archetypes
+## 2. Level anatomy — every level is bespoke, not a template with parameters
 
-Seven, each twisting one system the game already has. A campaign reuses these
-with different spawn scripts and parameters — the archetype is the *code*, the
-level is the *data*.
+Directed by the project owner: *"every level is different with a designed
+challenge and an allocated time with goals."* That is a real pivot from an
+earlier draft of this document, worth stating precisely — a campaign level is
+**not** "pick an archetype, fill in its parameters." Each level is its own
+hand-designed encounter:
 
-**SEQUENCE** — a hand-authored fixed spawn list; the budget director is off
-entirely. The same setup every attempt, so the level can be *learned*. This is
-the backbone archetype and the one that most needs the director refactor
-(`Q-002`) to already be done.
+> **name + a bespoke spawn script + its own time allocation + its own goals.**
 
-**CLOSE QUARTERS** — the arena clamped to a fraction of 38 × 22. Nearly free,
-because `half_x`/`half_z` are already parameters everywhere, and it transforms
-play completely: the dash stops being an escape and becomes a commitment.
-Best value-per-line in the whole document.
+That is the same anatomy Rush's legs already use (`RUSH_TIERS_AND_LEVELS.md`
+§2 — a window, a tier stamped at the end of it, a goal that is achievable in
+that window and awkward elsewhere), generalised from three uniform 60s legs
+inside one run to N individually authored levels, each free to set its own
+length and its own challenge rather than sharing a template.
 
-**DASH ONLY** — the gun is disabled; contact during a dash kills. Toko Drop's
-answer to Pacifism, and it makes the 0.18s dash window the entire game. The one
-archetype needing a genuinely new rule (dash contact kills), and still small.
+**What stays reusable is the vocabulary of *twists*, not the levels
+themselves.** The seven systems below are the modifiers a level's bespoke
+script can draw on — a designer composing a level reaches for these the way a
+level designer reaches for a tileset, not the way this document's earlier
+draft used them (as a template instantiated with different numbers):
 
-**GRAVEYARD** — revenge volleys amplified: every corpse blooms, at raised
-counts. This one is **ours, not borrowed** — revenge volleys are Toko Drop's
-signature mechanic, and a level built around them makes *kill order and
-spacing* the puzzle rather than aim. Nothing in the games this borrows its
-structure from has an equivalent.
+| twist | what it changes | where it already lives |
+|---|---|---|
+| arena size | `half_x` / `half_z`, already threaded through player, enemies, bullets, director | the biggest change for the least code |
+| HP | `Player.MAX_HP` | a one-hit level |
+| fire rate / dash | `FIRE_RATE`, `DASH_CD`, `DASH_DUR` in `player.gd` | weapon and mobility levels |
+| composition | `WaveDirector` budget, `POOL`, shooter/body caps | melee-only, shooter-only, or a hand-fixed list |
+| revenge | `REV_*` constants in `wave_director.gd` | corpse-density levels |
+| dash-contact-kill | a genuinely new rule, not an existing parameter | Toko Drop's answer to a Pacifism-style level |
+| hazards | once `Q-019`–`Q-021` land | timing-based levels |
 
-**ARTILLERY** — shooters only, shooter cap lifted. Pure bullet-reading, and it
-finally puts SPITTOR/FANNER/WEEVA/ORANGE_CUBE under a spotlight instead of
-mixed three-deep into a swarm.
+A level's bespoke spawn script is authored the way `SEQUENCE` was described in
+an earlier draft — fixed, learnable, no budget director running — which is now
+the *default* shape for every level, not one option among several. That
+default is also what makes grading tractable (§3): a fixed script has an
+exactly knowable maximum. A level's designer can still choose to run the
+budget director as *its* particular challenge (an "endless composition"
+level), but that is now a deliberate, called-out exception per level, not a
+generic archetype other levels share by default.
 
-**SWARM** — melee only, body cap raised. Pure crowd control and space
-management; the exact complement of ARTILLERY.
-
-**ONE HP** — `MAX_HP` 1. Trivial to implement, brutal to play, and a natural
-late-campaign gate.
-
-An eighth, **MINEFIELD** (built around GRID SURGE timing), unlocks once the
-hazard items land.
+One twist is called out on its own merits, not just as a lever: **revenge
+volleys amplified — every corpse blooms, at raised counts.** This is **ours,
+not borrowed** — revenge volleys are Toko Drop's signature mechanic, and a
+level built around them makes *kill order and spacing* the puzzle rather than
+aim. Nothing in the games this document's structure borrows from has an
+equivalent, and at least one level in any slice should be built around it.
 
 ## 3. Grading and progression
 
@@ -82,40 +100,46 @@ worth more than matching another game's icon. Below C shows the score with no
 letter, same rule as Rush.
 
 **Unlock currency = levels cleared at A or better.** Clearing a level opens the
-next; a *count* of A-grades opens each new archetype block. That way a player
+next; a *count* of A-grades opens each new block of levels. That way a player
 who is merely finishing levels keeps moving, while the gates ahead reward
 playing them well — and it needs no second currency.
 
-### Authoring thresholds: measure, don't reuse the formula
+### Authoring thresholds: every level computes its own, from its own script
 
 The Rush par table was **derived** by integrating a statistical model over 180s
-of procedurally composed waves. That method does not transfer, and someone will
-try to reuse it — so, explicitly:
+of procedurally composed waves. That method does not transfer, and with every
+campaign level now bespoke (§2) it does not need to — the situation is simpler
+than the earlier draft's split:
 
-- **SEQUENCE-type levels have an exactly knowable maximum.** The spawn script
-  is fixed, so the total available score is the sum of its kill values, times
-  the best achievable multiplier. Thresholds should be a **percentage of that
-  maximum** (with a time component), which is computable and stays correct when
-  the script changes.
-- **Open-composition levels** (CLOSE QUARTERS, SWARM at a budget) have no fixed
-  maximum, so thresholds are **measured from a reference run** and recorded as
-  measurements, not presented as derived numbers.
+- **Every level has an exactly knowable maximum**, because every level's spawn
+  script is fixed by design. The total available score is the sum of its kill
+  values, times the best achievable multiplier, over its own allocated time.
+  Thresholds are a **percentage of that maximum**, computable per level and
+  automatically correct when that level's script changes.
+- **The rare level that deliberately runs open composition** as its challenge
+  (§2's called-out exception) has no fixed maximum, so *that* level's
+  thresholds are **measured from a reference run** and recorded as a
+  measurement, not presented as a derived number.
 
-Mixing the two silently is how a campaign ends up with some levels where A is
-routine and others where it is impossible.
+Mixing the two silently — grading a bespoke level as if it were open, or vice
+versa — is how a campaign ends up with some levels where A is routine and
+others where it is impossible. With bespoke-by-default, this is now the
+exception path rather than half the campaign.
 
 ## 4. What this costs — read before committing
 
 This is a **third mode**, a **level-select screen**, N hand-authored levels, and
-a **new save shape**, proposed for a port that is at 6/40 enemies with Rush
-itself not yet built. That is a real prioritisation question, not a formality.
+a **new save shape** — for a port at 6/40 enemies where Rush is now held on
+cross-repo parity (Status, top). That is a real prioritisation question, not a
+formality, and the hold above already answers *when*; this section is about
+scope once that gate opens.
 
-**Recommendation: vertical slice first.** Six levels, one per archetype, shipped
-end to end — select screen, grading, unlocks, saves. That proves the archetype
-system and the threshold method against real play, and six levels of data is
-enough to know whether a thirty-level campaign is worth authoring. Committing to
-thirty up front means authoring content against an ungraded, unvalidated
-framework.
+**Recommendation: vertical slice first.** Six levels, one per twist from §2's
+table, shipped end to end — select screen, grading, unlocks, saves. That
+proves the per-level threshold method against real play (§3), and six levels
+of authored content is enough to know whether a thirty-level campaign is worth
+the authoring time. Committing to thirty up front means authoring content
+against a framework nothing has graded yet.
 
 ### Two items this changes, both still unlanded — act now, not later
 

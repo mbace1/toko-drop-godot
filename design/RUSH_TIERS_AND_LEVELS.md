@@ -1,6 +1,10 @@
 # Rush — legs, goals, and S/A/B/C tiers
 
-**Status:** proposal. Thresholds are `PROPOSED` and derived from a stated model
+**Status:** proposal — not implemented. `RushDirector` (`scripts/rush_director.gd`)
+has landed the mechanics this document's thresholds are computed against
+(kill values, the virtual-wave curve, the heat multiplier), but the legs,
+checkpoints, goals and grading themselves are still design only (`Q-017`,
+`Q-018`). Thresholds are `PROPOSED` and derived from a stated model
 (§3) rather than picked by feel — **the model is the deliverable, not the
 numbers.** First playtest replaces the numbers; it should not need to replace
 the method.
@@ -136,11 +140,18 @@ telegraph **starts**, with several in flight at once. Then the ceiling is
 it. This belongs in `Q-003`'s acceptance: *assert that overlapping telegraphs
 are permitted*.
 
-**The heat cap may not discriminate.** Heat needs only *continuity*, not rate —
-one kill per 2.5s keeps the chain alive, so any competent player pins ×3 and
-the multiplier stops separating A from S. Separation then comes entirely from
-raw kill rate. If A and S prove indistinguishable in playtest, the lever is the
-heat **window** (shorten it, so the chain demands rate), not the tier table.
+**The heat cap may not discriminate — and it got harder to discriminate, not
+easier.** The heat window is now settled at 4.0s (up from this document's
+original 2.5s guess — `design/RUSH_MODE.md` §4), because the project owner
+specified the chain should break on an idle timer alone, never on a hit. Heat
+needs only *continuity*, not rate — at 4.0s a kill roughly once every 4 seconds
+keeps the chain alive, which is slower than any tier in §3's table sustains, so
+essentially any competent player pins ×3 and the multiplier stops separating A
+from S. Separation then comes entirely from raw kill rate. If A and S prove
+indistinguishable in playtest, the lever is the heat **window** (shorten it, so
+the chain demands rate) — that is a tuning change local to `RushDirector`, not
+a change to the tier table above, which stays derived from kill rate directly
+and does not depend on the window's exact value.
 
 ## 6. Open questions
 

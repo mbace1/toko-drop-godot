@@ -29,6 +29,9 @@ func _init() -> void:
 	_test_seeded_stream(root)
 	_test_save_v2_migration(root)
 	_test_level_records(root)
+	_test_rush_escalation_and_caps(root)
+	_test_rush_spawn_placement_and_telegraph(root)
+	_test_rush_heat_and_scoring(root)
 
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
@@ -602,3 +605,196 @@ func _test_level_records(root: Node3D) -> void:
 		"level records survive a reload alongside run history")
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+
+func _rush_director(root: Node3D, target: Node3D, bullets: BulletPool) -> RushDirector:
+	var rd := RushDirector.new()
+	root.add_child(rd)
+	rd.half_x = 19.0
+	rd.half_z = 11.0
+	rd.target = target
+	rd.bullets = bullets
+	var enemies_root := Node3D.new()
+	root.add_child(enemies_root)
+	rd.enemies_root = enemies_root
+	rd.start_rush()
+	return rd
+
+## RushDirector escalates off ELAPSED TIME through a virtual wave rather than
+## clears, and holds a STANDING pressure instead of spending a whole budget at
+## once — reusing budget_for()/shooter_cap_for()/body_cap_for() unchanged
+## (design/RUSH_MODE.md §3). The caps binding under a completely different
+## cadence is the check that would have caught "Rush quietly ignores the
+## shooter cap", which would be invisible in play until the screen became
+## unreadable — and the pause check is the one that would catch a clock built
+## on Time.get_ticks_msec() or a Timer, either of which drains through a pause.
+func _test_rush_escalation_and_caps(root: Node3D) -> void:
+	_check(RushDirector.new().virtual_wave_for(0.0) == 1, "elapsed 0 is virtual wave 1")
+	var boundary := RushDirector.RUSH_WAVE_SECONDS * 5.0
+	_check(RushDirector.new().virtual_wave_for(boundary - 0.01) == 5,
+		"just before a wave boundary is still the earlier virtual wave")
+	_check(RushDirector.new().virtual_wave_for(boundary) == 6,
+		"a wave boundary advances the virtual wave")
+
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(1000.0, 0.0, 1000.0)   # out of the way
+	var bullets := _make_pool(root)
+	var rd := _rush_director(root, target, bullets)
+
+	var dt := 1.0 / 30.0
+	var last_start_elapsed := -999.0
+	var min_gap_seen := 999.0
+	var pressure_ok := true
+	var caps_ok := true
+	var player_pos := Vector3.ZERO
+
+	for i in range(int(150.0 / dt)):
+		rd.update_rush(dt, player_pos)
+
+		if rd._since_last_spawn_start < dt * 0.5:
+			if last_start_elapsed > -900.0:
+				min_gap_seen = minf(min_gap_seen, rd.elapsed - last_start_elapsed)
+			last_start_elapsed = rd.elapsed
+
+		var vw := rd.virtual_wave_for(rd.elapsed)
+		if rd.live_pressure() > rd.target_pressure_for(rd.elapsed) + 0.001:
+			pressure_ok = false
+		if rd.enemies.size() > rd.body_cap_for(vw):
+			caps_ok = false
+		var shooters := 0
+		for e in rd.enemies:
+			if WaveDirector.is_shooter_type(e.type_name):
+				shooters += 1
+		if shooters > rd.shooter_cap_for(vw):
+			caps_ok = false
+
+	_check(pressure_ok, "standing pressure never exceeds its target over a full simulated run")
+	_check(caps_ok, "the ported body and shooter caps still bind under Rush's cadence")
+	_check(min_gap_seen >= RushDirector.RUSH_SPAWN_GAP - 0.001,
+		"telegraph starts never land closer together than the spawn gap (min seen %.3f)" % min_gap_seen)
+
+	var rd2 := _rush_director(root, target, bullets)
+	rd2.update_rush(1.0, player_pos)
+	var elapsed_snapshot := rd2.elapsed
+	var time_left_snapshot := rd2.time_left
+	# main.gd pauses by simply not calling waves.update() — nothing here should
+	# move the clock without update_rush() being called.
+	_check(rd2.elapsed == elapsed_snapshot and rd2.time_left == time_left_snapshot,
+		"the rush clock only ever advances inside update_rush() — pause is free")
+
+	var rd3 := _rush_director(root, target, bullets)
+	rd3.time_left = RushDirector.RUSH_DURATION - 0.1
+	for i in 10:
+		rd3.register_kill(1)
+	_check(rd3.time_left <= RushDirector.RUSH_DURATION + 0.0001,
+		"earned time never exceeds the run's base duration")
+	_check(is_equal_approx(rd3.time_left, RushDirector.RUSH_DURATION),
+		"and caps exactly at it once kills keep coming — without this the mode is plain endless")
+
+## Trickle spawns cannot use the wave ellipse (design/RUSH_MODE.md §3.4): a body
+## materialising at 0.6x extents mid-dash with no wave boundary to warn you is
+## an unavoidable hit. Rush spawns on the full edge, clear of the player, and
+## behind a real telegraph delay rather than a cosmetic flourish over an
+## already-live body.
+func _test_rush_spawn_placement_and_telegraph(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	var bullets := _make_pool(root)
+	var rd := _rush_director(root, target, bullets)
+
+	var corners := [Vector3.ZERO, Vector3(17.0, 0.0, 9.0), Vector3(-17.0, 0.0, -9.0)]
+	var all_safe := true
+	var all_on_edge := true
+	for c in corners:
+		for i in 40:
+			var pos := rd._pick_edge_position(c)
+			if pos.distance_to(c) < RushDirector.RUSH_SPAWN_SAFE - 0.001:
+				all_safe = false
+			var nx := pos.x / rd.half_x
+			var nz := pos.z / rd.half_z
+			if absf(sqrt(nx * nx + nz * nz) - 1.0) > 0.01:
+				all_on_edge = false
+	_check(all_safe, "no Rush spawn lands inside the safe radius, even with the player in a corner")
+	_check(all_on_edge, "Rush spawns land on the full arena edge, not the 0.6x wave ellipse")
+
+	target.position = Vector3.ZERO
+	var player_far := Vector3(1000.0, 0.0, 1000.0)
+	var dt := 1.0 / 60.0
+	var first_pending: Dictionary = {}
+	var enemies_at_pending_start := 0
+	var precocious := false
+	var completed := false
+	var steps := 0
+	while steps < int(6.0 / dt) and not completed:
+		var had_none := first_pending.is_empty()
+		rd.update_rush(dt, player_far)
+		if had_none and not rd._pending.is_empty():
+			first_pending = rd._pending[0]
+			enemies_at_pending_start = rd.enemies.size()
+		if not first_pending.is_empty():
+			if float(first_pending.get("t", -1.0)) > 0.0:
+				if rd.enemies.size() > enemies_at_pending_start:
+					precocious = true
+			else:
+				completed = rd.enemies.size() > enemies_at_pending_start
+		steps += 1
+
+	_check(not first_pending.is_empty(), "a Rush spawn enters a telegraph before it exists")
+	_check(not precocious, "the telegraphed body does not exist while its wind-up is still running")
+	_check(completed, "the telegraphed body exists once its wind-up ends")
+
+## Heat replaces Normal's per-clear bonus (design/RUSH_MODE.md §4). Per the
+## project owner: the chain breaks only on an IDLE timer, never on taking a
+## hit — accordingly RushDirector has no method that reduces heat in response
+## to damage, so a hit cannot break the chain by construction. Not a runtime
+## check for that reason: there is nothing to call.
+func _test_rush_heat_and_scoring(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	var bullets := _make_pool(root)
+	var rd := _rush_director(root, target, bullets)
+
+	_check(is_equal_approx(rd.multiplier(), 1.0), "heat starts at zero, the multiplier at x1.0")
+
+	var s1 := rd.register_kill(1)
+	_check(is_equal_approx(rd.multiplier(), 1.0 + RushDirector.RUSH_HEAT_MULT_PER),
+		"the multiplier follows 1.0 + heat * 0.15")
+	_check(s1 == 115, "the first kill scores 100 * max_hp * the multiplier it just earned (%d)" % s1)
+
+	for i in 20:
+		rd.register_kill(1)
+	_check(is_equal_approx(rd.multiplier(), 3.0), "the multiplier caps at x3.0 however long the chain runs")
+	_check(rd.heat_peak >= 13.0, "heat_peak tracks the run's high-water mark")
+
+	var s_tough := rd.register_kill(4)
+	_check(s_tough == int(100 * 4 * 3.0), "score scales with the body's max_hp too (%d)" % s_tough)
+
+	var rd2 := _rush_director(root, target, bullets)
+	rd2.register_kill(1)
+	rd2.register_kill(1)
+	var heat_at_kill := rd2.heat
+	# Exactly the window, not window+epsilon: a real decay has now started (the
+	# next call proves that), but nothing of it has landed inside THIS call yet.
+	rd2._update_heat(RushDirector.RUSH_HEAT_WINDOW)
+	_check(is_equal_approx(rd2.heat, heat_at_kill),
+		"heat holds for the full window before it starts decaying")
+
+	rd2._update_heat(RushDirector.RUSH_HEAT_DECAY * 0.5)
+	_check(rd2.heat < heat_at_kill and rd2.heat > 0.0,
+		"heat ramps down partway through the decay window, not instantly")
+
+	rd2._update_heat(RushDirector.RUSH_HEAT_DECAY * 0.5 + 0.01)
+	_check(is_equal_approx(rd2.heat, 0.0), "heat reaches zero once the decay window fully elapses")
+
+	var rd3 := _rush_director(root, target, bullets)
+	rd3.register_kill(1)
+	rd3.register_kill(1)
+	var h_before := rd3.heat
+	rd3._update_heat(RushDirector.RUSH_HEAT_WINDOW + RushDirector.RUSH_HEAT_DECAY * 0.5)
+	_check(rd3.heat < h_before, "heat has started decaying mid-ramp")
+	rd3.register_kill(1)
+	var h_after_kill := rd3.heat
+	_check(h_after_kill > 0.0, "a kill mid-decay adds to whatever heat remained rather than resetting to zero first")
+	rd3._update_heat(0.5)
+	_check(is_equal_approx(rd3.heat, h_after_kill),
+		"a kill mid-decay restarts the hold — heat does not keep dropping right after")

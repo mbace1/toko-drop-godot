@@ -102,6 +102,15 @@ func shooter_cap_for(w: int) -> int:
 func body_cap_for(w: int) -> int:
 	return mini(BODY_CAP_MAX, BODY_CAP_BASE + BODY_CAP_PER * w)
 
+## `POOL` lookups as functions rather than inline `POOL[name][1]` everywhere —
+## RushDirector needs to price a body back OUT of the pool (live pressure), not
+## just spend a budget forwards, so this is read from both directions now.
+static func cost_of(name: String) -> float:
+	return float(POOL[name][1])
+
+static func is_shooter_type(name: String) -> bool:
+	return bool(POOL[name][2])
+
 func start_wave() -> void:
 	wave += 1
 	_spawn(compose(wave, budget_for(wave), shooter_cap_for(wave), body_cap_for(wave)))
@@ -168,6 +177,9 @@ func _spawn(picks: Array[String]) -> void:
 		# Hand over the run's gameplay stream BEFORE init() — subclasses draw
 		# from it there (globbo's pounce phase, fanner's strafe, weeva's spiral).
 		e.rng = rng
+		# type_name lets a caller price a live body back out of POOL — e.g.
+		# RushDirector's standing-pressure accounting.
+		e.type_name = picks[i]
 		e.init()
 		enemies.append(e)
 
@@ -183,6 +195,16 @@ func _make(name: String) -> Enemy:
 	return Globbo.new()
 
 func update(delta: float) -> void:
+	_step_bodies(delta)
+	if enemies.is_empty() and wave > 0:
+		wave_cleared.emit(wave)
+
+## Advances every living body, moves the newly dead into the corpse list
+## (firing their revenge on the way), and finishes death pops. Split out of
+## update() so RushDirector can reuse it without the wave_cleared check, which
+## only means something for a mode that actually clears waves — Rush's arena
+## emptying for a moment mid-run is not a clear and must not emit the signal.
+func _step_bodies(delta: float) -> void:
 	for i in range(enemies.size() - 1, -1, -1):
 		var e := enemies[i]
 		if not is_instance_valid(e):
@@ -205,9 +227,6 @@ func update(delta: float) -> void:
 		if c.update_death(delta):
 			corpses.remove_at(i)
 			c.queue_free()
-
-	if enemies.is_empty() and wave > 0:
-		wave_cleared.emit(wave)
 
 ## CLOSE COMBAT: the dead shoot back (main.js onKill(), v187/v220). The volley
 ## SPEAKS THE SPECIES' LANGUAGE — a gunner's corpse spits a slow aimed burst,

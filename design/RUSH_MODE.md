@@ -1,9 +1,16 @@
 # Rush mode — design
 
-**Status:** proposal, nothing implemented. Numbers here are *Godot-side
-proposals* and are marked `PROPOSED`; they are not ported values. See
-[Parity risk](#parity-risk-read-this-before-locking-any-number) before any of
-them is written into a script.
+**Status:** the director's *structure* is implemented — `RushDirector` in
+`scripts/rush_director.gd` (virtual-wave escalation §3.1, standing pressure
+§3.2, gated/pipelined telegraph spawning §3.3–3.4, the pause-safe clock, the
+earned-time cap, and heat/scoring §4) — with its own smoke coverage. It is
+**not wired into `main.gd`**: no mode select, no HUD, no menu integration yet
+(`Q-007`/`Q-008`). Numbers are a mix of `PROPOSED` (unverified against
+`tuning.js` — mbace1/Suds-Jack could not be attached this session) and
+`SPECIFIED` (settled directly by the project owner — the heat window and the
+hit-does-not-break-the-chain rule, §4). Neither kind is a port. See
+[Parity risk](#parity-risk-read-this-before-locking-any-number) before any
+`PROPOSED` number is treated as final.
 
 **Scope:** one alternative run structure — the mode itself, its scoring, its
 HUD, its touch answer, its save shape, and the changes to `wave_director.gd` /
@@ -157,10 +164,10 @@ Normal scores `100 × max_hp` per kill plus `50 × wave` per clear. Rush has no
 clears, so the clear bonus has to be replaced by something that rewards the
 behaviour the mode is about: never letting the pressure drop.
 
-**Heat** (PROPOSED):
+**Heat** (SPECIFIED — settled by the project owner, not derived; see below):
 
 ```
-kill                → heat += 1, heat_timer = RUSH_HEAT_WINDOW (2.5s)
+kill                → heat += 1, heat_timer = RUSH_HEAT_WINDOW (4.0s)
 heat_timer expires  → heat decays to 0 over RUSH_HEAT_DECAY (1.0s)
 multiplier          = 1.0 + min(heat * 0.15, 2.0)          # caps at x3.0
 score per kill      = 100 * max_hp * multiplier
@@ -170,10 +177,13 @@ A chain of 14 kills inside the window reaches the ×3 cap. The decay ramp rather
 than a hard reset matters: a player who dashes across the arena to reach the
 next cluster should not be punished for the traversal, only for stalling.
 
-Taking a hit does **not** reset heat. Losing an HP out of three is already the
-harshest punishment the game has; stacking a score wipe on top makes the mode
-punitive rather than fast. (This one is worth arguing about — see
-[Open questions](#8-open-questions).)
+**Only an idle timer breaks the chain — taking a hit never does.** Settled: the
+window is 4.0s (not the original 2.5s guess), and a hit does not touch heat at
+all. `RushDirector` in `scripts/rush_director.gd` has no method that reduces
+heat in response to damage, so this is a structural guarantee, not a
+convention — there is nothing to call. Losing an HP out of three is already the
+harshest punishment the game has; stacking a score wipe on top would make the
+mode punitive rather than fast.
 
 ## 5. HUD
 
@@ -265,16 +275,21 @@ Decisions that change the work, in the order they block:
 1. **Does the browser build already have a Rush/time-attack mode?** If it does,
    this document is wrong to invent numbers and should be replaced by a port of
    the source's — see below. **Blocks all tuning constants.**
-2. **Does taking a hit break the heat chain?** §4 says no. The opposite reading
-   (a hit halves heat) makes the mode a no-hit challenge, which is a different
-   and also defensible mode. Blocks nothing structural; cheap to flip later.
-3. **180s, or shorter?** 180 is a guess at "one commute-length run". 120 makes
-   the mode a genuinely different session length from Normal; 180 lets the
-   virtual wave reach the post-knee curve.
+2. ~~**Does taking a hit break the heat chain?**~~ **Settled: no** — see §4.
+3. **180s, or shorter?** Still open. 180 is a guess at "one commute-length
+   run"; 120 makes the mode a genuinely different session length from Normal;
+   180 lets the virtual wave reach the post-knee curve. Kept as `RUSH_DURATION`
+   in `scripts/rush_director.gd`, still `PROPOSED` — a one-constant change if
+   this goes the other way.
 4. **Do the modes share a leaderboard screen?** §7's shape supports either.
 5. **Does Rush unlock, or is it available from the first launch?** Available
    immediately is the recommendation — a locked mode in a game with six enemy
    types is hiding content it does not have.
+6. **Does Rush have to exist in `mbace1/Suds-Jack` too, not just here?**
+   Directed by the project owner: yes — Rush should exist in **both** the
+   browser build and this port, not merely be proposed upstream as optional.
+   `QUEUE.md` `Q-010` is written to that mandate now rather than "propose or
+   port, pick one". See the Parity risk section below.
 
 ## Parity risk (read this before locking any number)
 
@@ -291,11 +306,16 @@ Two outcomes, and they need different work:
   tuning table, replace §2–§4's constants with the source's, and keep only the
   Godot-specific parts (§5–§7) as this repo's own choices.
 - **It does not.** Then Rush is a **deliberate divergence** — the first
-  gameplay-level one in this port — and it must be recorded as such, the way
-  the emissive floor grid and the surface-mounted eyes already are in
-  `PORT_STATUS.md`'s divergence list. It should probably also be proposed
-  upstream, since the two builds drifting apart in *modes* is a much bigger
-  split than drifting in materials.
+  gameplay-level one in this port. Directed by the project owner: this is not
+  optional. Rush is judged big and important enough that both codebases must
+  end up with it, not just this one with an upstream proposal left to languish
+  — the two builds drifting apart in *modes* is a much bigger split than
+  drifting in materials, and it does not get treated as this repo's problem
+  alone. `Q-010` in `QUEUE.md` now reads as a mandate to build it in
+  `mbace1/Suds-Jack` if it is not already there, not merely to suggest it.
 
 Resolving this is `Q-001` in [`../QUEUE.md`](../QUEUE.md) and it gates every
-implementation item behind it.
+tuning constant behind it. It also gates the campaign
+(`CAMPAIGN_LEVELS.md`) by direct instruction: hold that work until Rush has
+reached parity between the two repos, so effort is not spent on the third
+mode while the second is still unreconciled with its own source of truth.

@@ -98,46 +98,56 @@ none) and spawning (`RUSH_SPAWN_SAFE` would need to test geometry too).
 idea, but because they are a movement-system project wearing a level-design
 costume, and they should be costed as one.
 
-## 4. Proposed: area-denial hazards on the floor
+## 4. Settled: one mechanic, three shapes — blinking AoE, then it hurts
 
-Hazards that occupy floor without blocking it. They cost no pathing, they fit
-the circle test exactly, they telegraph naturally by glowing, and — crucially —
-**the floor is already a shader-driven neon grid that pulses on its own clock**,
-so they are close to free visually.
+Directed by the project owner: hazards are telegraphed area-damage zones — a
+patch **blinks** (a clear, readable pre-fire warning), holds, then **hurts**
+anything still standing in it. That single pattern is genre-standard telegraph
+design (the same "warn, then punish" shape as SPITTOR's inflate or a raid
+boss's ground indicator) — not any specific game's content, so there is
+nothing here to cross-reference or diverge from; it is a mechanic, not an
+asset. It also **settles §7 Q2** (damage, not denial) and folds SLUDGE into the
+same model rather than leaving it as the odd one out: all three hazards below
+are the same blink-then-hurt shape, in three geometries.
+
+They cost no pathing, they fit the circle test exactly, they telegraph by
+construction, and — crucially — **the floor is already a shader-driven neon
+grid that pulses on its own clock**, so they are close to free visually.
 
 Three, in the order they should be built:
 
-### 4a. SLUDGE — a lingering pool that slows
+### 4a. SLUDGE — a circular blink zone
 
-A circular patch that slows the player while they stand in it. No damage: it
-converts a positional mistake into *danger from something else*, which is more
-interesting than chip damage and much fairer on touch.
+A circular patch blinks, then becomes a damaging pool for its active window.
 
 Build this one first because **it is already required**. `PORT_STATUS.md`'s
 next-up list names SLUDGE_CUBE as "slow MASS + poison trail" — that trail *is*
 an area-denial hazard, so the hazard system is a prerequisite for a queued
 enemy rather than a detour around it. Building it standalone first, then
-hooking SLUDGE_CUBE's trail into it, gets one system serving two features.
+hooking SLUDGE_CUBE's trail into it, gets one system serving two features. The
+enemy's own trail can still layer a slow on top of this shared shape if that
+reads better once it is on screen — the blink-then-hurt core stays the same
+either way.
 
-### 4b. GRID SURGE — the floor fires along its own lines
+### 4b. GRID SURGE — a linear blink zone
 
-A row or column of the existing floor grid lights, holds for a telegraph beat,
+A row or column of the existing floor grid blinks, holds for a telegraph beat,
 then discharges — damaging anything standing on that line.
 
 This is the one that best fits what the game already is. The floor shader draws
 the grid and pulses it; a surge is a brighter pulse travelling one line, which
-the shader can take as a uniform. It telegraphs by construction (the line lights
-before it fires), it reads at arena scale, it demands *movement* rather than
-precision — you step off a line, and the lines are already drawn on the floor
-in front of you — and it costs no new geometry at all.
+the shader can take as a uniform. It reads at arena scale, it demands
+*movement* rather than precision — you step off a line, and the lines are
+already drawn on the floor in front of you — and it costs no new geometry at
+all.
 
 It also creates the thing the empty arena lacks: a reason for one part of the
 floor to be worse than another, changing every second.
 
-### 4c. LIVE RAIL — the boundary bites
+### 4c. LIVE RAIL — a boundary blink zone
 
-The four arena rails electrify on a cycle, damaging anything touching the clamp
-line.
+The four arena rails blink, then electrify for a beat, damaging anything
+touching the clamp line during that window.
 
 This one exists for a specific reason rather than for variety: **both modes
 currently reward hugging the edge**. Bodies clamp to the same boundary the
@@ -154,11 +164,12 @@ the other two shipped and understood first.
 - **Spawn safety.** `RUSH_SPAWN_SAFE` keeps bodies from materialising on the
   player; it must also keep them from materialising *inside a live hazard*, or
   the mode kills its own spawns and the pressure accounting drifts.
-- **Are enemies affected?** Recommendation: **no, in the first pass.** Hazards
+- **Are enemies affected? Settled: no.** Directed by the project owner. Hazards
   that damage enemies turn into a farming strategy — herd the swarm into the
-  grid surge — which is a genuinely good mechanic and a much larger design
-  (it interacts with heat, with revenge volleys, and with the pressure loop).
-  Ship hazards as a player-side constraint first, then decide deliberately.
+  grid surge — which is a genuinely good mechanic and a much larger design (it
+  interacts with heat, with revenge volleys, and with the pressure loop) and is
+  explicitly out of scope for the first pass. Hazards ship as a player-side
+  constraint only.
 - **Rush leg III.** `RUSH_TIERS_AND_LEVELS.md` gives leg III the "arena stops
   being safe anywhere" character. Hazard density scaling with the virtual wave
   is the cheapest way to deliver that, and it is one number.
@@ -183,9 +194,8 @@ If it is wanted anyway, it needs its own document and a different name.
 1. **Does the browser build have hazards at all?** If it does, these should be
    ports rather than inventions — fold into `PARITY_RECON.md` as a sixth
    question, since the trip is already being made.
-2. **Damage or denial?** §4a argues slow-not-damage for SLUDGE; GRID SURGE and
-   LIVE RAIL are proposed as damage. A game where hazards never damage is
-   gentler and arguably reads better with 3 HP.
+2. ~~**Damage or denial?**~~ **Settled: damage**, via the blinking-AoE model in
+   §4 — directed by the project owner, "aoe blinking area then hurts."
 3. **Do hazards persist across waves, or reset?** Persisting makes the arena
    accumulate character over a run; resetting keeps each wave readable.
 4. **Density scaling** — by wave, by mode, or fixed? §5 suggests by virtual
