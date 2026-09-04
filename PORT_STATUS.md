@@ -12,21 +12,30 @@ and confirmed at `mbace1.github.io/Suds-Jack/toko-drop-godot/`, `master`
 clean, smoke green. Read `CLAUDE.md`'s "Which build leads" section first if
 this is a fresh session — it decides what belongs in this repo at all.
 
-**The browser build has moved and is not yet assessed.** Last checked here
-against **v231**; `git fetch` on `gh-pages` shows it is now at **v236** (`js/arena.js`
-— the arena boundary became an SDF, "the rectangle becomes an SDF, and nothing
-changes"). v232–v236 are unread from this side. Audit the DEPLOYED tree
-(`gh-pages`, not `main` — see `CLAUDE.md`), same as every prior catch-up pass.
+**Browser build assessed through v236** (2026-09-04). v232–v236 read; see
+"Catching up: v232–v236" below. Audit the DEPLOYED tree (`gh-pages`, not
+`main` — see `CLAUDE.md`), same as every prior catch-up pass.
 
-**Two items are the owner's, not yet decided, and nothing should be built on
-top of either without asking:**
-- RUSH abilities (4 selectable ones) exist only in this repo.
-- RUSH lives: this repo's is a live, spent resource; the browser's
-  (`v226`) was removed as dead code. The two builds now disagree about
-  whether Rush has a separate lives resource at all.
+**One owner item is now CLOSED, the right way round.** RUSH abilities existed
+only here; PR #311 raised it; the owner's call was to port them upstream, and
+**v232 did** — stating outright that *"this build leads on gameplay, so this
+is now the reference version, not a copy."* Their numbers now lead; this
+port's have been reconciled to them.
 
-Both are tracked in `mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md` and
-[PR #311](https://github.com/mbace1/Suds-Jack/pull/311), open as of this note.
+**One owner item is still OPEN, and nothing should be built on it without
+asking:** RUSH lives. This repo's is a live, spent resource; the browser's
+(v226) was removed as dead code. The two builds genuinely disagree about
+whether Rush has a separate lives resource at all. Tracked in
+`mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md` and
+[PR #311](https://github.com/mbace1/Suds-Jack/pull/311).
+
+**A new one to be aware of, not yet decided:** upstream is scoping a LEVEL
+EDITOR (`toko-drop/LEVEL_EDITOR_DESIGN.md` on `main`, P0 shipped as v236's
+arena SDF). Its own §6 flags that an editor plus a level format *is* the
+delivery mechanism CHALLENGES needed — the mode the owner dropped as Q-028 —
+and says the two "should be decided together rather than one arriving through
+the back door". Nothing for this port to do yet; worth knowing before anyone
+re-opens the campaign work here.
 
 **A live-site bug was found and fixed while wrapping up, not by this port's
 own work**: some other agent's plain (non-`--check`) `versions.mjs` run on
@@ -988,6 +997,44 @@ Six versions shipped upstream after v225. What each meant here:
 - **v228 Arena pass 2, v229/v230 haptics + reduce-motion, v231 press kit** —
   not yet assessed. v229/v230 are portable (Godot has
   `Input.vibrate_handheld()`); v231 is not a game change.
+
+## Catching up: v232-v236 (assessed 2026-09-04)
+
+- **v232 — the four RUSH abilities went UPSTREAM.** Caused by this port's own
+  PR #311; the owner's call was to migrate rather than grandfather. Upstream
+  is now the reference version, so `ABILITY_DEF`'s numbers here were
+  RECONCILED TO THEIRS (`TUNING.rush.abilities`) rather than kept:
+  heat-exchange cooldown 12→8, min heat 0.25→0.15, radius 2.6→3;
+  hyper-bomb radius 8.5→10, cooldown 18→22; overcharge 6s→4s, cooldown
+  20→16; quantum shield 5s→3s, cooldown 16→18. Pinned by
+  `_test_ability_parity` so they cannot drift back.
+- **A real bug found by that reconciliation.** This port's AoE abilities
+  called `add_boost_kill()` for every body caught, so a HYPER BOMB clearing
+  ten enemies raised the boost chain by ten. Upstream routes those kills
+  through `onKill(e, 'env')`, which counts PAR but never `boostKill()` — the
+  chain is boost-kills-only, which is the whole shape of the mode's economy.
+  Fixed, and the radius test now includes the body's own radius the way
+  `_clearRadius` does. Pinned by a test that also checks a real boost kill
+  still chains, so the assertion can fail.
+- **v234's ability self-fire bug does NOT exist here.** Upstream hung the
+  abilities on `onDash`, which is fired BY the boost input, so an ability
+  discharged at the end of every boost. This port has always had a dedicated
+  ability input (its own touch pad, plus `Q` and pad X), so there is nothing
+  to port — and its desktop path is better: upstream's is touch-and-Space.
+- **v235 — ZONE boost scheme removed upstream as unreachable.** NOT ported,
+  and the reasoning does not carry: upstream's `boostScheme` was written once
+  in the constructor and never assigned, so every `'zone'` branch was dead
+  from the day it landed. This port's ZONE is genuinely reachable (a corner
+  toggle assigns it, `input_manager.gd`). Their second reason — that v234 gave
+  the lower-left margin to the ability pad — also does not apply: this port
+  puts the boost zone mid-LEFT and the ability pad mid-RIGHT, so they do not
+  collide. A working feature is not deleted to match someone else's dead-code
+  cleanup; same shape as the lives divergence.
+- **v233 (Rush first-run tutorial), v234's ladder PANEL and per-level bests,
+  v236 (arena as SDF), v228 (Arena pass 2), v229/v230 (haptics +
+  reduce-motion)** — not ported, not yet assessed in detail. v236 is
+  groundwork for the level editor rather than a behaviour change ("nothing
+  changes" is its own stated promise).
 
 ## Not ported yet — in priority order
 

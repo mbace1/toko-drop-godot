@@ -48,7 +48,7 @@ var half_z := HALF_Z
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "3.4"
+const VERSION := "3.5"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -1614,10 +1614,18 @@ func _fire_ability() -> void:
 			continue
 		var dx := e.position.x - player.position.x
 		var dz := e.position.z - player.position.z
-		if dx * dx + dz * dz < r * r:
+		# The browser's `_clearRadius` includes the body's own radius in the
+		# test, so a big body clipped by the edge of the blast still dies.
+		if dx * dx + dz * dz < (r + e.radius) * (r + e.radius):
 			var m := e.max_hp
 			if e.take_hit(99):
-				rush.add_boost_kill(e is YelaCube)
+				# NOT `add_boost_kill` — an AoE clear must not feed the boost
+				# chain. Upstream tags these kills `env` and routes them through
+				# `onKill(e, 'env')`, which calls `rush.kill()` (PAR) but never
+				# `boostKill()` (the chain). This port credited the chain for
+				# every body a HYPER BOMB caught, so one panic button could
+				# spike the multiplier by ten — the opposite of "boost kills
+				# only", which is the whole shape of the mode's economy.
 				rush.add_kill()
 				_add_score(rush.award(100 * m))
 

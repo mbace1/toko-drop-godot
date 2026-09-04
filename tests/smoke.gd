@@ -78,6 +78,7 @@ func _process(_delta: float) -> bool:
 	_test_rush_v225()
 	_test_gel_geo()
 	_test_rush_tiers()
+	_test_ability_parity()
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
@@ -1681,6 +1682,47 @@ func _test_kill_scoring() -> void:
 ## primitive swap that loses either is exactly what went unnoticed here before.
 ## v227 — RUSH's S/A/B/C tiers, the stamped ladder and the two goals. Ported
 ## from the browser, which shipped this repo's own tier research first.
+## The four RUSH abilities, reconciled against the browser after it became the
+## reference version for them (its v232 — "this build leads on gameplay, so
+## this is now the reference version, not a copy").
+func _test_ability_parity() -> void:
+	var D := RushRules.ABILITY_DEF
+	# TUNING.rush.abilities upstream. Pinned so a later edit to these has to be
+	# a deliberate act with a reason, not a drift back to this port's originals.
+	var want := {
+		RushRules.Ability.HEAT_EXCHANGE:
+			{"charge": 8.0, "min_heat": 0.15, "radius": 3.0, "radius_per_heat": 5.0},
+		RushRules.Ability.HYPER_BOMB:
+			{"charge": 22.0, "radius": 10.0},
+		RushRules.Ability.OVERCHARGE:
+			{"charge": 16.0, "duration": 4.0},
+		RushRules.Ability.QUANTUM_SHIELD:
+			{"charge": 18.0, "duration": 3.0},
+	}
+	for a in want:
+		for k in want[a]:
+			_check(is_equal_approx(float(D[a][k]), float(want[a][k])),
+				"%s.%s matches upstream (%s)" % [D[a]["name"], k, want[a][k]])
+
+	# THE RULE THAT WAS BROKEN: an AoE clear must not feed the boost chain.
+	# Upstream routes those kills through onKill(e, 'env'), which counts PAR
+	# but never calls boostKill(). This port credited the chain for every body
+	# a HYPER BOMB caught, so one panic button could spike the multiplier by
+	# ten — the opposite of "boost kills only".
+	var r := RushRules.new()
+	r.reset()
+	var m0: int = r.multiplier
+	for _i in 10:
+		r.add_kill()          # what an AoE clear now does, ten bodies deep
+	_check(r.multiplier == m0,
+		"an AoE clear does not raise the boost chain, however many it catches")
+	_check(r.level_kills == 10,
+		"but every one of them still counts toward the level's PAR")
+	# A real boost kill still chains, so the check discriminates.
+	r.add_boost_kill(false)
+	_check(r.multiplier > m0, "while an actual boost kill still does chain")
+	r.free()
+
 func _test_rush_tiers() -> void:
 	var r := RushRules.new()
 	r.reset()

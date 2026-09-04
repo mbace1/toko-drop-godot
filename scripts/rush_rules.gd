@@ -63,26 +63,36 @@ const LEVEL_SECONDS_STEP := 30.0
 ##                    The only one that rewards standing still and shooting.
 enum Ability { HEAT_EXCHANGE, HYPER_BOMB, OVERCHARGE, QUANTUM_SHIELD }
 
+## Numbers are the BROWSER'S, as of its v232/v234 (`TUNING.rush.abilities`).
+##
+## The direction of travel reversed here and it is worth being explicit about,
+## because the numbers changed and nobody should "restore" them later. These
+## four abilities were designed in THIS repo and existed only here; PR #311
+## raised that, and the owner's call was to port them upstream. v232 did, and
+## says so plainly: *"this build leads on gameplay, so this is now the
+## reference version, not a copy."* So these are no longer this port's own
+## numbers to set — upstream's playtest owns them, exactly as it owns the v227
+## tier table. Every value below was this repo's once and has been replaced.
 const ABILITY_DEF := {
 	Ability.HEAT_EXCHANGE: {
-		"name": "HEAT EXCHANGE", "charge": 12.0, "min_heat": 0.25,
-		"kind": "burst", "radius": 2.6, "radius_per_heat": 5.0,
+		"name": "HEAT EXCHANGE", "charge": 8.0, "min_heat": 0.15,
+		"kind": "burst", "radius": 3.0, "radius_per_heat": 5.0,
 		"blurb": "dump your heat as a burn — bigger the hotter you are",
 	},
 	Ability.HYPER_BOMB: {
-		"name": "HYPER BOMB", "charge": 18.0, "min_heat": 0.0,
-		"kind": "burst", "radius": 8.5, "radius_per_heat": 0.0,
+		"name": "HYPER BOMB", "charge": 22.0, "min_heat": 0.0,
+		"kind": "burst", "radius": 10.0, "radius_per_heat": 0.0,
 		"blurb": "a wide clear that costs no heat — the panic button",
 	},
 	Ability.OVERCHARGE: {
-		"name": "OVERCHARGE", "charge": 20.0, "min_heat": 0.0,
-		"kind": "buff", "duration": 6.0,
-		"blurb": "6s of free boosting, and the chain climbs double",
+		"name": "OVERCHARGE", "charge": 16.0, "min_heat": 0.0,
+		"kind": "buff", "duration": 4.0,
+		"blurb": "4s of free boosting, and the chain climbs double",
 	},
 	Ability.QUANTUM_SHIELD: {
-		"name": "QUANTUM SHIELD", "charge": 16.0, "min_heat": 0.0,
-		"kind": "buff", "duration": 5.0,
-		"blurb": "5s where enemy fire is reflected back as yours",
+		"name": "QUANTUM SHIELD", "charge": 18.0, "min_heat": 0.0,
+		"kind": "buff", "duration": 3.0,
+		"blurb": "3s where enemy fire is reflected back as yours",
 	},
 }
 
