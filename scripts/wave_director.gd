@@ -42,6 +42,22 @@ const RUSH_POOL := {
 ## Set by main.gd for a Rush run. Swaps the roster and drops boss set pieces.
 var rush_roster := false
 
+## Q-032: an AUTHORED level (scripts/level.gd) — the browser's own JSON. When
+## set, start_wave() rolls nothing: the level's timeline is queued and pumped
+## by delay in update(), exactly as js/main.js pumps `pendingSpawns` against
+## `waveTimer`, honouring the authored px/pz over the ring. A wave is not
+## clear while the queue still holds bodies to send.
+var level: Level = null
+var _level_queue: Array = []
+var wave_timer := 0.0
+
+## Every name _make() can build — the roster the level validator checks
+## against, so a level naming a body this build lacks is refused at load
+## rather than becoming a GLOBBO at spawn.
+const KNOWN_TYPES := ["GLOBBO", "YELA_CUBE", "SPITTOR", "FANNER", "ORANGE_CUBE", "WEEVA",
+	"SLUDGE_CUBE", "SPLITTA", "REDD_CUBE", "PURP_CUBE", "TORO", "PYRA", "BOTFLY", "BULWARK",
+	"WARDEN", "BAMBU", "CLOAKER", "MAGNA", "DRAPER", "SHEPHERD", "SIREN", "REDD_MINI", "PURP_MINI"]
+
 const POOL := {
 	"GLOBBO":      [1, 1, false],
 	"YELA_CUBE":   [1, 1, false],
@@ -249,6 +265,13 @@ var wave_kind := "normal"
 
 func start_wave() -> void:
 	wave += 1
+	wave_timer = 0.0
+	if level != null:
+		# Q-032: the authored timeline, verbatim. No budget, no rng, no ring.
+		_level_queue = level.schedule()
+		wave_kind = "level"
+		wave_started.emit(wave)
+		return
 	# difficulty(), not `wave`: Rush drives escalation from its own LEVEL, which
 	# moves DOWN when you lose a life, and composition has to follow it.
 	var d := difficulty()
@@ -374,6 +397,33 @@ func _eligible_for(w: int) -> Array[String]:
 ## per axis. The arena is 38 x 22, so a circle of the smaller half-extent would
 ## bunch every wave into a narrow band down the middle and leave the wide ends
 ## of the room empty.
+## Q-032: one authored spawn — the level's px/pz, the level's multipliers.
+## Speed and fire cadence scale the way the browser's `speedMult`/
+## `intervalMult` do on the pump's entry: after init() set the species'
+## base, before anything reads them.
+func _spawn_level_entry(entry: Dictionary) -> void:
+	var e := _make(entry["type"])
+	enemies_root.add_child(e)
+	e.position = Vector3(float(entry["px"]), 0.0, float(entry["pz"]))
+	_wire_body(e)
+	e.speed *= float(entry["speed_mult"])
+	if e.fire_interval > 0.0:
+		e.fire_interval *= float(entry["interval_mult"])
+	enemies.append(e)
+
+## The fields every body gets from the director, in the order they must be
+## set (the rng BEFORE init(): subclasses draw from it there).
+func _wire_body(e: Enemy) -> void:
+	e.arena = arena
+	e.target = target
+	e.bullets = bullets
+	e.trails = trails
+	e.drips = drips
+	if e is SludgeCube:
+		(e as SludgeCube).poison = poison
+	e.rng = rng
+	e.init()
+
 func _spawn(picks: Array) -> void:
 	var n := picks.size()
 	for i in n:
@@ -435,6 +485,12 @@ func _make(name: String) -> Enemy:
 	return Globbo.new()
 
 func update(delta: float) -> void:
+	# Q-032: the level pump, BEFORE the bodies update — the browser spawns
+	# and updates in the same frame, so a body is first seen one step into
+	# its life on both sides (what the parity gate's tolerance assumes).
+	wave_timer += delta
+	while not _level_queue.is_empty() and float(_level_queue[0]["t"]) <= wave_timer:
+		_spawn_level_entry(_level_queue.pop_front())
 	for i in range(enemies.size() - 1, -1, -1):
 		var e := enemies[i]
 		if not is_instance_valid(e):
@@ -463,7 +519,9 @@ func update(delta: float) -> void:
 			corpses.remove_at(i)
 			c.queue_free()
 
-	if enemies.is_empty() and wave > 0:
+	# Q-032: a level's timeline must be SPENT before its floor counts as
+	# clear, or the first gap between two authored spawns ends the level.
+	if enemies.is_empty() and wave > 0 and _level_queue.is_empty():
 		wave_cleared.emit(wave)
 
 ## SPLITTA's death is a spawn. The children are added to the LIVE list, so a
@@ -568,6 +626,8 @@ func _fire_revenge(e: Enemy) -> void:
 				bullets.spawn_dir(ex, ez, cos(a), sin(a), false, col, false, REV_SPEED_MULT)
 
 func clear() -> void:
+	_level_queue.clear()
+	wave_timer = 0.0
 	for e in enemies:
 		if is_instance_valid(e):
 			e.queue_free()

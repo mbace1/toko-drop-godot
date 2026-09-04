@@ -420,7 +420,9 @@ Nothing changes — which is what the seeded pair proves.
 
 ### Q-032 — Level format loader: read upstream's JSON directly, no exporter
 
-- status: Queued
+- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-032"`).
+  Both shipped levels play identically in both builds: `tools/level-parity.mjs`
+  46/46 and 34/34. The floor drawing the region here is Q-037.
 - repo: both (format lands upstream first; the loader lands here)
 - size: M
 - blocked-by: Q-035; upstream P1 (the format, a loader, one authored level)
@@ -488,6 +490,27 @@ and Godot prints no warning about it. Establish whether 4.7's Compatibility
 glow needs an HDR buffer or different thresholds, or is simply faint here.
 Until this lands, every compat look must be built as tint and shape, never
 as light (Q-030's transmittance was cut that way for this reason).
+
+### Q-037 — Godot floor draws the level's region (both tiers)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: upstream v238 (`FLOOR_FRAG`'s shape term: world-space SDF from a
+  fixed slot array, union=min, intersect=max, neutral for an unused slot,
+  dim outside, boundary glow); PORT_STATUS.md "Q-032", the last paragraph
+- gate: `three-rings` photographed on Forward+ AND Compatibility with the
+  region visible on both (Q-030's rule), against upstream's own
+  `scripts/level-shot.sh` pictures; smoke unchanged; the parity gate
+  unchanged (drawing must not touch the simulation)
+
+The mechanics already honour the shape (Q-031/Q-032); the floor still
+paints the bounding rectangle, so a circle level is invisible. Port the
+term into `floor_grid.gdshader` with the shape slots as uniforms written
+from `_apply_level()`. The compat tier's bloom threshold (Q-034) and
+tonemapper (Q-033) will both act on the glowing boundary — judge it on the
+phone's tier, not the desktop's.
 
 ## Landed
 

@@ -58,6 +58,63 @@ one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
 
+## Q-032 — the browser's authored levels play here, from the SAME file (2026-09-04)
+
+**Owner decision, 2026-09-04:** the level editor is built upstream in JS;
+this build LOADS the levels. Upstream shipped the format and two levels as
+v237/v238 (`toko-drop/js/level.js`, `toko-drop/levels/*.json`, PR #447).
+
+- **`tools/sync-levels.sh`** copies `toko-drop/levels/*.json` out of the
+  upstream clone's DEPLOYED ref (`git show origin/gh-pages:…`, whatever the
+  clone has checked out) into the git-ignored `levels/`, and writes
+  `levels/LEVELS_SOURCE.txt` with the exact commit. No exporter, no
+  allow-list, nothing that can drop a field — Eeri paid for that design
+  twice. Hand-editing `levels/` is how a lineage forks; the file says so.
+- **`scripts/level.gd`** parses the JSON and validates it STRICTLY, clause
+  for clause with `level.js`: unknown keys, off-grid times, out-of-order
+  spawns, unknown enemy names (against `WaveDirector.KNOWN_TYPES`, so a body
+  this build lacks is refused at load rather than becoming a GLOBBO), moving
+  shapes and pickups by name, more than `MAX_SHAPES` shapes. Builds the
+  `Arena` shape (Q-031) and a stable-sorted schedule.
+- **`wave_director.gd` grew the one thing it lacked: a delay pump.** The
+  browser trickles a wave by `delay` against `waveTimer`; this build placed
+  a whole wave at once. With `level` set, `start_wave()` queues the timeline
+  and `update()` pumps it BEFORE the bodies step (spawn-then-update in one
+  frame, like the browser), honouring the authored `px`/`pz` and the
+  speed/interval multipliers. **A level is not clear while its queue still
+  holds bodies** — `wave_cleared` fires on any empty frame, and without that
+  guard the first gap between two authored spawns ended the level.
+- **`main.gd`:** `level_id` (set by `tools/trace.gd`/`capture.gd` `level:<id>`;
+  a menu row is later) → `_apply_level()` pins the file's arena (size via
+  `_set_arena_size`, SHAPE via `arena.set_shape`) and hands the director the
+  timeline; `_on_wave_cleared` → `_finish_level()`, the results screen
+  without the death (the WAVE sting, "LEVEL CLEAR"). Mirrors the browser's
+  `finishLevel()`.
+- **THE CROSS-BUILD GATE — `tools/level-parity.mjs`.** Both builds log the
+  first sighting of every body in one format (`SPAWN <i> <TYPE> t= x= z=`):
+  the browser from `scripts/level-smoke.sh` (it writes
+  `$LEVEL_DIR/seen-<id>.txt`), this build from `tools/trace.gd level:<id>`.
+  The gate diffs them: same count, same types in order, within 0.15 s and
+  1.0 unit (each side's own tolerance against the authored file — a body is
+  first seen up to two frames into its life). **`first-light`: 46/46.
+  `three-rings`: 34/34.** Falsified: shifting the Godot spawn by two units
+  fails it. A first cut traced 900 frames and saw 7 of 15 bodies, all
+  correct — the window is sized from the level's duration now.
+- `tests/smoke.gd` `_test_level_loader` (12 checks): FAILS if `levels/` is
+  not synced rather than skipping; both levels load with the shapes the
+  files say; the validator says no; the pump sends the t=0 body on the
+  first step, where the file put it, and holds the clear.
+
+**Not done, named — Q-037:** this build's floor does not DRAW the region
+yet. `three-rings` plays correctly (the SDF contains, clamps and marches)
+but the floor still paints the bounding rectangle, so the common area of
+the three circles is invisible. Upstream draws it on both of its paths as
+of v238 (world-space SDF from a fixed slot array, union=min,
+intersect=max, dim outside, a glowing boundary); the same term belongs in
+`floor_grid.gdshader`, and it must be photographed on both tiers (Q-030's
+rule) because the compat tier's ACES-crush and bloom threshold (Q-033/
+Q-034) will both touch a glowing line.
+
 ## Q-031 — the arena as an SDF: `scripts/arena.gd` (2026-09-04)
 
 **Owner decisions, 2026-09-04:** the level editor is built upstream in JS

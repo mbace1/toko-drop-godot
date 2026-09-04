@@ -51,6 +51,12 @@ var half_z := HALF_Z
 ## step. Upstream's §8: the split between "how big" and "where is the edge"
 ## is what made this a day's work rather than a fortnight's.
 var arena := Arena.new(Arena.rect_shape(HALF_X_LANDSCAPE, HALF_Z_LANDSCAPE))
+## Q-032: an authored level to run instead of the director's roll — the id
+## of a file in levels/ (synced from upstream by tools/sync-levels.sh).
+## Empty = classic. Set by tools/trace.gd and tools/capture.gd (`level:<id>`)
+## and, later, by a menu row; a level that fails to load is a warning and a
+## classic run, never a crash.
+var level_id := ""
 var _xz := Arena.XZ.new()
 
 ## Q-034: the glow threshold for the Compatibility tier's LDR buffer.
@@ -1708,6 +1714,7 @@ func _start_game() -> void:
 	if not owned.has(rush.ability):
 		rush.ability = owned[0]
 	_start_challenge() if mode == Mode.CHALLENGE else _clear_challenge()
+	_apply_level()   # Q-032: after the size reset above, so the level's arena wins
 	_wave_peak = 0
 	player.rush_shotgun = _rush_verbs()
 	player.reset()
@@ -1776,6 +1783,34 @@ func _start_challenge() -> void:
 	waves.revenge_mult = 2 if _ch_rule == Challenges.Rule.GRAVEYARD else 1
 	waves.force_support = _ch_rule == Challenges.Rule.FOCUS
 	_resize_arena()
+
+## Q-032: load `level_id` (or clear it). The file's arena replaces the
+## preset's — the bounding box drives the floor, rails and camera as any
+## resize does, the SHAPE goes to `arena` where every boundary question is
+## answered — and the director gets the timeline.
+func _apply_level() -> void:
+	waves.level = null
+	if level_id.is_empty():
+		return
+	var lv := Level.load_file("res://levels/%s.json" % level_id, WaveDirector.KNOWN_TYPES)
+	if not lv.errors.is_empty():
+		push_warning("LEVEL: %s not loaded —\n  %s" % [level_id, "\n  ".join(lv.errors)])
+		return
+	_set_arena_size(lv.half_x, lv.half_z)
+	arena.set_shape(lv.arena_shape)
+	waves.level = lv
+	_resize_arena()
+	print("LEVEL: loaded %s — %d spawns over %.0fs" % [lv.id, lv.spawns.size(), lv.duration])
+
+## Q-032: the level's one timeline is spent and the floor is clear — the run
+## ends on the results screen like a death does, minus the death: the WAVE
+## sting instead of the dead one. Mirrors the browser's finishLevel().
+func _finish_level() -> void:
+	state = State.DEAD
+	audio.play("wave")
+	input_mgr.reset()
+	_msg_label.text = "%s — LEVEL CLEAR\n\nscore %d" % [waves.level.name, score]
+	_msg_label.show()
 
 func _clear_challenge() -> void:
 	_ch_rule = Challenges.Rule.NONE
@@ -1939,6 +1974,9 @@ func _update_toast(delta: float) -> void:
 func _on_wave_cleared(n: int) -> void:
 	_wave_peak = 0
 	_add_score(50 * n)
+	if waves.level != null:   # Q-032: one timeline, spent and cleared
+		_finish_level()
+		return
 	audio.play("wave")
 	# ROGUELIKE: the browser offers upgrade cards every 3rd wave and holds the
 	# run until you pick (js/main.js: `roguelikeMode && wave % 3 === 0`).

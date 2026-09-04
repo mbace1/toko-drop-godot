@@ -83,6 +83,7 @@ func _process(_delta: float) -> bool:
 	_test_kill_scoring()
 	_test_adaptive_quality()
 	_test_render_tier()
+	_test_level_loader()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
@@ -2919,6 +2920,75 @@ func _test_render_tier() -> void:
 	_check(bd.z > 0.5 and bd.y < 0.0,
 		"main.gd's back light travels toward the camera (+Z) and slightly down (%.2f, %.2f, %.2f)" % [bd.x, bd.y, bd.z])
 	main.queue_free()
+
+## Q-032 — the browser's authored levels, read from the SAME JSON. This is
+## not vacuous: a missing levels/ FAILS with the sync command, it does not
+## skip. Then: both shipped levels load, their shapes are what the files
+## say, the pump sends bodies at the authored second and place, the clear is
+## held while the timeline has more to send, and the validator says no.
+func _test_level_loader() -> void:
+	var names := WaveDirector.KNOWN_TYPES
+	if not FileAccess.file_exists("res://levels/first-light.json"):
+		_check(false, "levels/ is synced (run tools/sync-levels.sh — a missing level is a FAIL, not a skip)")
+		return
+	var fl := Level.load_file("res://levels/first-light.json", names)
+	_check(fl.errors.is_empty(), "first-light loads clean (%s)" % ", ".join(fl.errors))
+	_check(fl.spawns.size() == 15 and fl.arena_shape is Arena.RectShape and fl.half_x == 19.0,
+		"first-light: 15 spawns on a 19x11 rectangle")
+	var tr := Level.load_file("res://levels/three-rings.json", names)
+	_check(tr.errors.is_empty(), "three-rings loads clean (%s)" % ", ".join(tr.errors))
+	_check(tr.arena_shape is Arena.CombineShape and tr.arena_shape.kind == Arena.KIND_INTERSECT and tr.spawns.size() == 11,
+		"three-rings: 11 spawns in the intersection of three circles")
+	_check(tr.arena_shape.sdf(0.0, 0.0) < 0.0 and tr.arena_shape.sdf(9.0, 0.0) > 0.0,
+		"three-rings: the origin is inside the common area and x=9 is not")
+	var missing := Level.load_file("res://levels/no-such-level.json", names)
+	_check(not missing.errors.is_empty(), "a missing file is an error, never an empty level")
+	# The validator can say no (the same clauses as level.js).
+	var bad: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://levels/first-light.json"))
+	bad["bonus"] = true
+	bad["spawns"][0]["type"] = "GLOBBO_XL"
+	bad["spawns"][1]["t"] = 0.05
+	var errs := Level.validate(bad, names)
+	_check(errs.size() >= 3, "the validator rejects an unknown key, an unknown type and an off-grid time (%d errors)" % errs.size())
+
+	# The pump, against a real director.
+	var root := Node3D.new()
+	get_root().add_child(root)
+	var target := Node3D.new()
+	root.add_child(target)
+	var bullets := _make_pool(root)
+	var enemies_root := Node3D.new()
+	root.add_child(enemies_root)
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+	wd.arena = Arena.new(fl.arena_shape)
+	wd.target = target
+	wd.bullets = bullets
+	wd.enemies_root = enemies_root
+	wd.level = fl
+	var cleared := [-1]
+	wd.wave_cleared.connect(func(n): cleared[0] = n)
+	wd.start_wave()
+	_check(wd.enemies.is_empty() and wd._level_queue.size() == 15, "start_wave() on a level rolls nothing and queues the 15 authored spawns")
+	wd.update(0.05)
+	_check(wd.enemies.size() == 1 and wd.enemies[0] is Globbo, "at t=0.05 the t=0 GLOBBO is on the floor")
+	var e0 := wd.enemies[0]
+	_check(absf(e0.position.x - (-14.0)) < 1.0 and absf(e0.position.z - (-7.0)) < 1.0,
+		"and it stands where the file put it (%.2f, %.2f)" % [e0.position.x, e0.position.z])
+	# Ten additions of 0.05 land a hair under 0.5 in doubles, so the t=0.5
+	# body arrives on the eleventh step — the same one-frame slack the
+	# browser's gate allows (and the parity gate's 0.15 s tolerance covers).
+	for i in 10:
+		wd.update(0.05)
+	_check(wd.enemies.size() == 2, "by t=0.55 the second GLOBBO has arrived (%d bodies)" % wd.enemies.size())
+	for en in wd.enemies.duplicate():
+		while en.alive:
+			en.take_hit(en.hp)
+	wd.update(0.016)
+	_check(cleared[0] == -1, "an empty floor is NOT a clear while the timeline still has bodies to send")
+	wd.clear()
+	wd.level = null
+	root.queue_free()
 
 ## DAILY RUN: the date math is pure, so it is checked directly against known
 ## dates rather than against "today" (a test that only runs correctly on the

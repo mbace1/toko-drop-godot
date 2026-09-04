@@ -175,6 +175,15 @@ expressions (Q-031). Run it on every edit to that file. It is a port of
 upstream's `scripts/arena-check.mjs`, check for check, and it has been
 falsified: a 1e-12 nudge on one coordinate fails 1,536 of them.
 
+**Levels are the browser build's files, synced — never authored here.**
+`tools/sync-levels.sh` fills the git-ignored `levels/` from the upstream
+clone's deployed ref (Q-032); `tests/smoke.gd` FAILS when it is empty. The
+cross-build gate is `GODOT=… node tools/level-parity.mjs <id> <seen-file>`,
+where the seen file comes from upstream's `scripts/level-smoke.sh` — run it
+whenever the pump, the arena or a level file changes. A level that plays
+differently in the two builds is a bug in whichever build diverged from the
+file, never a reason to edit the file.
+
 `godot --headless --fixed-fps 60 --script tools/trace.gd -- seed:9D6875 300`
 — a seeded GAMEPLAY-STATE trace: every body's class and exact float32
 position at fixed frames. Diff it before and after any change to movement,

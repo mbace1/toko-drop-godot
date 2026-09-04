@@ -15,6 +15,10 @@ build/
 # Capture output from tools/capture.gd — look at them, don't commit them
 _shots/
 
+# Q-032: the browser build's authored levels, synced by tools/sync-levels.sh
+# from the deployed upstream tree. Generated — never edit, never commit.
+levels/
+
 # Editor / OS cruft
 .DS_Store
 Thumbs.db
