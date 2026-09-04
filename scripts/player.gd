@@ -16,6 +16,7 @@ const FIRE_RATE := 0.09
 const MAX_HP := 3
 const MERCY_DURATION := 1.2
 const RADIUS := 0.5
+var _xz := Arena.XZ.new()   # Q-035 scratch for the per-frame clamp
 
 const GEL_SHADER := preload("res://shaders/gel.gdshader")
 const REST_RIM := Color(0.6, 0.85, 1.0)
@@ -296,7 +297,7 @@ func dash(aim: Dictionary) -> void:
 	_dash_time = DASH_DUR * up_dash_dur_mult
 	_sqv += 0.6
 
-func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, half_x: float, half_z: float) -> void:
+func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, arena: Arena) -> void:
 	if not alive:
 		return
 	if dashing:
@@ -349,10 +350,11 @@ func update(delta: float, move: Vector2, aim: Dictionary, bullets: BulletPool, h
 			_show()
 			mat.set_shader_parameter("rim_color", REST_RIM)
 
-	var hx := half_x - RADIUS
-	var hz := half_z - RADIUS
-	position.x = clampf(position.x, -hx, hx)
-	position.z = clampf(position.z, -hz, hz)
+	# Q-035: the boundary is the Arena's question (arena.gd); for the
+	# rectangle this is the identical max/min expression, gated exactly.
+	var c := arena.clamp_pt(position.x, position.z, RADIUS, _xz)
+	position.x = c.x
+	position.z = c.z
 
 	# Spring squash (player.js `_sq`/`_sqV`).
 	_sqv = (_sqv - (_sq - 1.0) * 0.28) * 0.84

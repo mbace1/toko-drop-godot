@@ -42,8 +42,20 @@ class Drone:
 	var base_perp := 0.0
 
 var active := false
-var half_x := 19.0
-var half_z := 11.0
+## Q-035: shares main.gd's Arena; half_x/half_z read through as the SIZE
+## (the edge-spawn literals below are size questions and stay). Setters keep
+## the hand-built tests working, each giving a private rectangle.
+var arena: Arena = Arena.new(Arena.rect_shape(19.0, 11.0))
+var half_x: float:
+	get:
+		return arena.half_x
+	set(v):
+		arena = Arena.new(Arena.rect_shape(v, arena.half_z))
+var half_z: float:
+	get:
+		return arena.half_z
+	set(v):
+		arena = Arena.new(Arena.rect_shape(arena.half_x, v))
 var drones: Array[Drone] = []
 
 var _dx := 0.0
@@ -167,7 +179,9 @@ func update(delta: float, t: float) -> String:
 		d.wing_l.rotation.z = flap
 		d.wing_r.rotation.z = -flap
 		d.body.rotation.y = t * 1.5 + float(i) * 0.5
-		if absf(px) > half_x + 5.0 or absf(pz) > half_z + 5.0:
+		# Q-035: "escaped" is `not contains(x, z, -slack)` — gated exactly
+		# against the old |x| > hx+5 test in tests/arena_check.gd.
+		if not arena.contains(px, pz, -5.0):
 			d.escaped = true
 			d.alive = false
 			d.node.visible = false

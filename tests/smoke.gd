@@ -120,7 +120,7 @@ func _test_player_move_and_fire(root: Node3D) -> void:
 
 	var move := Vector2(1.0, 0.0)
 	var aim := {"x": 1.0, "z": 0.0, "valid": true}
-	player.update(0.5, move, aim, bullets, 9.0, 9.0)
+	player.update(0.5, move, aim, bullets, Arena.new(Arena.rect_shape(9.0, 9.0)))
 	_check(player.position.x > 0.0, "player moves toward held direction")
 
 	bullets.update(0.016, 9.0)
@@ -2683,31 +2683,31 @@ func _test_weapons(root: Node3D) -> void:
 	var aim := {"x": 1.0, "z": 0.0, "valid": true}
 
 	_check(p.weapon == "SINGLE", "the run starts on the plain gun")
-	p.update(0.5, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	p.update(0.5, Vector2.ZERO, aim, bullets, Arena.new(Arena.rect_shape(19.0, 11.0)))
 	_check(bullets.active.size() == 1, "SINGLE fires one shot")
 
 	bullets.clear()
 	p.weapon = "SPREAD"
 	p._fire_t = 0.0
-	p.update(0.5, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	p.update(0.5, Vector2.ZERO, aim, bullets, Arena.new(Arena.rect_shape(19.0, 11.0)))
 	_check(bullets.active.size() == 5, "SPREAD fires 5 (got %d)" % bullets.active.size())
 
 	bullets.clear()
 	p.weapon = "SPREAD2"
 	p._fire_t = 0.0
-	p.update(0.5, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	p.update(0.5, Vector2.ZERO, aim, bullets, Arena.new(Arena.rect_shape(19.0, 11.0)))
 	_check(bullets.active.size() == 7, "SPREAD2 fires 7")
 
 	# BURST commits: the rest of the burst arrives even after you let go.
 	bullets.clear()
 	p.weapon = "BURST"
 	p._fire_t = 0.0
-	p.update(0.01, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	p.update(0.01, Vector2.ZERO, aim, bullets, Arena.new(Arena.rect_shape(19.0, 11.0)))
 	var immediate := bullets.active.size()
 	_check(immediate == 1, "BURST fires one immediately")
 	var idle := {"x": 0.0, "z": 0.0, "valid": false}
 	for i in 40:
-		p.update(1.0 / 60.0, Vector2.ZERO, idle, bullets, 19.0, 11.0)
+		p.update(1.0 / 60.0, Vector2.ZERO, idle, bullets, Arena.new(Arena.rect_shape(19.0, 11.0)))
 	_check(bullets.active.size() > immediate,
 		"and the queued shots still arrive after the trigger is released (%d)"
 			% bullets.active.size())
@@ -2715,7 +2715,7 @@ func _test_weapons(root: Node3D) -> void:
 	# RAPID is a RATE change, not a shot-count change.
 	p.weapon = "RAPID"
 	p._fire_t = 0.0
-	p.update(0.01, Vector2.ZERO, aim, bullets, 19.0, 11.0)
+	p.update(0.01, Vector2.ZERO, aim, bullets, Arena.new(Arena.rect_shape(19.0, 11.0)))
 	_check(p._fire_t < Player.FIRE_RATE, "RAPID shortens the gap between shots")
 
 	# The pod table: homing is enemy-exclusive, per enemy.js v88.

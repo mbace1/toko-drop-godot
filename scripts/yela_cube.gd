@@ -77,6 +77,11 @@ func _step_flop(delta: float) -> void:
 		position.x = _origin.x + _dir.x * (2.0 * l)
 		position.z = _origin.y + _dir.y * (2.0 * l)
 
+		# Q-035: deliberately NOT moved to Arena. This is a per-AXIS
+		# reflection ("if |x| > bx flip x"), and an SDF has no notion of an
+		# axis — upstream left the cube flop for the same reason and named a
+		# gradient-reflect helper as the prerequisite (their §8). Stays until
+		# that helper exists on both sides.
 		var hx := half_x - radius
 		var hz := half_z - radius
 		if position.x > hx or position.x < -hx:

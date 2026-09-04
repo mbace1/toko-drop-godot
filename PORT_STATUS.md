@@ -86,14 +86,46 @@ schedule drifts. The module now returns `Arena.XZ` (two 64-bit floats,
 with the optional `out` upstream uses so per-frame calls need not
 allocate), and nothing in it touches a 32-bit type.
 
-**NOT wired yet — Q-035.** Player, enemy, TORO's slab test, the spawn ring
-and `main.gd`'s random placements still inline the rectangle. Upstream
-found about twenty such sites, not the ~62 first estimated, because "how
-big is the room" (`HALF_X` as a size) is a different question from "where
-is the boundary" and only the second moves. Three sites upstream
-deliberately did NOT migrate (the smash door's literal cardinal table, the
-cube flop's per-axis reflection, the decoration drift bounce) — carry that
-list, do not rediscover it.
+**Wired — Q-035, same day.** `main.gd` owns one `Arena`; `_set_arena_size()`
+keeps `half_x`/`half_z` (the SIZE, for floor, rails, camera) in step with
+it, and the director, every body it spawns, the cargo convoy and the
+player share it. On bodies, the director and the cargo, `half_x`/`half_z`
+are now read-throughs to the arena with a setter, so the ~25 hand-built
+test fixtures that assign a size keep working and get a private rectangle
+each — which is what they mean.
+
+The BOUNDARY questions that moved, each to the identical expression:
+the player clamp and the MAGNA-pull clamp (`clamp_pt`, r = radius), every
+enemy's `_clamp_to_arena()`, TORO's dash slab (`ray_edge`) and its wall
+hit (`sdf + r >= 0`, the exact equivalent of `|x| >= hx-r or |z| >= hz-r`),
+the child-split landing (`clamp_pt`, r = 1), the spawn ring
+(`ring_point`, k = 0.6), the cargo escape test (`not contains(x, z, -5)`),
+and the vault/foam placements (`random_point`, two draws, x then z).
+
+Deliberately NOT moved, and commented at the site so nobody re-opens
+them: the cube flop's per-axis reflection and the gate's drift bounce
+(upstream's own two, needing a gradient-reflect helper), plus the escort
+and gate placements, which draw the rng once per axis in a form
+`random_point` does not match — moving them would change the seeded
+stream, which is the one thing this item must not do.
+
+**One float-order note, named rather than hidden:** the spawn ring was
+`cos(a)·(0.6·halfX)` here and is `(cos(a)·halfX)·0.6` in `ring_point`
+(upstream's order). Those can differ by a double ulp before the float32
+store. The trace gate below is what proves it did not, on two seeds.
+
+**The gate that actually proves "nothing changes" is `tools/trace.gd`,
+not a picture.** The first attempt was a seeded capture pair compared
+pixel for pixel; it differed by ~40k pixels on every frame — because
+cosmetic randomness is deliberately OFF the gameplay stream (bullet
+shimmer, camera shake), so two runs of the SAME code differ on screen.
+What must not move is the simulation. `trace.gd` drives the real scene
+headless on a fixed timestep under one seed and prints every body's class
+and float32 position (nine decimals, exact) at fixed frames. HEAD vs
+wired, seed `9D6875` over 300 frames and seed `C5EC07` over 600: **zero
+differing lines**. Falsified: nudging the ring factor to 0.61 changes the
+trace immediately. Run it on both sides of any change that touches
+movement, spawning or the arena.
 
 ## Q-030 — the two gel tiers (2026-09-04)
 

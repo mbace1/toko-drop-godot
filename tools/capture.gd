@@ -92,8 +92,7 @@ func _process(_delta: float) -> bool:
 		var e = wd._make(_force)
 		wd.enemies_root.add_child(e)
 		e.position = Vector3(0.0, 0.0, -4.0)
-		e.half_x = _main.HALF_X
-		e.half_z = _main.HALF_Z
+		e.arena = _main.arena   # Q-035
 		e.target = _main.player
 		e.bullets = _main.bullets
 		e.trails = _main.trails

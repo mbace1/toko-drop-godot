@@ -116,6 +116,8 @@ func update(delta: float, t: float, half_x: float, half_z: float) -> void:
 	if drift:
 		position.x += _drift_dir.x * delta
 		position.z += _drift_dir.y * delta
+		# Q-035: deliberately NOT moved to Arena — a per-axis bounce, same
+		# reason as the cube flop (upstream's "decoration drift bounce").
 		if absf(position.x) > half_x - 3.0:
 			_drift_dir.x *= -1.0
 		if absf(position.z) > half_z - 3.0:

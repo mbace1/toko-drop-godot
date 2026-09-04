@@ -47,8 +47,23 @@ var is_blob := true
 var _drip_t := 0.0
 var target: Node3D          # the player — chasers steer toward this
 var bullets: BulletPool     # set by WaveDirector; null for melee-only types
-var half_x := 9.0
-var half_z := 9.0
+## Q-035: the arena is the SOURCE. Game code shares main.gd's one Arena
+## (WaveDirector hands it over in _spawn()); `half_x`/`half_z` read through
+## to it as the room's SIZE. The setters exist for the tests, which build
+## bodies by hand and assign a size — each assignment gives the body a
+## private rectangle, which is exactly what those tests mean.
+var arena: Arena = Arena.new(Arena.rect_shape(9.0, 9.0))
+var half_x: float:
+	get:
+		return arena.half_x
+	set(v):
+		arena = Arena.new(Arena.rect_shape(v, arena.half_z))
+var half_z: float:
+	get:
+		return arena.half_z
+	set(v):
+		arena = Arena.new(Arena.rect_shape(arena.half_x, v))
+var _xz := Arena.XZ.new()   # scratch for per-frame boundary calls
 
 ## GAMEPLAY randomness only. WaveDirector hands every body the run's shared
 ## generator in _spawn(), which is what lets one seed reproduce one swarm; a
@@ -498,10 +513,11 @@ func _hold_at_range(delta: float, want: float, band: float, strafe: float = 0.0)
 	return Vector2(nx, nz)
 
 func _clamp_to_arena() -> void:
-	var hx := half_x - radius
-	var hz := half_z - radius
-	position.x = clampf(position.x, -hx, hx)
-	position.z = clampf(position.z, -hz, hz)
+	# Q-035: the boundary is the Arena's question now (arena.gd). For the
+	# rectangle this is the identical max/min expression, gated exactly.
+	var c := arena.clamp_pt(position.x, position.z, radius, _xz)
+	position.x = c.x
+	position.z = c.z
 
 ## Drives the shared fire clock. Returns true on the single frame the volley
 ## should actually go off; the subclass then spawns whatever shape it fires.

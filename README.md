@@ -103,6 +103,7 @@ scripts/
                           corpse pops and revenge volleys
 tests/smoke.gd         headless gate — see "Testing" above
 tests/arena_check.gd   the arena SDF gate — exact, 8,396 checks; port of upstream scripts/arena-check.mjs
+tools/trace.gd         seeded gameplay-state trace, headless — diff before/after to prove "nothing changed"
 tools/capture.gd      screenshots the real game — see "Looking at it" above
 PORT_BRIEF.md         inherited visual/material brief (Godot-side canon for shaders/lighting)
 PORT_STATUS.md        living doc: what's ported, what's next, in priority order

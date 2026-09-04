@@ -45,6 +45,18 @@ var _cam_look_base := CAM_LOOK_LANDSCAPE
 ## rather than the constants.
 var half_x := HALF_X
 var half_z := HALF_Z
+## Q-035: THE arena — the one boundary every body, the director and the
+## cargo share (scripts/arena.gd). `half_x`/`half_z` above stay as the room's
+## SIZE for the floor, rails and camera; _set_arena_size() keeps the two in
+## step. Upstream's §8: the split between "how big" and "where is the edge"
+## is what made this a day's work rather than a fortnight's.
+var arena := Arena.new(Arena.rect_shape(HALF_X_LANDSCAPE, HALF_Z_LANDSCAPE))
+var _xz := Arena.XZ.new()
+
+func _set_arena_size(hx: float, hz: float) -> void:
+	half_x = hx
+	half_z = hz
+	arena.set_rect(hx, hz)
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
@@ -270,16 +282,12 @@ func _on_viewport_resized() -> void:
 	if _detect_landscape() == landscape_mode:
 		return
 	_apply_orientation()
-	half_x = HALF_X
-	half_z = HALF_Z
-	waves.half_x = half_x
-	waves.half_z = half_z
+	_set_arena_size(HALF_X, HALF_Z)
 	_resize_arena()
 
 func _ready() -> void:
 	_apply_orientation()
-	half_x = HALF_X
-	half_z = HALF_Z
+	_set_arena_size(HALF_X, HALF_Z)
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	_setup_world()
 	_setup_camera()
@@ -325,8 +333,7 @@ func _ready() -> void:
 
 	waves = WaveDirector.new()
 	add_child(waves)
-	waves.half_x = half_x
-	waves.half_z = half_z
+	waves.arena = arena
 	waves.target = player
 	waves.bullets = bullets
 	waves.trails = trails
@@ -1046,7 +1053,7 @@ func _process_playing(delta: float) -> void:
 		if was_ready:
 			audio.play("dash")
 
-	player.update(delta, move, aim, bullets, half_x, half_z)
+	player.update(delta, move, aim, bullets, arena)
 	bullets.update(delta, maxf(half_x, half_z), player.position)
 	trails.update(delta)
 	drips.update(delta)
@@ -1470,8 +1477,7 @@ func _escort_delivered() -> void:
 func _update_cargo(delta: float) -> void:
 	_cargo_wave_t += delta
 	if not cargo.active and _cargo_spawn_at >= 0.0 and _cargo_wave_t >= _cargo_spawn_at:
-		cargo.half_x = half_x
-		cargo.half_z = half_z
+		cargo.arena = arena
 		cargo.spawn(waves.rng)
 		_cargo_spawn_at = -1.0   # one convoy per wave
 	if cargo.active:
@@ -1550,10 +1556,11 @@ func _apply_magna_pull(delta: float) -> void:
 	if pl > MAGNA_PULL_CAP:
 		pull *= MAGNA_PULL_CAP / pl
 	if pull != Vector2.ZERO:
-		player.position.x = clampf(player.position.x + pull.x * delta,
-			-half_x + Player.RADIUS, half_x - Player.RADIUS)
-		player.position.z = clampf(player.position.z + pull.y * delta,
-			-half_z + Player.RADIUS, half_z - Player.RADIUS)
+		# Q-035: Arena.clamp_pt, r = the player's radius — same expression.
+		var c := arena.clamp_pt(player.position.x + pull.x * delta,
+			player.position.z + pull.y * delta, Player.RADIUS, _xz)
+		player.position.x = c.x
+		player.position.z = c.z
 
 ## Remembers the cause of the most recent hit. Whatever is stored when the
 ## last life goes is what the death screen asks about.
@@ -1738,17 +1745,14 @@ func _start_challenge() -> void:
 	rush.reset()
 	player.rush_shotgun = true
 
-	half_x = HALF_X
-	half_z = HALF_Z
+	_set_arena_size(HALF_X, HALF_Z)
 	match _ch_rule:
 		Challenges.Rule.CLOSE_QUARTERS:
-			half_x = HALF_X * Challenges.CLOSE_QUARTERS_SCALE
-			half_z = HALF_Z * Challenges.CLOSE_QUARTERS_SCALE
+			_set_arena_size(HALF_X * Challenges.CLOSE_QUARTERS_SCALE,
+				HALF_Z * Challenges.CLOSE_QUARTERS_SCALE)
 		Challenges.Rule.ONE_LIFE:
 			rush.lives = 1
 
-	waves.half_x = half_x
-	waves.half_z = half_z
 	waves.level_override = int(lv["difficulty"])
 	waves.only_shooters = _ch_rule == Challenges.Rule.ARTILLERY
 	waves.only_melee = _ch_rule == Challenges.Rule.SWARM
@@ -1758,10 +1762,7 @@ func _start_challenge() -> void:
 
 func _clear_challenge() -> void:
 	_ch_rule = Challenges.Rule.NONE
-	half_x = HALF_X
-	half_z = HALF_Z
-	waves.half_x = half_x
-	waves.half_z = half_z
+	_set_arena_size(HALF_X, HALF_Z)
 	waves.only_shooters = false
 	waves.only_melee = false
 	waves.revenge_mult = 1
@@ -1861,8 +1862,10 @@ func _on_wave_started(n: int) -> void:
 		if n >= 5 and n % 4 == 3:
 			vault = VaultCrate.new()
 			add_child(vault)
-			vault.build((waves.rng.randf() * 2.0 - 1.0) * (half_x - 5.0),
-				(waves.rng.randf() * 2.0 - 1.0) * (half_z - 5.0))
+			# Q-035: Arena.random_point — two draws, x then z, the identical
+			# expression with margin 5 (gated in tests/arena_check.gd).
+			var vp := arena.random_point(waves.rng.randf, 5.0, _xz)
+			vault.build(vp.x, vp.z)
 		if n >= 6 and n % 4 == 1:
 			escort = EscortBot.new()
 			add_child(escort)
@@ -1870,8 +1873,8 @@ func _on_wave_started(n: int) -> void:
 		if n >= 6 and n % 4 == 2:
 			var fz := FoamZone.new()
 			add_child(fz)
-			fz.build((waves.rng.randf() * 2.0 - 1.0) * (half_x - 4.0),
-				(waves.rng.randf() * 2.0 - 1.0) * (half_z - 4.0))
+			var fp := arena.random_point(waves.rng.randf, 4.0, _xz)   # Q-035, margin 4
+			fz.build(fp.x, fp.z)
 			foam_zones.append(fz)
 	match waves.wave_kind:
 		"boss":

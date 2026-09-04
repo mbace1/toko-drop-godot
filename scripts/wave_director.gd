@@ -164,8 +164,21 @@ var wave := 0
 ## waves have been cleared, so that levelling down actually makes the next
 ## wave easier. 0 = off (classic uses `wave`).
 var level_override := 0
-var half_x := 9.0
-var half_z := 9.0
+## Q-035: main.gd hands over its one Arena; every body spawned here shares
+## it, so a resize reaches them all. half_x/half_z read through as the SIZE;
+## the setters keep the hand-built tests working (private rectangle each).
+var arena: Arena = Arena.new(Arena.rect_shape(9.0, 9.0))
+var half_x: float:
+	get:
+		return arena.half_x
+	set(v):
+		arena = Arena.new(Arena.rect_shape(v, arena.half_z))
+var half_z: float:
+	get:
+		return arena.half_z
+	set(v):
+		arena = Arena.new(Arena.rect_shape(arena.half_x, v))
+var _xz := Arena.XZ.new()
 var target: Node3D
 var bullets: BulletPool
 var trails: TrailPool
@@ -362,8 +375,6 @@ func _eligible_for(w: int) -> Array[String]:
 ## bunch every wave into a narrow band down the middle and leave the wide ends
 ## of the room empty.
 func _spawn(picks: Array) -> void:
-	var rx := 0.6 * half_x
-	var rz := 0.6 * half_z
 	var n := picks.size()
 	for i in n:
 		var a := (float(i) / float(maxi(n, 1))) * TAU + rng.randf() * 0.4 - 0.2
@@ -371,9 +382,14 @@ func _spawn(picks: Array) -> void:
 		var type_name: String = entry["type"] if typeof(entry) == TYPE_DICTIONARY else String(entry)
 		var e := _make(type_name)
 		enemies_root.add_child(e)
-		e.position = Vector3(cos(a) * rx, 0.0, sin(a) * rz)
-		e.half_x = half_x
-		e.half_z = half_z
+		# Q-035: the spawn ring is Arena.ring_point — cos(a)·halfX·k, the
+		# inscribed ellipse it has always been. NOTE the multiplication order
+		# changed from cos(a)·(0.6·halfX) to (cos(a)·halfX)·0.6, which can
+		# differ by one double ulp before the float32 store; the seeded
+		# capture pair is what proves nothing visible moved.
+		var p := arena.ring_point(a, 0.6, _xz)
+		e.position = Vector3(p.x, 0.0, p.z)
+		e.arena = arena
 		e.target = target
 		e.bullets = bullets
 		e.trails = trails
@@ -460,11 +476,11 @@ func _split(parent: Enemy) -> void:
 	for p in parent.child_positions():
 		var c := _make(parent.child_kind)
 		enemies_root.add_child(c)
-		c.position = Vector3(
-			clampf(p.x, -half_x + 1.0, half_x - 1.0), 0.0,
-			clampf(p.z, -half_z + 1.0, half_z - 1.0))
-		c.half_x = half_x
-		c.half_z = half_z
+		# Q-035: a child lands one unit inside the boundary — Arena.clamp_pt
+		# with r = 1, the identical expression.
+		var cp := arena.clamp_pt(p.x, p.z, 1.0, _xz)
+		c.position = Vector3(cp.x, 0.0, cp.z)
+		c.arena = arena
 		c.target = target
 		c.bullets = bullets
 		c.trails = trails

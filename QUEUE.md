@@ -397,15 +397,19 @@ first and stop, same as they did.
 
 ### Q-035 — Wire the rectangle sites to `Arena`
 
-- status: Queued
+- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-035"`).
+  The gate turned out to be a seeded state TRACE (`tools/trace.gd`), not a
+  pixel pair — see PORT_STATUS.md "Q-031 — the arena as an SDF", "Wired".
 - repo: toko-drop-godot
 - size: M
 - blocked-by: —
 - design: PORT_STATUS.md "Q-031 — the arena as an SDF"; upstream
   LEVEL_EDITOR_DESIGN.md §8 for the site split and the three deliberate
   non-migrations
-- gate: `tests/smoke.gd` unchanged in count and content; a seeded capture
-  pair (same `seed:HEX`) before and after is pixel-identical
+- gate: `tests/smoke.gd` unchanged in count and content; a seeded
+  gameplay-state trace (`tools/trace.gd`, same `seed:HEX`) before and
+  after is byte-identical — pixels cannot be, by design (cosmetic
+  randomness is off the gameplay stream)
 
 `main.gd` owns one `Arena`, `set_rect(half_x, half_z)` on every arena
 resize, and threads it to `player.update()`, `WaveDirector._spawn()`

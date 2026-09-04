@@ -167,6 +167,13 @@ expressions (Q-031). Run it on every edit to that file. It is a port of
 upstream's `scripts/arena-check.mjs`, check for check, and it has been
 falsified: a 1e-12 nudge on one coordinate fails 1,536 of them.
 
+`godot --headless --fixed-fps 60 --script tools/trace.gd -- seed:9D6875 300`
+— a seeded GAMEPLAY-STATE trace: every body's class and exact float32
+position at fixed frames. Diff it before and after any change to movement,
+spawning or the arena; zero lines is the pass (Q-035). Do not try to prove
+"nothing changed" with screenshots — cosmetic randomness is deliberately off
+the gameplay stream, so two runs of identical code differ on screen.
+
 Also sanity-check the real scene boots clean after any change:
 
 ```

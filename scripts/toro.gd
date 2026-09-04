@@ -130,13 +130,10 @@ func _build_indicator() -> void:
 ## Distance from here to the arena wall along `dir` — what the indicator has to
 ## be scaled to so its tip is the impact point.
 func dash_length(dir: Vector2) -> float:
-	var best := INF
-	if absf(dir.x) > 1e-4:
-		var bx := (half_x if dir.x > 0.0 else -half_x) - position.x
-		best = minf(best, bx / dir.x)
-	if absf(dir.y) > 1e-4:
-		var bz := (half_z if dir.y > 0.0 else -half_z) - position.z
-		best = minf(best, bz / dir.y)
+	# Q-035: the slab test is Arena.ray_edge (arena.gd), the same expression
+	# TORO always inlined, r = 0. `dir` is snapped to eight headings, so the
+	# old 1e-4 guard and ray_edge's exact-zero test never disagree.
+	var best := arena.ray_edge(position.x, position.z, dir.x, dir.y, 0.0)
 	return maxf(0.5, best if best < INF else half_x)
 
 ## 45-degree snapping (TUNING.toro.dirSnapDeg). A charger that can aim at any
@@ -189,9 +186,9 @@ func update(delta: float) -> void:
 			position.z += _dash_dir.y * _dash_speed * delta
 			# Rolls at the speed it travels: spin = v / rim radius.
 			_spin = _dash_speed / maxf(radius, 0.01)
-			var hx := half_x - radius
-			var hz := half_z - radius
-			if absf(position.x) >= hx or absf(position.z) >= hz:
+			# Q-035: "touching or past the wall" is sdf + r >= 0 — the exact
+			# equivalent of |x| >= hx-r or |z| >= hz-r on the rectangle.
+			if arena.sdf(position.x, position.z) + radius >= 0.0:
 				_clamp_to_arena()
 				_phase = Phase.RECOVER
 				_phase_t = RECOVER_TIME
