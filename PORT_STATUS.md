@@ -5,6 +5,36 @@ Living doc — update this in the same commit as any change to `scripts/` or
 `mbace1/Suds-Jack`, `toko-drop/js/*.js` (referenced per line below). Visual
 target is `PORT_BRIEF.md`.
 
+## Start here (handoff, 2026-09-04)
+
+Everything as of this note is **committed, pushed, and live** — v3.4 deployed
+and confirmed at `mbace1.github.io/Suds-Jack/toko-drop-godot/`, `master`
+clean, smoke green. Read `CLAUDE.md`'s "Which build leads" section first if
+this is a fresh session — it decides what belongs in this repo at all.
+
+**The browser build has moved and is not yet assessed.** Last checked here
+against **v231**; `git fetch` on `gh-pages` shows it is now at **v236** (`js/arena.js`
+— the arena boundary became an SDF, "the rectangle becomes an SDF, and nothing
+changes"). v232–v236 are unread from this side. Audit the DEPLOYED tree
+(`gh-pages`, not `main` — see `CLAUDE.md`), same as every prior catch-up pass.
+
+**Two items are the owner's, not yet decided, and nothing should be built on
+top of either without asking:**
+- RUSH abilities (4 selectable ones) exist only in this repo.
+- RUSH lives: this repo's is a live, spent resource; the browser's
+  (`v226`) was removed as dead code. The two builds now disagree about
+  whether Rush has a separate lives resource at all.
+
+Both are tracked in `mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md` and
+[PR #311](https://github.com/mbace1/Suds-Jack/pull/311), open as of this note.
+
+**A live-site bug was found and fixed while wrapping up, not by this port's
+own work**: some other agent's plain (non-`--check`) `versions.mjs` run on
+`gh-pages` silently dropped four hub cabinet version entries, including this
+one's. Restored by hand (`f1684e0b`); the other three
+(`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
+commit for why.
+
 ## Ported
 
 **Portrait/landscape dual arena** (`scripts/main.gd`, main.js
