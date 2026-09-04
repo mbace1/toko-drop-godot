@@ -428,7 +428,14 @@ func _setup_world() -> void:
 	# 16 rather than 32: SSR is a full-screen ray march, and the arena's floor
 	# reflections do not need the extra steps to read — part of the 60fps pass.
 	env.ssr_max_steps = 16
-	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	# Q-033: Compatibility's ACES crushes dark red and green to ZERO — the
+	# floor came out (0, 11.5, 85) against Forward+'s (11.4, 19.6, 57), and
+	# even the void colour lost its red. Measured one variable at a time
+	# (PORT_STATUS.md, Q-033): fog, ambient, reflections, SSR and SSAO change
+	# nothing; the tonemapper is the whole shift. AgX is the closest match on
+	# that tier (void within a few counts, red back on the floor). Same
+	# exposure on both, so every other tuned value keeps its meaning.
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES if fp else Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = 1.15
 	env_node.environment = env
 	add_child(env_node)

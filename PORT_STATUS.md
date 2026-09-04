@@ -33,7 +33,9 @@ not an open one — whether the browser converges is upstream's call.
 
 **The gel look was NOT shipping on the web, and now there are two tiers
 (Q-030, 2026-09-04) — and bloom, which had never fired on the web either,
-does now (Q-034, same day: the threshold, not the pass, was the problem).** Godot's own GLES3 compiler says it on every
+does now (Q-034, same day: the threshold, not the pass, was the problem),
+and the floor's missing red was the compat ACES tonemapper, now AgX there
+(Q-033).** Godot's own GLES3 compiler says it on every
 Compatibility launch: SSS, transmittance and SSR are Forward+ only. The
 cabinet is a Compatibility build. See "Q-030 — the two gel tiers" below for
 what was found, what was fixed, and the three compat gaps that are still
@@ -188,11 +190,37 @@ on"; the owner's decision reverses that, and the comment is rewritten.
 
 ### What is still different on the web, with numbers — open
 
-- **Q-033 — the floor hue.** Open floor, same seed, same frame: Forward+
-  `rgb(11.5, 19.2, 56.6)`, Compatibility `rgb(0, 13.7, 87.3)`. Same luma,
-  zero red, +54% blue — a hue shift, not brightness. First suspect is SSR
-  of the warm-grey sky onto the floor (gone on compat); second is the sky
-  ambient term. Not chased under Q-030.
+- **Q-033 — the floor hue. CLOSED as far as a tonemapper can close it;
+  the remainder is Q-036.** Both suspects were wrong, and measuring said
+  so: on Forward+, turning SSR, SSAO or sky reflection off moves the
+  floor by less than a count; on Compatibility, fog, ambient and
+  reflection do nothing either. **The tonemapper is the whole shift.**
+  Compatibility's ACES crushes dark red and green to ZERO — even the void
+  colour `(0.051, 0.051, 0.102)` came out `(0, 0, 11.5)` there against
+  Forward+'s `(3, 4, 14)`. Open-floor sample, same box, exposure 1.15:
+
+  | compat tonemap | floor rgb | void rgb |
+  |---|---|---|
+  | ACES (was) | (0, 11.5, 85) | (0, 0, 11.5) |
+  | linear / Reinhard | (21, 26, 83) | (10.6, 10.6, 26.5) |
+  | filmic | (25, 28, 105) | (12.6, 12.6, 30.5) |
+  | **AgX (now)** | (8, 29, 81) | (2.6, 5.6, 18.5) |
+  | Forward+ ACES | (11.4, 19.6, 57) | (3, 4, 14) |
+
+  AgX ships on the compat tier (`main.gd`, `_setup_world`), same 1.15
+  exposure so nothing else re-tunes. Lower exposure was tried and loses
+  the red again (0.75: floor `(0, 17.8, 59)`), which is the tell for the
+  residual: **dark values are being quantised away BEFORE the tonemapper**
+  — an 8-bit scene buffer — and no curve can lift a channel that arrived
+  as zero. What is left after AgX: floor red at half of Forward+'s (r/b
+  0.10 vs 0.20) and luma 37% high (28 vs 20.5). That is Q-036.
+- **Q-036 — compat dark crush (8-bit scene buffer).** `use_hdr_2d` gives
+  the compat tier an HDR buffer — measured: the void's luma lands exactly
+  on Forward+'s (4.2 vs 4.5) — but it also triples the floor's brightness
+  (57 vs 20) and brightens the rail, i.e. the midtones re-map. It is the
+  right lever and needs the exposure/tonemap re-tuned WITH it, on the
+  same seed, judged against Forward+. Not done under Q-033 because it
+  changes every tuned value at once.
 - **Q-034 — bloom. CLOSED, same day.** Compatibility's glow pass works;
   it never showed because `glow_hdr_threshold = 0.9` was judged against
   an LDR scene buffer where nothing exceeds ~0.5 after tonemapping (the

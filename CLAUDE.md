@@ -86,6 +86,11 @@ terms by the `gel_compat` global. Rules that follow:
   `main.gd`'s `COMPAT_GLOW_THRESHOLD` (0.4), Forward+ keeps 0.9. Emission
   above that blooms on both tiers (Q-034). Anything judged "too dim to
   bloom" on compat is a threshold question, not a renderer limit.
+- **The compat tier tonemaps with AgX, Forward+ with ACES.** Compat's
+  ACES zeroes dark red and green (Q-033). Do not "fix" a colour on compat
+  by editing a shader constant until the tonemapper and buffer (Q-036)
+  have been ruled out with the probe method: one variable per run,
+  sampled at the same box, against the Forward+ frame.
 - A feature that only exists in Forward+ is not a bug on compat, but it
   must be NAMED in PORT_STATUS.md's "still different" list.
 

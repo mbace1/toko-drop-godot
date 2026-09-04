@@ -438,7 +438,9 @@ drop a field.
 
 ### Q-033 — Compat tier: the floor hue
 
-- status: Queued
+- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-033"`).
+  Neither suspect; the compat ACES tonemapper zeroed dark red. AgX on
+  that tier. The 8-bit residual is Q-036.
 - repo: toko-drop-godot
 - size: S
 - blocked-by: —
@@ -450,6 +452,25 @@ Forward+ open floor `rgb(11.5, 19.2, 56.6)`; Compatibility
 `rgb(0, 13.7, 87.3)`. Same luma, zero red, +54% blue. Suspects in order:
 SSR of the warm-grey sky (absent on compat), the sky ambient term. Measure
 before changing anything.
+
+### Q-036 — Compat tier: the 8-bit dark crush (`use_hdr_2d`, re-tuned)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: PORT_STATUS.md "Q-030 — the two gel tiers", the Q-033 and
+  Q-036 bullets
+- gate: same-seed floor AND void AND rail samples within a stated
+  tolerance of Forward+ on the compat tier; the seeded sheet for the eye
+
+After Q-033, the compat floor still carries half of Forward+'s red and
+runs 37% bright, because dark linear values are quantised to zero in an
+8-bit scene buffer before any tonemapper sees them. `use_hdr_2d` gives
+that tier an HDR buffer and puts the void exactly on Forward+'s, but
+triples the floor's brightness — so the exposure, threshold (Q-034) and
+tonemapper must be re-tuned together with it, on one seed, against the
+Forward+ frame. Change all of them in one item or none.
 
 ### Q-034 — Compat tier: bloom
 
