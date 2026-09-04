@@ -50,6 +50,19 @@ uniform float sss_depth : hint_range(0.01, 8.0) = 0.55;
 uniform float sss_boost : hint_range(0.0, 4.0) = 1.6;
 uniform float backlight_amt : hint_range(0.0, 1.0) = 0.45;
 
+// ── The Compatibility tier (Q-030) ──────────────────────────────────────────
+// SSS_STRENGTH and SSS_TRANSMITTANCE_* below are Forward+ only; on
+// gl_compatibility (the web cabinet) Godot's GLES3 compiler warns and drops
+// them, and the gummy-bear read above simply did not exist there. Owner
+// decision 2026-09-04: both tiers get the look. So on compat the ONE light
+// main.gd placed for transmittance is modelled analytically instead: light
+// travelling along `gel_back_dir` bleeds through toward the camera in the
+// body's own colour, strongest where the body is thin. `gel_compat` is 1.0
+// on that tier and 0.0 on Forward+, where the real pass does the job and this
+// term is multiplied to nothing. Both are set once by RenderTier.apply().
+global uniform float gel_compat;
+global uniform vec3 gel_back_dir;
+
 // Fresnel rim — PORT_BRIEF.md §0 "Fresnel rim" fragment injection.
 uniform vec4  rim_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float rim_power : hint_range(1.0, 8.0) = 2.6;
@@ -148,6 +161,29 @@ void fragment() {
 	// Cheap always-on wrap so the body reads translucent even facing the key
 	// light, where transmittance has nothing behind it to carry.
 	BACKLIGHT = gel * backlight_amt * (0.35 + 0.65 * thin);
+
+	// Compat-tier transmittance (Q-030, see the uniform block). What the real
+	// pass shows is light landing on the FAR side of the body and leaking
+	// out this side: a face whose normal points along the light's travel
+	// direction has its back to the light, so it glows; a face at right
+	// angles to it (the top, under this camera) does not. First cut used
+	// "light heading into the eye" instead, and with the camera 20 units up
+	// and the light travelling level that came to 0.26^2.4 = nothing —
+	// checked by picture, not by reading. `thin` weights it to the silhouette
+	// the way the real TRANSMITTANCE_BOOST above is weighted. The tint is the
+	// back light's own colour in main.gd; its 1.5 energy is in the constant.
+	vec3 n_world = normalize(mat3(INV_VIEW_MATRIX) * normalize(NORMAL));
+	float through = pow(clamp(dot(n_world, normalize(gel_back_dir)), 0.0, 1.0), 1.5);
+	vec3 back_tint = vec3(0.72, 0.84, 1.0);
+	float trans = through * mix(0.35, 1.0, thin) * sss_strength * gel_compat;
+	// What the real pass mostly DOES to a body under this camera is tint, not
+	// brighten: the lit-from-behind faces go deeper into the gel's own colour
+	// (the two-tone cube, red-orange below and light above). On an LDR buffer
+	// with no bloom, extra emission alone just clips to albedo — checked at
+	// 3x, by picture — so the deepening carries the read and the emission
+	// only lifts the silhouette.
+	ALBEDO = mix(ALBEDO, gel * gel * 1.25, clamp(trans * 1.1, 0.0, 0.85));
+	EMISSION += gel * back_tint * trans * sss_boost * 0.55;
 
 	// The rim follows the instance colour too. Left on the white default it
 	// swamped the small chunks completely: on a body most of the surface faces

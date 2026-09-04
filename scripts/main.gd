@@ -400,9 +400,14 @@ func _setup_world() -> void:
 	env.glow_strength = 1.0
 	env.glow_bloom = 0.05          # let the HDR threshold decide, not a floor
 	env.glow_hdr_threshold = 0.9   # "only the hottest highlights bloom"
-	env.ssao_enabled = true
+	# Q-030: SSAO and SSR are Forward+ only. On the Compatibility tier they
+	# are dropped by the renderer anyway (SSR with a warning, SSAO silently);
+	# gating them here makes that a stated choice rather than a surprise, and
+	# keeps the tier decision in one place (RenderTier).
+	var fp := not RenderTier.is_compat()
+	env.ssao_enabled = fp
 	env.ssao_intensity = 1.4
-	env.ssr_enabled = true
+	env.ssr_enabled = fp
 	# 16 rather than 32: SSR is a full-screen ray march, and the arena's floor
 	# reflections do not need the extra steps to read — part of the 60fps pass.
 	env.ssr_max_steps = 16
@@ -433,6 +438,11 @@ func _setup_world() -> void:
 	# nobody was meant to see — part of the 60fps pass (owner direction).
 	back.shadow_enabled = false
 	add_child(back)
+	# Q-030: publish the tier and this light's travel direction to the gel
+	# shader. On Forward+ the real transmittance pass reads the light itself;
+	# on the Compatibility tier gel.gdshader models it from this vector.
+	RenderTier.apply(-back.global_transform.basis.z)
+	print("render tier: ", RenderTier.detect())
 
 	_floor_inst = MeshInstance3D.new()
 	var pm := PlaneMesh.new()

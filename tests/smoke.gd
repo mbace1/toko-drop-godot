@@ -82,6 +82,7 @@ func _process(_delta: float) -> bool:
 	_test_foam_wiring()
 	_test_kill_scoring()
 	_test_adaptive_quality()
+	_test_render_tier()
 	_test_daily()
 	print("SMOKE: %s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
@@ -2879,6 +2880,44 @@ func _test_adaptive_quality() -> void:
 	main._update_adaptive_quality()
 	_check(is_equal_approx(Enemy.quality, 1.0), "and recovers once the arena empties")
 	Enemy.quality = 1.0   # leave it clean for every test after this one
+	main.queue_free()
+
+## Q-030 — the two gel tiers. The shader cannot be looked at here (no GPU),
+## but the DECISION can: which tier is detected, that the override works, and
+## that the globals the shader reads actually arrive. main.tscn is live at this
+## point, so the back light's real direction is checked too — if it ever stops
+## travelling toward the camera the compat transmittance goes dark and nothing
+## else would say so.
+func _test_render_tier() -> void:
+	var saved := RenderTier.override
+	RenderTier.override = ""
+	_check(RenderTier.detect() == RenderTier.COMPAT,
+		"headless has no RenderingDevice, so it detects as COMPAT (the conservative tier)")
+	RenderTier.override = RenderTier.FORWARD_PLUS
+	_check(not RenderTier.is_compat(), "the override can force Forward+")
+	RenderTier.override = RenderTier.COMPAT
+	_check(RenderTier.is_compat(), "and force Compatibility")
+
+	# The headless RenderingServer hands back Nil from
+	# global_shader_parameter_get(), so what apply() RECORDED is checked here
+	# and the shader's receipt of it is proved by the tier pictures instead.
+	RenderTier.apply(Vector3(0.0, -3.0, 4.0))
+	_check(is_equal_approx(RenderTier.applied_back_dir.length(), 1.0),
+		"the back-light direction is published normalised")
+	_check(RenderTier.applied_compat == 1.0, "on the compat tier gel_compat is published as 1")
+	RenderTier.override = RenderTier.FORWARD_PLUS
+	RenderTier.apply(Vector3.FORWARD)
+	_check(RenderTier.applied_compat == 0.0,
+		"and on Forward+ as 0, so the analytic term multiplies to nothing")
+	RenderTier.override = saved
+
+	# What main.gd actually published when it built the world.
+	RenderTier.applied_back_dir = Vector3.ZERO
+	var main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(main)
+	var bd := RenderTier.applied_back_dir
+	_check(bd.z > 0.5 and bd.y < 0.0,
+		"main.gd's back light travels toward the camera (+Z) and slightly down (%.2f, %.2f, %.2f)" % [bd.x, bd.y, bd.z])
 	main.queue_free()
 
 ## DAILY RUN: the date math is pure, so it is checked directly against known

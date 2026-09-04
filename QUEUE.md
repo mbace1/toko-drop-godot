@@ -374,7 +374,95 @@ corner restricts the arc you can be attacked from. A periodically live rail is
 the targeted answer, and it reuses the emissive rail material already built.
 Last of the three because it changes movement habits game-wide.
 
+### Q-031 — `arena.gd`: port `js/arena.js` (SDF arena) with its check suite
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: `Suds-Jack` `toko-drop/LEVEL_EDITOR_DESIGN.md` §2, §8 (P0 as
+  built, v236)
+- gate: a port of `scripts/arena-check.mjs` — the same comparisons
+  (`sdf`/`contains`/`clamp`/`ringPoint`/`insetPoint`/`rayEdge`/
+  `randomPoint`) against the literal expressions, at every shipped arena
+  size, exact rather than tolerant
+
+Owner decision 2026-09-04: a body left outside a moving shape is PUSHED
+along the SDF gradient — which is exactly `arena.js`'s `clamp()` ("march
+down the gradient"), so no new rule is needed. Keep §8's two determinism
+rules verbatim: `randomPoint` draws exactly twice, and nothing in the
+module reads a clock. Only the rectangle is wired up upstream; port that
+first and stop, same as they did.
+
+### Q-032 — Level format loader: read upstream's JSON directly, no exporter
+
+- status: Queued
+- repo: both (format lands upstream first; the loader lands here)
+- size: M
+- blocked-by: Q-031; upstream P1 (the format, a loader, one authored level)
+- design: `Suds-Jack` `toko-drop/LEVEL_EDITOR_DESIGN.md` §4 (format 1)
+- gate: the same authored level plays end to end in both builds; every
+  field the format declares round-trips through the Godot loader (a field
+  the loader does not know is a FAILURE, not a skip)
+
+Owner decision 2026-09-04: the editor is built upstream in JS; this build
+loads the levels. The loader must parse the shared JSON as-is — Eeri's
+`export-levels.mjs` carries an allow-list that silently dropped two new
+part types for two versions, and a translation step is the only thing that
+can do that. Godot parses JSON natively; do not build the thing that can
+drop a field.
+
+### Q-033 — Compat tier: the floor hue
+
+- status: Queued
+- repo: toko-drop-godot
+- size: S
+- blocked-by: —
+- design: PORT_STATUS.md "Q-030 — the two gel tiers", "still different"
+- gate: same-seed floor sample within a stated tolerance of Forward+ on
+  both tiers (capture recipe in `tools/capture.gd`)
+
+Forward+ open floor `rgb(11.5, 19.2, 56.6)`; Compatibility
+`rgb(0, 13.7, 87.3)`. Same luma, zero red, +54% blue. Suspects in order:
+SSR of the warm-grey sky (absent on compat), the sky ambient term. Measure
+before changing anything.
+
+### Q-034 — Compat tier: bloom
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: PORT_STATUS.md "Q-030 — the two gel tiers", "still different"
+- gate: a halo on the emissive rail in a Compatibility capture
+
+Nothing blooms on Compatibility — not the rail, not the pulse bullets —
+and Godot prints no warning about it. Establish whether 4.7's Compatibility
+glow needs an HDR buffer or different thresholds, or is simply faint here.
+Until this lands, every compat look must be built as tint and shape, never
+as light (Q-030's transmittance was cut that way for this reason).
+
 ## Landed
+
+### Q-030 — Two gel tiers: Compatibility gets an analytic transmittance
+
+- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-030"`)
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: PORT_BRIEF.md §2a (what the look is for); PORT_STATUS.md
+  "Q-030 — the two gel tiers" (what was found and what shipped)
+- gate: `_test_render_tier` in `tests/smoke.gd`, plus the three-panel
+  same-seed sheet described in PORT_STATUS.md
+
+Godot's GLES3 compiler warns that SSS, transmittance and SSR are Forward+
+only; the cabinet is a Compatibility build, so the gel's headline read was
+absent on the web. Owner decision: both tiers get the look. `RenderTier`
+detects the renderer once, publishes it to the shader as a global, and
+`gel.gdshader` deepens lit-from-behind faces toward the gel colour on that
+tier (tint, not glow — bloom does not run there, see Q-034). Forward+ is
+untouched by construction. Also fixes `tools/capture.gd`, which was never
+running at all (`--script` is not optional).
 
 ### Q-029 — Rush lives settled: 3, the counter stays, v226 not ported
 

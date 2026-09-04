@@ -31,6 +31,15 @@ number. The divergence stays recorded in `mbace1/Suds-Jack`'s
 [PR #311](https://github.com/mbace1/Suds-Jack/pull/311) as a decided one,
 not an open one — whether the browser converges is upstream's call.
 
+**The gel look was NOT shipping on the web, and now there are two tiers
+(Q-030, 2026-09-04).** Godot's own GLES3 compiler says it on every
+Compatibility launch: SSS, transmittance and SSR are Forward+ only. The
+cabinet is a Compatibility build. See "Q-030 — the two gel tiers" below for
+what was found, what was fixed, and the three compat gaps that are still
+open with pictures and numbers (Q-033, Q-034). **`tools/capture.gd` needs
+`--script`** — passed positionally it never ran, which is what "capture.gd
+doesn't work here" was.
+
 **A new one to be aware of, not yet decided:** upstream is scoping a LEVEL
 EDITOR (`toko-drop/LEVEL_EDITOR_DESIGN.md` on `main`, P0 shipped as v236's
 arena SDF). Its own §6 flags that an editor plus a level format *is* the
@@ -45,6 +54,86 @@ own work**: some other agent's plain (non-`--check`) `versions.mjs` run on
 one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
+
+## Q-030 — the two gel tiers (2026-09-04)
+
+**Owner decision, 2026-09-04: "both, two quality tiers."** Asked where
+great graphics have to land — the web cabinet, a desktop build, or both.
+
+### What was found, by the engine rather than by inference
+
+Running the real game with `--rendering-method gl_compatibility` (what
+`project.godot` ships to the web) prints, while building the player's
+material and the environment:
+
+```
+WARNING: Subsurface scattering is only available when using the Forward+ renderer.
+WARNING: Transmittance is only available when using the Forward+ renderer.
+WARNING: Screen-space reflections (SSR) are only available when using the Forward+ renderer.
+```
+
+SSAO is dropped too, silently. So `gel.gdshader`'s `SSS_*` writes and
+`main.gd`'s `ssr_enabled`/`ssao_enabled` did nothing in the only build a
+phone can run, and `PORT_BRIEF.md` §8's "thin edges glow from within (true
+SSS)" was never true there. `project.godot`'s [rendering] comment had
+admitted the SSS loss and declared the desktop "what the look is judged
+on"; the owner's decision reverses that, and the comment is rewritten.
+
+### What landed
+
+- **`scripts/render_tier.gd`** — the one place the renderer is detected
+  (`RenderingServer.get_rendering_device() == null` is Compatibility;
+  headless counts as Compatibility, the conservative answer). `override`
+  for the gate; `TOKO_TIER=compat|forward_plus` in the environment for
+  photographing one tier on the other renderer. `apply()` publishes two
+  shader globals declared in `project.godot` `[shader_globals]`:
+  `gel_compat` (1/0) and `gel_back_dir` (the transmittance back light's
+  travel direction, world, unit — read off the light itself in
+  `_setup_world`, not typed).
+- **`gel.gdshader`** grows a compat-tier transmittance, multiplied by
+  `gel_compat` so Forward+ is untouched by construction. Two cuts, both
+  judged by picture on ONE pinned seed across three runs (Forward+ /
+  compat before / compat after):
+  1. "light heading into the eye", `dot(V, D)^2.4` — invisible. With the
+     camera 20 units up and the light travelling level that is 0.26^2.4.
+     Arithmetic written before the picture; the picture won.
+  2. "the far side is lit", `dot(N_world, D)^1.5`, weighted by `thin`.
+     Verified reaching the shader by exaggerating to 3x first (the dew
+     lesson). At 3x it still did not GLOW — on an LDR buffer with no bloom,
+     extra emission only clips to albedo — so the term now mostly TINTS:
+     lit-from-behind faces deepen toward `gel*gel`, the two-tone cube
+     Forward+ shows (red-orange below, light above), with a small emissive
+     lift on the silhouette. That is what shipped.
+- **`main.gd`** gates SSAO/SSR on the tier and prints `render tier: …`
+  once at boot, so a capture log says which look it is.
+- **`tools/capture.gd`**: `--script` is mandatory (header rewritten);
+  `seed:HEX` pins the run seed so a pair of captures differ only by
+  renderer; the movie-writer recipe for machines whose window never
+  presents. `_test_render_tier` (7 checks) covers detection, override and
+  publication; `RenderTier.applied_*` exist because the headless
+  RenderingServer returns Nil from `global_shader_parameter_get`.
+
+### What is still different on the web, with numbers — open
+
+- **Q-033 — the floor hue.** Open floor, same seed, same frame: Forward+
+  `rgb(11.5, 19.2, 56.6)`, Compatibility `rgb(0, 13.7, 87.3)`. Same luma,
+  zero red, +54% blue — a hue shift, not brightness. First suspect is SSR
+  of the warm-grey sky onto the floor (gone on compat); second is the sky
+  ambient term. Not chased under Q-030.
+- **Q-034 — no bloom.** No halo on the emissive rail, the pulse bullets
+  or any body on Compatibility, and no warning either. Whether Godot 4.7's
+  Compatibility glow needs an HDR buffer, a different threshold, or is
+  simply faint at these settings is undetermined. Until it is, nothing on
+  the compat tier can "glow" and every compat look has to be built as tint
+  and shape.
+- The dew lattice reads much stronger on compat (nothing blurs it). Not
+  queued; revisit with Q-034.
+
+### The picture
+
+Three-panel sheet, one seed (`9D6875`), wave 3, shot 03: Forward+ / compat
+before / compat after. Kept out of the repo (`_shots/` is ignored) — the
+recipe is in `tools/capture.gd`'s header and rebuilds it in three minutes.
 
 ## Ported
 

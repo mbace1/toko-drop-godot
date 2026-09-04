@@ -7,7 +7,17 @@
 ## is the other half of the gate: tests/smoke.gd proves it works, this proves
 ## it LOOKS like something.
 ##
-##   godot --path . tools/capture.gd -- [out_dir] [frames_between_shots]
+##   godot --path . --script tools/capture.gd -- [out_dir] [frames_between_shots] [wave] [menu|rush|spawn:TYPE|pods|ch:N]
+##
+## Add `seed:HEX` (any position) to pin the run seed for a like-for-like pair.
+## `--script` is NOT optional: passed positionally, Godot 4 ignores this file
+## and simply launches the main scene, which never quits and never writes a
+## shot. That is what "capture.gd doesn't work here" was (found 2026-09-04).
+## On a machine where the window cannot present frames, add
+##   --fixed-fps 60 --write-movie <dir>/f.png --quit-after 150
+## and Godot writes every frame itself on a fixed timestep.
+## TOKO_TIER=compat|forward_plus in the environment forces the gel tier
+## (scripts/render_tier.gd), for photographing one tier on the other renderer.
 ##
 ## Writes shot_00.png … to out_dir (default: user:// — printed on exit).
 extends SceneTree
@@ -47,6 +57,16 @@ func _init() -> void:
 		_main.set("mode", 3)   # Mode.CHALLENGE
 		_main.set("challenge_i", int(OS.get_cmdline_user_args()[3].substr(3)))
 	_main.call_deferred("_start_game")
+	# "seed:HEX" anywhere in the args pins the run's seed (the HUD's SEED
+	# line), so two captures on different renderers show the SAME bodies in
+	# the SAME places and the only difference left is the renderer. Deferred
+	# after _start_game, which would otherwise draw a fresh random seed.
+	for a in args:
+		if a.begins_with("seed:"):
+			var v: int = a.substr(5).hex_to_int()
+			# `_main.waves` does not exist until main's _ready() has run, so
+			# this must be a deferred CALLABLE, not a deferred call on it.
+			(func() -> void: _main.waves.reseed(v); _main.waves.clear()).call_deferred()
 	# Jump the director forward so wave-2+ types appear in the shots.
 	var w := int(OS.get_cmdline_user_args()[2]) if OS.get_cmdline_user_args().size() > 2 else 0
 	if w > 0:

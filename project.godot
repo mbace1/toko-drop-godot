@@ -74,13 +74,31 @@ fire={
 ]
 }
 
+[shader_globals]
+
+; Q-030 — set once by RenderTier.apply() from main.gd. 1.0 on the
+; Compatibility tier, 0.0 on Forward+. gel.gdshader multiplies its analytic
+; transmittance by it, so the same shader is one look on each renderer.
+gel_compat={
+"type": "float",
+"value": 0.0
+}
+; The direction the transmittance back light TRAVELS, world space, unit.
+gel_back_dir={
+"type": "vec3",
+"value": Vector3(0, -0.31, 0.95)
+}
+
 [rendering]
 
 renderer/rendering_method="forward_plus"
-; Browsers have no Vulkan, so the web build runs Compatibility (WebGL2). It
-; loses real subsurface scattering — SSS is a Forward+ screen-space pass — so
-; the gel reads flatter there. The web build exists to be PLAYED (tier
-; thresholds, feel); the desktop build is what the look is judged on.
+; Browsers have no Vulkan, so the web build runs Compatibility (WebGL2). That
+; drops SSS, transmittance, SSR and SSAO — Godot's GLES3 compiler warns about
+; the first three on every launch. Owner decision 2026-09-04 (Q-030): the
+; look ships on BOTH tiers. scripts/render_tier.gd detects which one is
+; running and gel.gdshader carries an analytic transmittance for the
+; Compatibility tier, so the cabinet is judged on its own picture rather than
+; on the desktop's.
 renderer/rendering_method.web="gl_compatibility"
 textures/canvas_textures/default_texture_filter=1
 ; 2048 rather than the 4096 default: half the shadow-map fill cost for a

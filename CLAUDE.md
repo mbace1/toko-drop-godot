@@ -68,6 +68,24 @@ be ported. Recorded in `mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md`
 and [PR #311](https://github.com/mbace1/Suds-Jack/pull/311); whether the
 browser converges back to lives is upstream's call, not a port task.
 
+## Two renderers, two gel tiers — Q-030, 2026-09-04
+
+The cabinet runs **Compatibility** (WebGL2); the desktop runs **Forward+**.
+Godot's GLES3 compiler warns at every Compatibility launch that SSS,
+transmittance and SSR are Forward+ only (SSAO goes silently). Owner
+decision: the look ships on BOTH tiers. `scripts/render_tier.gd` is the
+one place the tier is detected; `gel.gdshader` multiplies its compat-only
+terms by the `gel_compat` global. Rules that follow:
+
+- **Any look change is photographed on both tiers, same seed.**
+  `tools/capture.gd` — `--script` is mandatory, `seed:HEX` pins the run,
+  `TOKO_TIER=compat` forces the tier on a desktop. Judge the compat
+  picture on its own; do not infer it from the Forward+ one.
+- **On compat, build looks as tint and shape, never as light** — nothing
+  blooms there yet (Q-034), so extra emission only clips to albedo.
+- A feature that only exists in Forward+ is not a bug on compat, but it
+  must be NAMED in PORT_STATUS.md's "still different" list.
+
 Read in this order before changing anything:
 
 1. **`PORT_STATUS.md`** — what's ported, what's next, in priority order.
