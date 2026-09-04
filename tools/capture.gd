@@ -10,6 +10,7 @@
 ##   godot --path . --script tools/capture.gd -- [out_dir] [frames_between_shots] [wave] [menu|rush|spawn:TYPE|pods|ch:N]
 ##
 ## Add `seed:HEX` (any position) to pin the run seed for a like-for-like pair.
+## Add `level:<id>` (any position) to play an authored level from levels/.
 ## `--script` is NOT optional: passed positionally, Godot 4 ignores this file
 ## and simply launches the main scene, which never quits and never writes a
 ## shot. That is what "capture.gd doesn't work here" was (found 2026-09-04).
@@ -56,6 +57,16 @@ func _init() -> void:
 	if OS.get_cmdline_user_args().size() > 3 			and OS.get_cmdline_user_args()[3].begins_with("ch:"):
 		_main.set("mode", 3)   # Mode.CHALLENGE
 		_main.set("challenge_i", int(OS.get_cmdline_user_args()[3].substr(3)))
+	# "level:<id>" anywhere in the args plays an authored level (Q-032/Q-037):
+	# the file's arena and timeline instead of the director's roll. The seek
+	# and the seeded clear below are skipped for it — clear() would empty the
+	# level's queue.
+	var level := ""
+	for a in args:
+		if a.begins_with("level:"):
+			level = a.substr(6)
+	if level != "":
+		_main.set("level_id", level)
 	_main.call_deferred("_start_game")
 	# "seed:HEX" anywhere in the args pins the run's seed (the HUD's SEED
 	# line), so two captures on different renderers show the SAME bodies in
@@ -66,10 +77,14 @@ func _init() -> void:
 			var v: int = a.substr(5).hex_to_int()
 			# `_main.waves` does not exist until main's _ready() has run, so
 			# this must be a deferred CALLABLE, not a deferred call on it.
-			(func() -> void: _main.waves.reseed(v); _main.waves.clear()).call_deferred()
+			(func() -> void:
+				_main.waves.reseed(v)
+				if level == "":
+					_main.waves.clear()   # a level's queue must NOT be cleared
+			).call_deferred()
 	# Jump the director forward so wave-2+ types appear in the shots.
 	var w := int(OS.get_cmdline_user_args()[2]) if OS.get_cmdline_user_args().size() > 2 else 0
-	if w > 0:
+	if w > 0 and level == "":
 		_main.call_deferred("_capture_seek_wave", w)
 
 func _process(_delta: float) -> bool:

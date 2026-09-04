@@ -1784,6 +1784,31 @@ func _start_challenge() -> void:
 	waves.force_support = _ch_rule == Challenges.Rule.FOCUS
 	_resize_arena()
 
+## Q-037: hand the floor the region to draw — upstream's syncShapeUniforms.
+## Classic play passes the rectangle with the pass OFF; a level turns it on.
+## Shapes are js/arena.js-shaped objects (Q-031): a plain shape, or a
+## union/intersect carrying `parts`. Slots past the last shape are zeroed and
+## the shader treats kind 0 as the combine's neutral element.
+func _sync_shape_uniforms() -> void:
+	var on := waves != null and waves.level != null
+	var shape: Arena.Shape = arena.shape
+	var parts: Array = shape.parts if shape is Arena.CombineShape else [shape]
+	var combine := 1.0 if shape.kind == Arena.KIND_INTERSECT else 0.0
+	for i in 4:
+		var v := Vector4.ZERO
+		if i < parts.size():
+			var p = parts[i]
+			if p is Arena.RectShape:
+				v = Vector4(1.0, p.half_x, p.half_z, 0.0)
+			elif p is Arena.CircleShape:
+				v = Vector4(2.0, p.cx, p.cz, p.r)
+			else:
+				push_warning("LEVEL: floor cannot draw shape kind %s" % p.kind)
+		_floor_mat.set_shader_parameter("u_shape%d" % i, v)
+	if parts.size() > 4:
+		push_warning("LEVEL: %d shapes, floor draws 4" % parts.size())
+	_floor_mat.set_shader_parameter("u_shape_mode", Vector2(1.0 if on else 0.0, combine))
+
 ## Q-032: load `level_id` (or clear it). The file's arena replaces the
 ## preset's — the bounding box drives the floor, rails and camera as any
 ## resize does, the SHAPE goes to `arena` where every boundary question is
@@ -1791,6 +1816,7 @@ func _start_challenge() -> void:
 func _apply_level() -> void:
 	waves.level = null
 	if level_id.is_empty():
+		_resize_arena()   # Q-037: the floor must forget a previous level's region
 		return
 	var lv := Level.load_file("res://levels/%s.json" % level_id, WaveDirector.KNOWN_TYPES)
 	if not lv.errors.is_empty():
@@ -1828,10 +1854,17 @@ func _resize_arena() -> void:
 		(_floor_inst.mesh as PlaneMesh).size = Vector2(half_x * 2.0, half_z * 2.0)
 		_floor_mat.set_shader_parameter("u_grid_x", (half_x * 2.0) / GRID_CELL)
 		_floor_mat.set_shader_parameter("u_grid_z", (half_z * 2.0) / GRID_CELL)
+		_sync_shape_uniforms()   # Q-037
 	for r in _rails:
 		r.queue_free()
 	_rails.clear()
 	_add_arena_edge()
+	# Q-037: the rails are the rectangle's edge; a level whose region is not
+	# its own bounding box draws its boundary on the floor instead (upstream
+	# hides its border line the same way).
+	var rect_region := waves == null or waves.level == null or waves.level.arena_shape is Arena.RectShape
+	for r in _rails:
+		r.visible = rect_region
 
 	# Pull the camera in with the room. A CLOSE QUARTERS level in the full-size
 	# frame is a small board adrift in black — the point of the rule is that the

@@ -493,7 +493,8 @@ as light (Q-030's transmittance was cut that way for this reason).
 
 ### Q-037 — Godot floor draws the level's region (both tiers)
 
-- status: Queued
+- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-037"`).
+  Photographed on both tiers beside upstream's picture; parity unchanged.
 - repo: toko-drop-godot
 - size: M
 - blocked-by: —

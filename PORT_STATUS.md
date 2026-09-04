@@ -105,15 +105,25 @@ v237/v238 (`toko-drop/js/level.js`, `toko-drop/levels/*.json`, PR #447).
   files say; the validator says no; the pump sends the t=0 body on the
   first step, where the file put it, and holds the clear.
 
-**Not done, named — Q-037:** this build's floor does not DRAW the region
-yet. `three-rings` plays correctly (the SDF contains, clamps and marches)
-but the floor still paints the bounding rectangle, so the common area of
-the three circles is invisible. Upstream draws it on both of its paths as
-of v238 (world-space SDF from a fixed slot array, union=min,
-intersect=max, dim outside, a glowing boundary); the same term belongs in
-`floor_grid.gdshader`, and it must be photographed on both tiers (Q-030's
-rule) because the compat tier's ACES-crush and bloom threshold (Q-033/
-Q-034) will both touch a glowing line.
+**Q-037 — the floor draws the region, same day.** `floor_grid.gdshader`
+carries upstream v238's term: world-space signed distance from four shape
+slots (four named `vec4` uniforms rather than an array — the Compatibility
+tier is the one that ships, and four vec4s need no array-uniform support
+anywhere), union as min, intersect as max, neutral for an unused slot,
+mix/step throughout. The fragment's world xz comes from a varying off
+`MODEL_MATRIX`, not from UV — Godot's `PlaneMesh` runs v the other way
+from three.js and this sidesteps the guess. Inside is the floor as
+before; outside dims to `u_shape_look.y`; the boundary glows the rails'
+colour; the four rails hide when the region is not its own bounding box.
+Classic play is untouched: the pass is off unless `waves.level` is set.
+`main.gd._sync_shape_uniforms()` writes the slots from `arena.shape` on
+every `_resize_arena()`, and `_apply_level()` resizes on the classic
+branch too so a previous level's region is forgotten.
+Photographed: `three-rings` on Forward+ and on Compatibility beside
+upstream's own classic-bundle picture — the same rounded triangle on all
+three; the web tier's glow blooms wider (Q-034's threshold) and its
+outside crushes darker (Q-036, the known residual). Smoke 616, parity
+34/34 unchanged — the drawing touched nothing the simulation reads.
 
 ## Q-031 — the arena as an SDF: `scripts/arena.gd` (2026-09-04)
 
