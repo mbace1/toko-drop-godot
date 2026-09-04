@@ -161,6 +161,12 @@ touches `scripts/`. When you port a new enemy type or mechanic, add its own
 checks to `tests/smoke.gd` in the same commit — the existing four
 `_test_*` functions are the template.
 
+`godot --headless --path . --script tests/arena_check.gd` — 8,396 exact
+checks that `scripts/arena.gd` still reproduces the rectangle's literal
+expressions (Q-031). Run it on every edit to that file. It is a port of
+upstream's `scripts/arena-check.mjs`, check for check, and it has been
+falsified: a 1e-12 nudge on one coordinate fails 1,536 of them.
+
 Also sanity-check the real scene boots clean after any change:
 
 ```

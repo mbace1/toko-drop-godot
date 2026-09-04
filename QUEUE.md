@@ -376,7 +376,8 @@ Last of the three because it changes movement habits game-wide.
 
 ### Q-031 — `arena.gd`: port `js/arena.js` (SDF arena) with its check suite
 
-- status: Queued
+- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-031"`);
+  the module and its gate. Wiring the rectangle call sites is Q-035.
 - repo: toko-drop-godot
 - size: M
 - blocked-by: —
@@ -394,12 +395,31 @@ rules verbatim: `randomPoint` draws exactly twice, and nothing in the
 module reads a clock. Only the rectangle is wired up upstream; port that
 first and stop, same as they did.
 
+### Q-035 — Wire the rectangle sites to `Arena`
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: PORT_STATUS.md "Q-031 — the arena as an SDF"; upstream
+  LEVEL_EDITOR_DESIGN.md §8 for the site split and the three deliberate
+  non-migrations
+- gate: `tests/smoke.gd` unchanged in count and content; a seeded capture
+  pair (same `seed:HEX`) before and after is pixel-identical
+
+`main.gd` owns one `Arena`, `set_rect(half_x, half_z)` on every arena
+resize, and threads it to `player.update()`, `WaveDirector._spawn()`
+(`ring_point`), every enemy's `_clamp_to_arena()`, TORO's slab test
+(`ray_edge`) and the random placements (`random_point`, two draws). Only
+BOUNDARY questions move; `half_x`/`half_z` as a SIZE stay where they are.
+Nothing changes — which is what the seeded pair proves.
+
 ### Q-032 — Level format loader: read upstream's JSON directly, no exporter
 
 - status: Queued
 - repo: both (format lands upstream first; the loader lands here)
 - size: M
-- blocked-by: Q-031; upstream P1 (the format, a loader, one authored level)
+- blocked-by: Q-035; upstream P1 (the format, a loader, one authored level)
 - design: `Suds-Jack` `toko-drop/LEVEL_EDITOR_DESIGN.md` §4 (format 1)
 - gate: the same authored level plays end to end in both builds; every
   field the format declares round-trips through the Godot loader (a field

@@ -55,6 +55,46 @@ one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
 
+## Q-031 — the arena as an SDF: `scripts/arena.gd` (2026-09-04)
+
+**Owner decisions, 2026-09-04:** the level editor is built upstream in JS
+and this build LOADS levels (Q-032); a body left outside a moving shape is
+**pushed along the SDF gradient**. The second needs no new code — it is
+`clamp()` on a shape with no closed form, which is already "march down the
+gradient" in upstream's `arena.js`.
+
+`scripts/arena.gd` is a port of `toko-drop/js/arena.js` (v236, upstream
+P0), method for method, oddities included: `clamp` is the nested
+`max(-h, min(h, v))` as written, and `ring_point` is the inscribed
+ELLIPSE the spawn ring has always been, not the box boundary. Rect,
+circle, union and intersect shapes; only the rectangle is meant to be
+wired, same as upstream.
+
+**`tests/arena_check.gd` is `scripts/arena-check.mjs` check for check —
+8,396 of them, the same count — and demands exact equality.** It was
+falsified before it was trusted, with the same three mutations upstream
+used: a wrong-axis clamp fails 2,019; **adding 1e-12 to one ring
+coordinate fails exactly 1,536, the number in upstream's own §8**; a third
+rng draw fails exactly the 19 draw-count checks.
+
+**One thing the gate caught that reading would not have.** The first cut
+returned `Vector2`, whose components are 32-bit; `-3.3` came back as
+`-3.29999995231628` and 5,703 checks failed. Positions only round when
+stored into a `Vector3` — the game already does that — but `half_x` and
+`half_z` feed further double arithmetic and MUST NOT round, or a seeded
+schedule drifts. The module now returns `Arena.XZ` (two 64-bit floats,
+with the optional `out` upstream uses so per-frame calls need not
+allocate), and nothing in it touches a 32-bit type.
+
+**NOT wired yet — Q-035.** Player, enemy, TORO's slab test, the spawn ring
+and `main.gd`'s random placements still inline the rectangle. Upstream
+found about twenty such sites, not the ~62 first estimated, because "how
+big is the room" (`HALF_X` as a size) is a different question from "where
+is the boundary" and only the second moves. Three sites upstream
+deliberately did NOT migrate (the smash door's literal cardinal table, the
+cube flop's per-axis reflection, the decoration drift bounce) — carry that
+list, do not rediscover it.
+
 ## Q-030 — the two gel tiers (2026-09-04)
 
 **Owner decision, 2026-09-04: "both, two quality tiers."** Asked where

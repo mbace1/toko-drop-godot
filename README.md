@@ -62,6 +62,7 @@ game looks, and *look at the output*.
 
 ```
 godot --headless --script tests/smoke.gd
+godot --headless --path . --script tests/arena_check.gd   # 8,396 exact checks on scripts/arena.gd (Q-031)
 ```
 
 A bare-`SceneTree` gate (no GPU, no wall-clock dependence) exercising player
@@ -101,6 +102,7 @@ scripts/
   wave_director.gd        budget-based wave composition, shooter cap,
                           corpse pops and revenge volleys
 tests/smoke.gd         headless gate — see "Testing" above
+tests/arena_check.gd   the arena SDF gate — exact, 8,396 checks; port of upstream scripts/arena-check.mjs
 tools/capture.gd      screenshots the real game — see "Looking at it" above
 PORT_BRIEF.md         inherited visual/material brief (Godot-side canon for shaders/lighting)
 PORT_STATUS.md        living doc: what's ported, what's next, in priority order
