@@ -32,7 +32,8 @@ number. The divergence stays recorded in `mbace1/Suds-Jack`'s
 not an open one — whether the browser converges is upstream's call.
 
 **The gel look was NOT shipping on the web, and now there are two tiers
-(Q-030, 2026-09-04).** Godot's own GLES3 compiler says it on every
+(Q-030, 2026-09-04) — and bloom, which had never fired on the web either,
+does now (Q-034, same day: the threshold, not the pass, was the problem).** Godot's own GLES3 compiler says it on every
 Compatibility launch: SSS, transmittance and SSR are Forward+ only. The
 cabinet is a Compatibility build. See "Q-030 — the two gel tiers" below for
 what was found, what was fixed, and the three compat gaps that are still
@@ -192,12 +193,32 @@ on"; the owner's decision reverses that, and the comment is rewritten.
   zero red, +54% blue — a hue shift, not brightness. First suspect is SSR
   of the warm-grey sky onto the floor (gone on compat); second is the sky
   ambient term. Not chased under Q-030.
-- **Q-034 — no bloom.** No halo on the emissive rail, the pulse bullets
-  or any body on Compatibility, and no warning either. Whether Godot 4.7's
-  Compatibility glow needs an HDR buffer, a different threshold, or is
-  simply faint at these settings is undetermined. Until it is, nothing on
-  the compat tier can "glow" and every compat look has to be built as tint
-  and shape.
+- **Q-034 — bloom. CLOSED, same day.** Compatibility's glow pass works;
+  it never showed because `glow_hdr_threshold = 0.9` was judged against
+  an LDR scene buffer where nothing exceeds ~0.5 after tonemapping (the
+  rail's brightest channel is 0.44). Measured with a probe that boots the
+  real scene and sets one variable at a time (all on Compatibility, luma
+  0–255, 2px above the top rail vs the void beyond it):
+
+  | variant | halo | void | floor |
+  |---|---|---|---|
+  | threshold 0.9 (was) | +0.3 | 0.8 | 18 |
+  | threshold 0.3 | +3.8 | 0.8 | 18 |
+  | bloom 0.5, intensity 2 | +23 | 12.7 | 50 |
+  | `use_hdr_2d` + 0.3 | +31 | 4.2 | 57 |
+
+  Forward+ for reference: +1.6, floor 20. So: the threshold alone is the
+  fix; `use_hdr_2d` does buy an HDR buffer but triples the floor's
+  brightness — a different look, not this one. Shipped as
+  `main.gd`'s `COMPAT_GLOW_THRESHOLD = 0.4`, chosen on the same seed
+  against Forward+: 0.3 matches the cube's halo but blooms the floor grid
+  (+3.8 on the rail, over twice Forward+); 0.5 leaves the grid alone but
+  the cube's halo is thin; 0.4 puts the cube's halo energy at Forward+'s
+  (+45.7 vs +42.9, ring-outside-mask luma, confounded by neighbouring
+  bodies and so read as a trend, not a number) without lighting the
+  grid. Forward+ keeps 0.9 against real HDR values.
+  **The CLAUDE.md rule "on compat, build looks as tint, never as light"
+  is withdrawn** — emission blooms there now, at the compat threshold.
 - The dew lattice reads much stronger on compat (nothing blurs it). Not
   queued; revisit with Q-034.
 

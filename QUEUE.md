@@ -453,7 +453,9 @@ before changing anything.
 
 ### Q-034 — Compat tier: bloom
 
-- status: Queued
+- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-034"`).
+  The glow pass works on Compatibility; the 0.9 HDR threshold was the
+  whole problem on an LDR buffer. `COMPAT_GLOW_THRESHOLD = 0.4`.
 - repo: toko-drop-godot
 - size: M
 - blocked-by: —

@@ -53,6 +53,11 @@ var half_z := HALF_Z
 var arena := Arena.new(Arena.rect_shape(HALF_X_LANDSCAPE, HALF_Z_LANDSCAPE))
 var _xz := Arena.XZ.new()
 
+## Q-034: the glow threshold for the Compatibility tier's LDR buffer.
+## Forward+ keeps 0.9 against real HDR values; picked by same-seed picture
+## against the Forward+ frame (see PORT_STATUS.md, Q-034).
+const COMPAT_GLOW_THRESHOLD := 0.4
+
 func _set_arena_size(hx: float, hz: float) -> void:
 	half_x = hx
 	half_z = hz
@@ -406,7 +411,12 @@ func _setup_world() -> void:
 	env.glow_intensity = 0.8
 	env.glow_strength = 1.0
 	env.glow_bloom = 0.05          # let the HDR threshold decide, not a floor
-	env.glow_hdr_threshold = 0.9   # "only the hottest highlights bloom"
+	# "only the hottest highlights bloom". Q-034: on the Compatibility tier
+	# the scene buffer is LDR — after tonemapping nothing exceeds ~0.5, so
+	# a 0.9 threshold meant NOTHING bloomed on the web, not even the rail,
+	# and no warning said so. Measured (PORT_STATUS.md, Q-034): the glow
+	# pass itself works there; only the threshold has to live in that range.
+	env.glow_hdr_threshold = 0.9 if not RenderTier.is_compat() else COMPAT_GLOW_THRESHOLD
 	# Q-030: SSAO and SSR are Forward+ only. On the Compatibility tier they
 	# are dropped by the renderer anyway (SSR with a warning, SSAO silently);
 	# gating them here makes that a stated choice rather than a surprise, and

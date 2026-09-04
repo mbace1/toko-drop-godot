@@ -81,8 +81,11 @@ terms by the `gel_compat` global. Rules that follow:
   `tools/capture.gd` — `--script` is mandatory, `seed:HEX` pins the run,
   `TOKO_TIER=compat` forces the tier on a desktop. Judge the compat
   picture on its own; do not infer it from the Forward+ one.
-- **On compat, build looks as tint and shape, never as light** — nothing
-  blooms there yet (Q-034), so extra emission only clips to albedo.
+- **Compat blooms, at its own threshold.** The scene buffer there is LDR,
+  so `glow_hdr_threshold` must live in the tonemapped range —
+  `main.gd`'s `COMPAT_GLOW_THRESHOLD` (0.4), Forward+ keeps 0.9. Emission
+  above that blooms on both tiers (Q-034). Anything judged "too dim to
+  bloom" on compat is a threshold question, not a renderer limit.
 - A feature that only exists in Forward+ is not a bug on compat, but it
   must be NAMED in PORT_STATUS.md's "still different" list.
 
