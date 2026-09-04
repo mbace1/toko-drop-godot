@@ -376,6 +376,24 @@ Last of the three because it changes movement habits game-wide.
 
 ## Landed
 
+### Q-029 — Rush lives settled: 3, the counter stays, v226 not ported
+
+- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-029"`)
+- repo: toko-drop-godot
+- size: S
+- blocked-by: —
+- design: PORT_STATUS.md "Catching up with the browser: v226-v231", the v226
+  bullet; `Suds-Jack` `toko-drop/PARITY_WITH_GODOT.md`, PR #311
+- gate: `tests/smoke.gd` — "Rush starts on exactly 3 lives (Q-029, owner
+  decision)"
+
+Owner direction 2026-09-04: "rush lives is 3". This build's `rush.lives` is a
+real, spent resource (`take_hit()` decrements it, the run ends at zero); the
+browser's v226 removed its own counter as dead code and runs Rush on HP. The
+two builds disagree on purpose from here: keep `LIVES_START := 3`, pin the
+number in the gate so a drift to the HP model cannot hide behind a rename,
+and do not port v226. Nothing else changes — the value was already 3.
+
 ### Q-017 — Par curve, live tier, and the final grade
 
 - status: **Landed, 2026-08-28, v3.4** — in the SIMPLER shape that shipped

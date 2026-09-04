@@ -551,6 +551,11 @@ func _test_rush_rules(root: Node3D) -> void:
 	# --- lives, and levels that move BOTH ways -----------------------------
 	r.reset()
 	_check(r.lives == RushRules.LIVES_START, "a Rush run starts on lives, not HP")
+	# Q-029, owner decision 2026-09-04: "rush lives is 3". This build KEEPS its
+	# spent lives counter and does NOT port the browser's v226 (which removed
+	# theirs as dead code and runs Rush on HP). Pinning the number itself, not
+	# just the constant, so a drift to the HP model cannot hide behind a rename.
+	_check(RushRules.LIVES_START == 3, "Rush starts on exactly 3 lives (Q-029, owner decision)")
 	r.level = 3
 	r.take_hit()
 	_check(r.lives == RushRules.LIVES_START - 1, "a hit costs a life")

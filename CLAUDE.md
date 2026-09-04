@@ -57,16 +57,16 @@ further Godot build-out. The design docs stay as a record, same shape as
 `sudsjack/`'s "SET DOWN" — do not resume without the owner asking in their
 own words.
 
-**Open, and it is a NEW one:** RUSH's four selectable abilities exist only
-here. And as of upstream v226, **RUSH's lives model has diverged rather than
-converged** — v226 removed the browser's `rush.lives` as dead code (it was
-never actually spent; the extra-life mechanic already worked through player
-HP directly), while this repo's `rush.lives` is a live, spent resource with a
-test asserting it. The two builds now genuinely disagree about whether Rush
-has a separate lives resource at all. Both recorded in
-`mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md` and
-[PR #311](https://github.com/mbace1/Suds-Jack/pull/311) — neither acted on
-unilaterally.
+**Both of the once-open Rush divergences are now settled.** The four
+selectable abilities went upstream as v232 and their numbers lead. **RUSH
+lives: owner decision 2026-09-04, "rush lives is 3" (Q-029).** Upstream v226
+removed the browser's `rush.lives` as dead code (it was never spent there;
+extra lives already worked through player HP), while this repo's `rush.lives`
+is a live, spent resource. That divergence is KEPT on purpose: this build
+runs Rush on 3 lives, `tests/smoke.gd` pins the number, and v226 is not to
+be ported. Recorded in `mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md`
+and [PR #311](https://github.com/mbace1/Suds-Jack/pull/311); whether the
+browser converges back to lives is upstream's call, not a port task.
 
 Read in this order before changing anything:
 

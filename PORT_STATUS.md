@@ -22,12 +22,14 @@ only here; PR #311 raised it; the owner's call was to port them upstream, and
 is now the reference version, not a copy."* Their numbers now lead; this
 port's have been reconciled to them.
 
-**One owner item is still OPEN, and nothing should be built on it without
-asking:** RUSH lives. This repo's is a live, spent resource; the browser's
-(v226) was removed as dead code. The two builds genuinely disagree about
-whether Rush has a separate lives resource at all. Tracked in
-`mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md` and
-[PR #311](https://github.com/mbace1/Suds-Jack/pull/311).
+**RUSH lives is now CLOSED too — owner decision 2026-09-04: "rush lives is
+3" (Q-029).** This build keeps its live, spent lives counter at
+`LIVES_START := 3`; the browser's v226 removal (Rush on HP) is deliberately
+NOT ported. `_check(RushRules.LIVES_START == 3)` in `tests/smoke.gd` pins the
+number. The divergence stays recorded in `mbace1/Suds-Jack`'s
+`toko-drop/PARITY_WITH_GODOT.md` and
+[PR #311](https://github.com/mbace1/Suds-Jack/pull/311) as a decided one,
+not an open one — whether the browser converges is upstream's call.
 
 **A new one to be aware of, not yet decided:** upstream is scoping a LEVEL
 EDITOR (`toko-drop/LEVEL_EDITOR_DESIGN.md` on `main`, P0 shipped as v236's
@@ -876,6 +878,7 @@ What survives the correction:
   the two builds now genuinely DISAGREE about whether Rush has a separate
   lives resource — not an unported fix, a live design question. Recorded in
   the same parity doc/PR above, not acted on unilaterally.
+  **Decided 2026-09-04 (Q-029): lives stay, and there are 3 of them.**
 
 ## v225 — RUSH's own arena and roster (ported 2026-08-28)
 
@@ -993,7 +996,8 @@ Six versions shipped upstream after v225. What each meant here:
   run when it hits zero, reached from `main.gd`'s hit path, and a test already
   asserts "a Rush run starts on lives, not HP". So the two builds now
   genuinely disagree about whether Rush has lives, and porting v226 would mean
-  deleting a working mechanic to match a bug fix. **Owner's call.**
+  deleting a working mechanic to match a bug fix. **Owner's call — made
+  2026-09-04: "rush lives is 3". Keep the counter, do not port v226. Q-029.**
 - **v228 Arena pass 2, v229/v230 haptics + reduce-motion, v231 press kit** —
   not yet assessed. v229/v230 are portable (Godot has
   `Input.vibrate_handheld()`); v231 is not a game change.
