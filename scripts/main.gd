@@ -59,11 +59,6 @@ var arena := Arena.new(Arena.rect_shape(HALF_X_LANDSCAPE, HALF_Z_LANDSCAPE))
 var level_id := ""
 var _xz := Arena.XZ.new()
 
-## Q-034: the glow threshold for the Compatibility tier's LDR buffer.
-## Forward+ keeps 0.9 against real HDR values; picked by same-seed picture
-## against the Forward+ frame (see PORT_STATUS.md, Q-034).
-const COMPAT_GLOW_THRESHOLD := 0.4
-
 func _set_arena_size(hx: float, hz: float) -> void:
 	half_x = hx
 	half_z = hz
@@ -415,16 +410,20 @@ func _setup_world() -> void:
 	env.ambient_light_energy = 0.7
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 
-	env.glow_enabled = true
+	# Q-038 (owner call, 2026-09-05): GLOW IS OFF ON THE COMPATIBILITY TIER.
+	# Enabling it there re-colours the whole frame — the floor goes from
+	# (10.0, 19.8, 63.6) to (6.2, 29.0, 81.1) against a desktop target of
+	# (11.4, 19.6, 57.0) — and NOTHING exposed on Environment modulates the
+	# side effect: threshold 0.9 vs 0.4 differ by 0.2 counts, intensity
+	# 0.15/0.3/0.8 by 2, and screen/additive/soft-light are byte-identical.
+	# The trade is binary and the owner chose the colour. Q-034's compat
+	# threshold is superseded: with the pass off it had nothing to tune.
+	# Forward+ keeps its bloom untouched.
+	env.glow_enabled = not RenderTier.is_compat()
 	env.glow_intensity = 0.8
 	env.glow_strength = 1.0
 	env.glow_bloom = 0.05          # let the HDR threshold decide, not a floor
-	# "only the hottest highlights bloom". Q-034: on the Compatibility tier
-	# the scene buffer is LDR — after tonemapping nothing exceeds ~0.5, so
-	# a 0.9 threshold meant NOTHING bloomed on the web, not even the rail,
-	# and no warning said so. Measured (PORT_STATUS.md, Q-034): the glow
-	# pass itself works there; only the threshold has to live in that range.
-	env.glow_hdr_threshold = 0.9 if not RenderTier.is_compat() else COMPAT_GLOW_THRESHOLD
+	env.glow_hdr_threshold = 0.9   # "only the hottest highlights bloom"
 	# Q-030: SSAO and SSR are Forward+ only. On the Compatibility tier they
 	# are dropped by the renderer anyway (SSR with a warning, SSAO silently);
 	# gating them here makes that a stated choice rather than a surprise, and
@@ -440,8 +439,10 @@ func _setup_world() -> void:
 	# floor came out (0, 11.5, 85) against Forward+'s (11.4, 19.6, 57), and
 	# even the void colour lost its red. Measured one variable at a time
 	# (PORT_STATUS.md, Q-033): fog, ambient, reflections, SSR and SSAO change
-	# nothing; the tonemapper is the whole shift. AgX is the closest match on
-	# that tier (void within a few counts, red back on the floor). Same
+	# nothing. Q-036 later falsified the REASON recorded here — the hue
+	# shift was the glow pass, now off on this tier (Q-038) — but not the
+	# choice: AgX is the closest match with glow off too, measured at
+	# floor luma 20.9 against ACES's 9.3 and a target of 20.5. Same
 	# exposure on both, so every other tuned value keeps its meaning.
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES if fp else Environment.TONE_MAPPER_AGX
 	env.tonemap_exposure = 1.15

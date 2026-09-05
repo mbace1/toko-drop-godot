@@ -383,10 +383,21 @@ on"; the owner's decision reverses that, and the comment is rewritten.
   at 0.0, AgX recovers it to 6.2). It is still the better of the two while
   glow is on, so it stays — but for that reason, not the recorded one.
 
-  **The remaining choice is a taste call, not a bug (Q-038).** On the
-  Compatibility renderer the trade is binary: accurate floor colour with no
-  bloom at all, or bloom with a floor that runs ~35% bright and blue. Both
-  are photographed in the three-panel sheet; the owner picks.
+  **The remaining choice was a taste call, and the owner made it —
+  Q-038, 2026-09-05: "actually, glow off".** Glow is now disabled on the
+  Compatibility tier (`env.glow_enabled = not RenderTier.is_compat()`);
+  Forward+ keeps its bloom. Same seed, same frame, floor sample:
+  desktop `(11.4, 21.2, 58.7)` luma 21.9 · compat before `(0, 11.1, 84.8)`
+  luma 14.1 · **compat after `(10.0, 21.6, 65.3)` luma 22.3**. The blue
+  wash is gone and the two tiers read as one game. AgX stays on compat —
+  with glow off it is still the closer of the two (floor luma 20.9 against
+  ACES's 9.3). `COMPAT_GLOW_THRESHOLD` is deleted: with the pass off it
+  had nothing to tune, which supersedes Q-034.
+
+  **What this costs, named:** nothing on the phone has a halo — not the
+  gel, not the rails, not a level's boundary line (Q-037). Every compat
+  look from here is tint and shape, and CLAUDE.md's rule now says so
+  instead of the opposite.
 - **Q-034 — bloom. CLOSED, same day.** Compatibility's glow pass works;
   it never showed because `glow_hdr_threshold = 0.9` was judged against
   an LDR scene buffer where nothing exceeds ~0.5 after tonemapping (the

@@ -482,9 +482,13 @@ Forward+ frame. Change all of them in one item or none.
 
 ### Q-034 — Compat tier: bloom
 
-- status: **Landed, 2026-09-04** — this commit (`git log -S "Q-034"`).
-  The glow pass works on Compatibility; the 0.9 HDR threshold was the
-  whole problem on an LDR buffer. `COMPAT_GLOW_THRESHOLD = 0.4`.
+- status: **Landed 2026-09-04, then SUPERSEDED by Q-038 on 2026-09-05.**
+  The threshold change was real (it did buy a halo on the rail) but it
+  came with a cost this item never measured: enabling glow at all on
+  Compatibility re-colours the frame (Q-036). The owner chose colour over
+  bloom, so glow is off on that tier and `COMPAT_GLOW_THRESHOLD` is
+  deleted. Kept here, not rewritten — the finding was sound, the trade
+  was not weighed.
 - repo: toko-drop-godot
 - size: M
 - blocked-by: —
@@ -521,7 +525,10 @@ phone's tier, not the desktop's.
 
 ### Q-038 — OWNER CALL: on the phone, bloom or floor colour?
 
-- status: Blocked — needs the owner
+- status: **Landed, 2026-09-05 — owner chose COLOUR** ("actually, glow
+  off"). `env.glow_enabled = not RenderTier.is_compat()`; the compat
+  threshold const is deleted; AgX stays (measured better with glow off
+  too: floor luma 20.9 vs ACES's 9.3, target 20.5).
 - repo: toko-drop-godot
 - size: S (the change is two lines; the decision is the item)
 - blocked-by: an owner decision

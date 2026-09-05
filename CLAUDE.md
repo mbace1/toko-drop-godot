@@ -81,11 +81,14 @@ terms by the `gel_compat` global. Rules that follow:
   `tools/capture.gd` — `--script` is mandatory, `seed:HEX` pins the run,
   `TOKO_TIER=compat` forces the tier on a desktop. Judge the compat
   picture on its own; do not infer it from the Forward+ one.
-- **Compat blooms, at its own threshold.** The scene buffer there is LDR,
-  so `glow_hdr_threshold` must live in the tonemapped range —
-  `main.gd`'s `COMPAT_GLOW_THRESHOLD` (0.4), Forward+ keeps 0.9. Emission
-  above that blooms on both tiers (Q-034). Anything judged "too dim to
-  bloom" on compat is a threshold question, not a renderer limit.
+- **THE COMPAT TIER DOES NOT BLOOM. Glow is off there** — owner call,
+  Q-038, because enabling it re-colours the whole frame and nothing
+  exposed on `Environment` modulates that (Q-036 measured threshold,
+  intensity, strength and blend mode; none of them do). Forward+ keeps its
+  bloom. **So on compat, build a look as tint and shape, never as light:**
+  emission there lands flat, with no halo, at any value. Q-034's
+  `COMPAT_GLOW_THRESHOLD` is gone — with the pass off there was nothing
+  for it to tune.
 - **The compat tier tonemaps with AgX, Forward+ with ACES** — a
   compensation for the glow flood below, not for a tonemapper defect
   (Q-033's original reasoning was falsified by Q-036; the change stayed,
