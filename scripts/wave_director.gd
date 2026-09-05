@@ -50,6 +50,9 @@ var rush_roster := false
 var level: Level = null
 var _level_queue: Array = []
 var wave_timer := 0.0
+## Q-039: an authored PICKUP comes down the same pump as the bodies. The
+## director owns no pods, so it says where and when and main.gd drops it.
+signal level_pickup(id: String, x: float, z: float, life: float)
 
 ## Every name _make() can build — the roster the level validator checks
 ## against, so a level naming a body this build lacks is refused at load
@@ -409,6 +412,13 @@ func _spawn_level_entry(entry: Dictionary) -> void:
 	e.speed *= float(entry["speed_mult"])
 	if e.fire_interval > 0.0:
 		e.fire_interval *= float(entry["interval_mult"])
+	# Q-039: the file's flags, applied AFTER init() like the rolled variants
+	# (init() sets the species' base; a promotion multiplies it). The browser
+	# does the same on its pump: setBoss() x3 HP x1.5 size, elite x2 HP x1.2.
+	if entry.get("boss", false):
+		e.apply_boss()
+	elif entry.get("elite", false):
+		e.apply_variant("elite", "")
 	enemies.append(e)
 
 ## The fields every body gets from the director, in the order they must be
@@ -490,7 +500,11 @@ func update(delta: float) -> void:
 	# its life on both sides (what the parity gate's tolerance assumes).
 	wave_timer += delta
 	while not _level_queue.is_empty() and float(_level_queue[0]["t"]) <= wave_timer:
-		_spawn_level_entry(_level_queue.pop_front())
+		var entry: Dictionary = _level_queue.pop_front()
+		if entry["kind"] == "pickup":
+			level_pickup.emit(String(entry["id"]), float(entry["px"]), float(entry["pz"]), float(entry["life"]))
+		else:
+			_spawn_level_entry(entry)
 	for i in range(enemies.size() - 1, -1, -1):
 		var e := enemies[i]
 		if not is_instance_valid(e):
