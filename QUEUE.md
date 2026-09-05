@@ -457,7 +457,13 @@ before changing anything.
 
 ### Q-036 — Compat tier: the 8-bit dark crush (`use_hdr_2d`, re-tuned)
 
-- status: Queued
+- status: **Landed as a NEGATIVE RESULT, 2026-09-04** — this commit
+  (`git log -S "Q-036"`). No code changed. The premise was false (a grey
+  card shows the renderers agree on lit albedo), `use_hdr_2d` was
+  measured and rejected, and the real cause of the floor shift is
+  ENABLING GLOW on the Compatibility renderer — which also falsifies
+  Q-033's recorded diagnosis. Full numbers in PORT_STATUS.md. The choice
+  that remains is Q-038.
 - repo: toko-drop-godot
 - size: M
 - blocked-by: —
@@ -512,6 +518,30 @@ term into `floor_grid.gdshader` with the shape slots as uniforms written
 from `_apply_level()`. The compat tier's bloom threshold (Q-034) and
 tonemapper (Q-033) will both act on the glowing boundary — judge it on the
 phone's tier, not the desktop's.
+
+### Q-038 — OWNER CALL: on the phone, bloom or floor colour?
+
+- status: Blocked — needs the owner
+- repo: toko-drop-godot
+- size: S (the change is two lines; the decision is the item)
+- blocked-by: an owner decision
+- design: PORT_STATUS.md, the Q-036 bullet
+- gate: whichever is chosen, photographed on both tiers on one seed
+
+On the Compatibility renderer the two cannot both be had, and no exposed
+setting splits the difference (threshold, intensity, strength and blend
+mode were all measured and none modulate the side effect):
+
+- **bloom on** (what ships today): the gel and the rails glow; the floor
+  runs `(6.2, 29.0, 81.1)` against the desktop's `(11.4, 19.6, 57.0)` —
+  about 35% bright and distinctly bluer, with AgX compensating.
+- **glow off on compat only**: the floor lands on `(10.0, 19.8, 63.6)`,
+  a near match for the desktop, and nothing on the phone blooms.
+
+Not a bug in either direction, so it is not mine to settle. If bloom wins,
+the AgX split stays and the reason in the docs is now correct. If colour
+wins, disable glow on the compat tier and revert to ACES there (with glow
+off, AgX's compensation is no longer wanted — re-measure).
 
 ## Landed
 

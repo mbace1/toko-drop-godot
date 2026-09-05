@@ -86,11 +86,19 @@ terms by the `gel_compat` global. Rules that follow:
   `main.gd`'s `COMPAT_GLOW_THRESHOLD` (0.4), Forward+ keeps 0.9. Emission
   above that blooms on both tiers (Q-034). Anything judged "too dim to
   bloom" on compat is a threshold question, not a renderer limit.
-- **The compat tier tonemaps with AgX, Forward+ with ACES.** Compat's
-  ACES zeroes dark red and green (Q-033). Do not "fix" a colour on compat
-  by editing a shader constant until the tonemapper and buffer (Q-036)
-  have been ruled out with the probe method: one variable per run,
-  sampled at the same box, against the Forward+ frame.
+- **The compat tier tonemaps with AgX, Forward+ with ACES** — a
+  compensation for the glow flood below, not for a tonemapper defect
+  (Q-033's original reasoning was falsified by Q-036; the change stayed,
+  the explanation changed).
+- **On Compatibility, ENABLING GLOW re-colours the whole frame**, and no
+  exposed setting modulates it: threshold, intensity, strength and blend
+  mode were each measured and none of them change the side effect. Glow
+  off there matches Forward+ almost exactly. Before blaming a colour on a
+  shader constant, photograph the frame with glow off — that is the
+  cheapest way to tell a material bug from this.
+- **Never conclude from luma alone.** A compat variant once matched
+  Forward+'s void luma exactly while being pure blue against its grey.
+  Sample RGB, and quote all three.
 - A feature that only exists in Forward+ is not a bug on compat, but it
   must be NAMED in PORT_STATUS.md's "still different" list.
 

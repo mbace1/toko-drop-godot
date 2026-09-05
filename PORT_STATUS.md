@@ -257,8 +257,10 @@ on"; the owner's decision reverses that, and the comment is rewritten.
 
 ### What is still different on the web, with numbers — open
 
-- **Q-033 — the floor hue. CLOSED as far as a tonemapper can close it;
-  the remainder is Q-036.** Both suspects were wrong, and measuring said
+- **Q-033 — the floor hue. CLOSED, but its DIAGNOSIS WAS WRONG — see
+  Q-036 below, which measured the same floor with glow off and found the
+  renderers agree. Keep the AgX change (it is the better tonemapper while
+  glow is on); discard the reasoning.** Both suspects were wrong, and measuring said
   so: on Forward+, turning SSR, SSAO or sky reflection off moves the
   floor by less than a count; on Compatibility, fog, ambient and
   reflection do nothing either. **The tonemapper is the whole shift.**
@@ -281,13 +283,46 @@ on"; the owner's decision reverses that, and the comment is rewritten.
   — an 8-bit scene buffer — and no curve can lift a channel that arrived
   as zero. What is left after AgX: floor red at half of Forward+'s (r/b
   0.10 vs 0.20) and luma 37% high (28 vs 20.5). That is Q-036.
-- **Q-036 — compat dark crush (8-bit scene buffer).** `use_hdr_2d` gives
-  the compat tier an HDR buffer — measured: the void's luma lands exactly
-  on Forward+'s (4.2 vs 4.5) — but it also triples the floor's brightness
-  (57 vs 20) and brightens the rail, i.e. the midtones re-map. It is the
-  right lever and needs the exposure/tonemap re-tuned WITH it, on the
-  same seed, judged against Forward+. Not done under Q-033 because it
-  changes every tuned value at once.
+- **Q-036 — CLOSED, and it FALSIFIES both its own premise and Q-033's
+  diagnosis. Read this before touching a compat colour.**
+
+  **1. There is no 8-bit dark crush.** A grey card settles it: set the
+  floor's `base_color` to a neutral value, turn the grid emission off, and
+  photograph both renderers. At 0.5 grey — Forward+ `(199, 204, 212)`,
+  compat `(196, 201, 208)`. At the floor's real 0.079 — Forward+
+  `(14, 15, 18)`, compat `(13, 16.4, 21)`. **The two renderers agree on lit
+  albedo, at the dark end included.** Red is not being crushed by anything.
+
+  **2. `use_hdr_2d` is the wrong lever and was rejected.** Four variants,
+  all on compat, floor sample: HDR+ACES@1.15 `(0, 60.6, 156)`,
+  HDR+AgX@1.15 `(46, 94, 151)`, HDR+AgX@0.8 `(0, 74, 133)`,
+  HDR+ACES@0.8 `(0, 24, 133)` — against a Forward+ target of
+  `(11.4, 19.6, 57)`. Every one is 30–330% too bright and three still have
+  zero red. **The earlier note that HDR "puts the void exactly on
+  Forward+'s" was luma-only and misleading**: that variant's void is
+  `(0, 0, 58.7)` — the same luma as Forward+'s `(3, 4, 14.2)` and a
+  completely different colour. A single-number match is not a match.
+
+  **3. What actually shifts the floor is ENABLING GLOW, not the
+  tonemapper.** Compat with glow off is `(10.0, 19.8, 63.6)`, luma 20.9 —
+  against Forward+'s `(11.4, 19.6, 57.0)`, luma 20.5. That is a match.
+  Turn glow on and it becomes `(6.2, 29.0, 81.1)` at ANY setting:
+  threshold 0.9 and 0.4 differ by 0.2 counts; intensity 0.15, 0.3 and 0.8
+  differ by 2; and **screen, additive and soft-light blending are
+  byte-identical to each other**. Enabling glow changes the Compatibility
+  render path itself, and nothing exposed on `Environment` modulates the
+  side effect.
+
+  **So Q-033's "the tonemapper is the whole shift" is wrong**, and its
+  table was measured with glow on throughout. AgX is not a fix; it is a
+  partial COMPENSATION for the glow flood (with glow on: ACES leaves red
+  at 0.0, AgX recovers it to 6.2). It is still the better of the two while
+  glow is on, so it stays — but for that reason, not the recorded one.
+
+  **The remaining choice is a taste call, not a bug (Q-038).** On the
+  Compatibility renderer the trade is binary: accurate floor colour with no
+  bloom at all, or bloom with a floor that runs ~35% bright and blue. Both
+  are photographed in the three-panel sheet; the owner picks.
 - **Q-034 — bloom. CLOSED, same day.** Compatibility's glow pass works;
   it never showed because `glow_hdr_threshold = 0.9` was judged against
   an LDR scene buffer where nothing exceeds ~0.5 after tonemapping (the
