@@ -545,6 +545,16 @@ off, AgX's compensation is no longer wanted — re-measure).
 
 ## Landed
 
+### Q-039 — One level format for two engines: read the editor's JSON
+**Landed 2026-09-05.** `scripts/level.gd` mirrors upstream v239's unified
+`level.js` clause for clause: named arenas, pickups (down the pump, via
+`WaveDirector.level_pickup`), `boss`/`elite`, three modes of which this
+build plays `arcade` and refuses `melee`/`rush` BY NAME. Parity gate 46/46
+and 34/34 on both bundled levels; classic trace byte-identical. Detail in
+`PORT_STATUS.md` → Q-039. Open follow-ons: an authored Rush level (which of
+`RushRules`' cadence/roster/clock an authored timeline overrides), and a
+menu row to play a synced level.
+
 ### Q-030 — Two gel tiers: Compatibility gets an analytic transmittance
 
 - status: **Landed, 2026-09-04** — this commit (`git log -S "Q-030"`)

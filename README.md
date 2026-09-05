@@ -61,6 +61,7 @@ game looks, and *look at the output*.
 ## Testing
 
 ```
+godot --headless --path . --import                      # ONCE on a fresh clone: writes the class_name cache the gates need
 godot --headless --script tests/smoke.gd
 godot --headless --path . --script tests/arena_check.gd   # 8,396 exact checks on scripts/arena.gd (Q-031)
 ```

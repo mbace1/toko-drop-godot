@@ -58,6 +58,70 @@ one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
 
+## Q-039 — ONE format for two engines: the port reads the editor's JSON (2026-09-05)
+
+**Owner ask, 2026-09-05: "make the Godot side read the same level JSON."**
+It did not, and the reason is worth keeping: **there were two "format 1"s.**
+Upstream's live v237 is the level EDITOR (`index.html?editor` — drop-downs,
+tap to place, a 0.1 s timeline) and its `level.js` writes named arenas,
+pickups and three modes. PR #447 — the lineage Q-032 was built against —
+shipped a *different* format 1 the same day (shape objects, strict
+unknown-key rejection, arcade only) and never merged. A level the phone
+authored was a level this build refused, on its first key.
+
+**Upstream v239 is the union** (`toko-drop/js/level.js` is the reference)
+and `scripts/level.gd` now mirrors it clause for clause:
+
+- `arena` is a NAME (`auto / portrait / landscape / room` — `Level.ARENAS`,
+  "auto" is whatever this device says, passed in as `auto_half`) or the
+  `{ combine?, shapes: [rect | circle …] }` object Q-032 already read.
+- A spawn is an enemy (`boss?`, `elite?`, the multipliers) or
+  `kind: "pickup"` (`id`, `life?`). **Pickups come down the same pump:**
+  `WaveDirector.level_pickup` fires where and when the file says and
+  `main.gd` drops it from the pool (`PowerupPool.drop` grew a `life`);
+  `boss` → `apply_boss()`, `elite` → `apply_variant("elite")`, both AFTER
+  `init()` like the rolled variants.
+- **Where this build lacks a thing the browser has, it refuses the level BY
+  NAME** — the rule Q-032 set for enemies, extended: `mode: "melee"` (no
+  CLOSE COMBAT here), `mode: "rush"` (Rush's own level clock and roster
+  would fight an authored timeline — left open, see below), a pickup id the
+  pool cannot build (`PowerupPool.level_ids()`). The message names the gap,
+  so the FILE is not blamed.
+- The strictness Q-032 had (unknown keys, authored order, a body outside the
+  region, nowhere to stand, `MAX_SHAPES`) went the other way, into the
+  browser's `level.js`. v237's `{halfX, halfZ}` arena form is retired on both.
+
+**`levels/` is finally read from where `tools/sync-levels.sh` always looked.**
+Upstream's deployed tree carries `toko-drop/levels/first-light.json` and
+`three-rings.json` now — PR #447's two files, verbatim, because this build's
+smoke pins their counts. `sync-levels.sh` is unchanged (and executable now).
+
+**THE CROSS-BUILD GATE HOLDS ON THE UNIFIED FORMAT: `first-light` 46/46,
+`three-rings` 34/34** — the browser's seen files came from upstream's new
+`scripts/level-smoke.sh` (the same probe-owns-the-clock recipe, re-cut for
+the live tree, with pickups counted too). `tests/smoke.gd`
+`_test_level_loader` grew 13 checks: an editor-made level (named arena,
+pickup, boss, elite) loads; "room" is 15×11 and "auto" is the device;
+melee/rush/an unknown pickup/an unknown kind/the retired arena form/a body
+outside are each refused; and against a real director the pickup is emitted
+at 0.5 s where the file put it and the boss and the elite arrive promoted.
+`tools/trace.gd` on the classic seed is **byte-identical** before and after
+— the pump change is under `level != null` and nowhere else.
+
+**Toolchain note that cost an hour:** on a fresh clone `--script tests/smoke.gd`
+fails to parse (`Identifier "Daily" not declared`) because `class_name`
+globals live in `.godot/global_script_class_cache.cfg`, which only the editor
+writes. `godot --headless --path . --import` once, then the gates run. README
+says so now.
+
+**Open, and named:** an authored **Rush** level. The browser plays one
+(`rules.mode: "rush"` → boost, shotgun, HP-as-lives, Rush's own clock parked).
+Here Rush is a `Mode` with its own director cadence, roster, HUD and level-up
+clock (`RushRules`), and a level run does not set `mode` — wiring one means
+deciding which of those an authored timeline overrides. Refused by name until
+then. Also open: a menu row to PLAY a synced level (Q-032 set one aside);
+`level_id` is still reached only through `tools/trace.gd` / `capture.gd`.
+
 ## Q-032 — the browser's authored levels play here, from the SAME file (2026-09-04)
 
 **Owner decision, 2026-09-04:** the level editor is built upstream in JS;

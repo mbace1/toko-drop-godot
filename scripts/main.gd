@@ -353,6 +353,8 @@ func _ready() -> void:
 	waves.enemies_root = enemies_root
 	waves.wave_cleared.connect(_on_wave_cleared)
 	waves.wave_started.connect(_on_wave_started)
+	# Q-039: an authored level's pickups come down the same pump as its bodies.
+	waves.level_pickup.connect(func(id: String, x: float, z: float, life: float) -> void: pods.drop(x, z, id, 0, life))
 
 	input_mgr = InputManager.new()
 	input_mgr.camera = camera
@@ -1818,7 +1820,9 @@ func _apply_level() -> void:
 	if level_id.is_empty():
 		_resize_arena()   # Q-037: the floor must forget a previous level's region
 		return
-	var lv := Level.load_file("res://levels/%s.json" % level_id, WaveDirector.KNOWN_TYPES)
+	# Q-039: the pool's ids and the device's own rectangle ("auto") travel in.
+	var lv := Level.load_file("res://levels/%s.json" % level_id, WaveDirector.KNOWN_TYPES,
+		PowerupPool.level_ids(), Vector2(HALF_X, HALF_Z))
 	if not lv.errors.is_empty():
 		push_warning("LEVEL: %s not loaded —\n  %s" % [level_id, "\n  ".join(lv.errors)])
 		return

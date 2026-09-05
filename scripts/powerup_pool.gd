@@ -116,12 +116,24 @@ func roll(wave: int, rng: RandomNumberGenerator) -> String:
 		return LV2[rng.randi() % LV2.size()]
 	return LV1[rng.randi() % LV1.size()]
 
-func drop(x: float, z: float, id: String, value: int = 0) -> void:
+## Q-039: every id an authored level may name (level.js LEVEL_PICKUPS on the
+## browser side — the five walk-overs and the non-homing weapon pods). The
+## level validator refuses anything else by name, so a pickup this pool
+## cannot build never reaches drop().
+static func level_ids() -> Array:
+	var out: Array = VALUES.keys()
+	out.append_array(LV1)
+	out.append_array(LV2)
+	return out
+
+## `life` — how long it lies there. LIFE for every drop the game rolls; an
+## authored level may say otherwise (level.js `life`, default 12 = LIFE).
+func drop(x: float, z: float, id: String, value: int = 0, life: float = LIFE) -> void:
 	for i in POOL_SIZE:
 		if _life[i] > 0.0:
 			continue
 		_x[i] = x; _z[i] = z
-		_life[i] = LIFE
+		_life[i] = life
 		_id[i] = id
 		_value[i] = value
 		return
@@ -133,7 +145,7 @@ func drop(x: float, z: float, id: String, value: int = 0) -> void:
 			worst_life = _life[i]
 			worst = i
 	_x[worst] = x; _z[worst] = z
-	_life[worst] = LIFE
+	_life[worst] = life
 	_id[worst] = id
 	_value[worst] = value
 

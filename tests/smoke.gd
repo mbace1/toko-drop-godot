@@ -2928,28 +2928,68 @@ func _test_render_tier() -> void:
 ## held while the timeline has more to send, and the validator says no.
 func _test_level_loader() -> void:
 	var names := WaveDirector.KNOWN_TYPES
+	var pickups := PowerupPool.level_ids()
 	if not FileAccess.file_exists("res://levels/first-light.json"):
 		_check(false, "levels/ is synced (run tools/sync-levels.sh — a missing level is a FAIL, not a skip)")
 		return
-	var fl := Level.load_file("res://levels/first-light.json", names)
+	var fl := Level.load_file("res://levels/first-light.json", names, pickups)
 	_check(fl.errors.is_empty(), "first-light loads clean (%s)" % ", ".join(fl.errors))
 	_check(fl.spawns.size() == 15 and fl.arena_shape is Arena.RectShape and fl.half_x == 19.0,
 		"first-light: 15 spawns on a 19x11 rectangle")
-	var tr := Level.load_file("res://levels/three-rings.json", names)
+	var tr := Level.load_file("res://levels/three-rings.json", names, pickups)
 	_check(tr.errors.is_empty(), "three-rings loads clean (%s)" % ", ".join(tr.errors))
 	_check(tr.arena_shape is Arena.CombineShape and tr.arena_shape.kind == Arena.KIND_INTERSECT and tr.spawns.size() == 11,
 		"three-rings: 11 spawns in the intersection of three circles")
 	_check(tr.arena_shape.sdf(0.0, 0.0) < 0.0 and tr.arena_shape.sdf(9.0, 0.0) > 0.0,
 		"three-rings: the origin is inside the common area and x=9 is not")
-	var missing := Level.load_file("res://levels/no-such-level.json", names)
+	var missing := Level.load_file("res://levels/no-such-level.json", names, pickups)
 	_check(not missing.errors.is_empty(), "a missing file is an error, never an empty level")
 	# The validator can say no (the same clauses as level.js).
 	var bad: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://levels/first-light.json"))
 	bad["bonus"] = true
 	bad["spawns"][0]["type"] = "GLOBBO_XL"
 	bad["spawns"][1]["t"] = 0.05
-	var errs := Level.validate(bad, names)
+	var errs := Level.validate(bad, names, pickups)
 	_check(errs.size() >= 3, "the validator rejects an unknown key, an unknown type and an off-grid time (%d errors)" % errs.size())
+
+	# Q-039: the UNIFIED format — what the browser's editor actually writes.
+	var ed: Dictionary = {
+		"format": 1, "id": "editor-made", "name": "EDITOR MADE", "arena": "room", "duration": 8.0,
+		"rules": { "mode": "arcade" },
+		"spawns": [
+			{ "t": 0.0, "type": "GLOBBO", "px": -3.0, "pz": -3.0 },
+			{ "t": 0.5, "kind": "pickup", "id": "hp", "px": 2.0, "pz": 2.0 },
+			{ "t": 1.0, "type": "TORO", "px": 0.0, "pz": -6.0, "boss": true },
+			{ "t": 1.0, "type": "GLOBBO", "px": 4.0, "pz": 0.0, "elite": true },
+		],
+	}
+	var el := Level.parse(ed, names, pickups, Vector2(19.0, 11.0))
+	_check(el.errors.is_empty(), "an editor-made level (named arena, pickup, boss, elite) loads clean (%s)" % ", ".join(el.errors))
+	_check(el.arena_shape is Arena.RectShape and el.half_x == 15.0 and el.half_z == 11.0, "arena \"room\" is the 15x11 rectangle")
+	var auto_lv: Dictionary = ed.duplicate(true)
+	auto_lv["arena"] = "auto"
+	_check(Level.parse(auto_lv, names, pickups, Vector2(11.0, 18.0)).half_z == 18.0, "arena \"auto\" is whatever this device says")
+	_check(el.spawns[1]["kind"] == "pickup" and el.spawns[1]["id"] == "hp" and el.spawns[1]["life"] == 12.0, "a pickup spawn carries its id and the default life")
+	_check(el.spawns[2]["boss"] and not el.spawns[2]["elite"] and el.spawns[3]["elite"], "boss and elite flags survive")
+	var melee: Dictionary = ed.duplicate(true)
+	melee["rules"] = { "mode": "melee" }
+	var me := Level.validate(melee, names, pickups)
+	_check(me.size() == 1 and me[0].contains("CLOSE COMBAT"), "mode \"melee\" is refused BY NAME, not as a bad value (%s)" % ", ".join(me))
+	var rushy: Dictionary = ed.duplicate(true)
+	rushy["rules"] = { "mode": "rush" }
+	_check(Level.validate(rushy, names, pickups).size() == 1, "mode \"rush\" is refused by name too (Q-039 leaves it open)")
+	var badpk: Dictionary = ed.duplicate(true)
+	badpk["spawns"][1]["id"] = "key"
+	_check(Level.validate(badpk, names, pickups).size() == 1, "a pickup this pool cannot build is refused")
+	var trap: Dictionary = ed.duplicate(true)
+	trap["spawns"][1] = { "t": 0.5, "kind": "trap", "px": 0.0, "pz": 0.0 }
+	_check(not Level.validate(trap, names, pickups).is_empty(), "an unknown spawn kind is refused")
+	var oldform: Dictionary = ed.duplicate(true)
+	oldform["arena"] = { "halfX": 9, "halfZ": 9 }
+	_check(not Level.validate(oldform, names, pickups).is_empty(), "the browser's retired v237 {halfX, halfZ} arena form is refused")
+	var outside: Dictionary = ed.duplicate(true)
+	outside["spawns"][0]["px"] = 40.0
+	_check(not Level.parse(outside, names, pickups).errors.is_empty(), "a body placed outside the region is refused")
 
 	# The pump, against a real director.
 	var root := Node3D.new()
@@ -2986,6 +3026,27 @@ func _test_level_loader() -> void:
 			en.take_hit(en.hp)
 	wd.update(0.016)
 	_check(cleared[0] == -1, "an empty floor is NOT a clear while the timeline still has bodies to send")
+	wd.clear()
+	# Q-039: the pump sends a pickup down the same queue, and applies the flags.
+	var got := []
+	wd.level_pickup.connect(func(id: String, x: float, z: float, life: float) -> void: got.append([id, x, z, life]))
+	wd.arena = Arena.new(el.arena_shape)
+	wd.level = el
+	wd.start_wave()
+	wd.update(0.05)
+	_check(wd.enemies.size() == 1 and got.is_empty(), "at t=0.05 the first body is out and no pickup yet")
+	for i in 10:
+		wd.update(0.05)
+	_check(got.size() == 1 and got[0][0] == "hp" and absf(got[0][1] - 2.0) < 1e-6 and got[0][3] == 12.0,
+		"by t=0.55 the pickup was emitted where the file put it (%s)" % str(got))
+	for i in 10:
+		wd.update(0.05)
+	var boss_n := 0
+	var elite_n := 0
+	for e in wd.enemies:
+		if e.is_boss: boss_n += 1
+		if e.variant == "elite": elite_n += 1
+	_check(wd.enemies.size() == 3 and boss_n == 1 and elite_n == 1, "by t=1.05 the boss and the elite arrived promoted (%d bodies, %d boss, %d elite)" % [wd.enemies.size(), boss_n, elite_n])
 	wd.clear()
 	wd.level = null
 	root.queue_free()
