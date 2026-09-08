@@ -69,6 +69,10 @@ func _process(_delta: float) -> bool:
 		if _main.waves.level != null:
 			p.max_hp = 999
 			p.hp = 999
+			# Q-040: a RUSH level ends through rush.lives, not hp — without this
+			# a stationary player is dead by t≈8 s and the trace stops at the
+			# 12th body of 56. Found by the parity gate on boost-lane.
+			_main.rush.lives = 999
 		for e in _main.waves.enemies:
 			if e.get_meta("_traced", false):
 				continue

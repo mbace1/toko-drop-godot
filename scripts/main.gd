@@ -89,7 +89,7 @@ enum State { MENU, PLAYING, PAUSED, DEAD, CARDS }
 ## mode ends up with a ruleset nobody chose. Selecting it today starts an
 ## ordinary run with `mode` set, so the plumbing is real and the rules land in
 ## one place when they are decided.
-enum Mode { CLASSIC, ROGUELIKE, RUSH, CHALLENGE, DAILY }
+enum Mode { CLASSIC, ROGUELIKE, RUSH, CHALLENGE, DAILY, LEVEL }
 
 ## CLASSIC is listed FIRST and is always "ready" — `_show_menu()` parks the
 ## cursor on the first ready row, so this is what a player who just taps
@@ -116,12 +116,27 @@ const MODE_ROWS := [
 	 "ready": true, "accent": Color(0.80, 0.53, 1.00)},
 	{"mode": Mode.DAILY, "label": "DAILY RUN",
 	 "note": "same seed as everyone today, worldwide — no upgrades", "ready": true, "accent": Color(1.00, 0.87, 0.40)},
+	# Q-040: the last mile of the shared format. A level authored in the
+	# browser's editor was playable here only under a developer's hands
+	# (tools/trace.gd), which is not "playable on the iPad". `ready` is
+	# decided at menu time — an empty levels/ shows why rather than offering
+	# a row that does nothing.
+	{"mode": Mode.LEVEL, "label": "LEVELS",
+	 "note": "authored in the browser's editor — the same file, played here", "ready": true, "accent": Color(0.53, 0.87, 1.00)},
 ]
 
 var state := State.MENU
 var score := 0
 var mode := Mode.CLASSIC
 var _menu_row := 0        # which mode row the selector is on; -1 = none
+## Q-040: the synced level files, and which one the LEVELS row is showing.
+## Filled at menu time, so a sync between runs is picked up without a restart.
+var _level_ids: PackedStringArray = []
+var _level_i := 0
+## Q-040: the loaded level asked for Rush's verbs (`rules.mode == "rush"`).
+## Read by _rush_verbs(), so one gate answers "are we playing Rush right now"
+## for every call site.
+var _level_rush := false
 ## Campaign state. `challenge_i` is which level is loaded; the rule it
 ## carries is read once at run start and then the loop just plays.
 var challenge_i := 0
@@ -1036,6 +1051,14 @@ func _process(delta: float) -> void:
 				rush.cycle_ability(1 if Input.is_action_just_pressed("move_right") else -1)
 				_refresh_menu()
 				return
+			# Q-040: and left/right walks the synced level files, same idiom.
+			if MODE_ROWS[_menu_row]["mode"] == Mode.LEVEL and not _level_ids.is_empty() \
+					and (Input.is_action_just_pressed("move_left") \
+					or Input.is_action_just_pressed("move_right")):
+				var lstep := 1 if Input.is_action_just_pressed("move_right") else -1
+				_level_i = (_level_i + lstep + _level_ids.size()) % _level_ids.size()
+				_refresh_menu()
+				return
 			if Input.is_action_just_pressed("move_down"):
 				_menu_row = mini(_menu_row + 1, MODE_ROWS.size() - 1)
 				_refresh_menu()
@@ -1048,6 +1071,14 @@ func _process(delta: float) -> void:
 				mode = row["mode"] if row["ready"] else Mode.CLASSIC
 				if mode == Mode.CHALLENGE and not Challenges.unlocked(challenge_i, save):
 					challenge_i = 0
+				# Q-040: an empty levels/ is not a run. The row already says so;
+				# pressing start on it should do nothing rather than drop the
+				# player into a blank arena.
+				if mode == Mode.LEVEL and _level_ids.is_empty():
+					return
+				# A LEVELS run must not follow the player into the next mode.
+				if mode != Mode.LEVEL:
+					level_id = ""
 				_start_game()
 
 	_update_shake(delta)
@@ -1066,7 +1097,7 @@ func _process_playing(delta: float) -> void:
 		aim = {"x": 0.0, "z": 0.0, "valid": false}
 		firing = false
 
-	if mode == Mode.RUSH or mode == Mode.CHALLENGE:
+	if _rush_verbs():
 		_process_rush(delta, firing)
 		if mode == Mode.CHALLENGE:
 			_ch_clock -= delta
@@ -1160,6 +1191,11 @@ func _collide_player_bullets() -> void:
 					# actually matched the browser.
 					streak += 1
 					_add_kill_score(100 * streak)
+					# Q-040: an ARCADE authored level is graded too — the PAR
+					# table is a kills-per-second RATE, not a Rush-only idea —
+					# so the counter runs even where the verbs do not.
+					if waves.level != null:
+						rush.add_kill()
 				# main.js drops a weapon pod from a kill now and then. Bounded, so
 				# a good wave does not carpet the floor with shopping.
 				if not _rush_verbs() and waves.rng.randf() < POD_CHANCE:
@@ -1325,6 +1361,11 @@ func _collide_gates() -> void:
 				if e.take_hit(1):
 					streak += 1
 					_add_kill_score(100 * streak)
+					# Q-040: an ARCADE authored level is graded too — the PAR
+					# table is a kills-per-second RATE, not a Rush-only idea —
+					# so the counter runs even where the verbs do not.
+					if waves.level != null:
+						rush.add_kill()
 					debris.burst(e.position.x, e.position.z, 22, e.color, e.radius * 0.26)
 					audio.play_varied("kill")
 				else:
@@ -1612,7 +1653,7 @@ func _bullet_owner_name(b) -> String:
 func _damage_player() -> void:
 	add_shake(0.45)   # the one event you must never miss
 	streak = 0   # the browser resets the streak on a hit
-	if mode == Mode.RUSH or mode == Mode.CHALLENGE:
+	if _rush_verbs():
 		if player.invincible:
 			return
 		audio.play("player")
@@ -1708,6 +1749,18 @@ func _start_game() -> void:
 	# against the full ecology, so it keeps the main pool.
 	waves.rush_roster = mode == Mode.RUSH
 	waves.level_override = 0
+	# Q-040: a LEVELS run plays the file the menu was showing. Cleared first so
+	# a previous level's ruleset cannot leak into a mode that is not one.
+	_level_rush = false
+	rush.authored = false
+	# Only ASSIGN here, never clear: tools/trace.gd and capture.gd set
+	# `level_id` directly and start in the default mode, and the cross-build
+	# parity gate runs through them. A first cut cleared it for every mode but
+	# LEVEL — and the gate failed on all three levels at once, bodies on the
+	# spawn ring instead of at the file's px/pz. The menu clears it instead
+	# (see the start handler), which is the only path a stale id can leak from.
+	if mode == Mode.LEVEL:
+		level_id = _level_ids[_level_i] if _level_i < _level_ids.size() else ""
 	save.mode = _cur_mode_key()   # every read below follows from this
 	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
 	rush.reset()
@@ -1831,7 +1884,17 @@ func _apply_level() -> void:
 	arena.set_shape(lv.arena_shape)
 	waves.level = lv
 	_resize_arena()
-	print("LEVEL: loaded %s — %d spawns over %.0fs" % [lv.id, lv.spawns.size(), lv.duration])
+	# Q-040: the file picks the ruleset. "rush" turns the Rush VERBS on for
+	# this run — boost, heat, chain, abilities, three lives — while the
+	# authored timeline replaces the director and the file's duration is the
+	# only clock (RushRules.authored parks Rush's own).
+	_level_rush = String(lv.rules.get("mode", "arcade")) == "rush"
+	rush.authored = _level_rush
+	if _level_rush:
+		input_mgr.set_rush(true)
+		rush.level = 1
+		rush.level_t = 0.0
+	print("LEVEL: loaded %s — %d spawns over %.0fs (%s)" % [lv.id, lv.spawns.size(), lv.duration, lv.rules.get("mode", "arcade")])
 
 ## Q-032: the level's one timeline is spent and the floor is clear — the run
 ## ends on the results screen like a death does, minus the death: the WAVE
@@ -1840,7 +1903,23 @@ func _finish_level() -> void:
 	state = State.DEAD
 	audio.play("wave")
 	input_mgr.reset()
-	_msg_label.text = "%s — LEVEL CLEAR\n\nscore %d" % [waves.level.name, score]
+	# Q-040: a survived level is GRADED, against the same PAR table Rush uses
+	# (kills per second × the authored duration). That works for an arcade
+	# level too — the tiers are a rate, not a Rush-only idea — and it turns
+	# "LEVEL CLEAR" into something worth beating.
+	var lines := ["%s — LEVEL CLEAR" % waves.level.name, ""]
+	var grade := rush.tier_for(rush.level_kills, waves.level.duration)
+	lines.append("score %d   %d kills%s" % [score, rush.level_kills,
+		("   GRADE " + grade) if grade != "" else ""])
+	if _level_rush:
+		var goals: Array[String] = []
+		if rush.chain_unbroken:
+			goals.append("UNBROKEN")
+		if rush.never_locked:
+			goals.append("NEVER LOCKED")
+		if not goals.is_empty():
+			lines.append("   ".join(goals))
+	_msg_label.text = "\n".join(lines)
 	_msg_label.show()
 
 func _clear_challenge() -> void:
@@ -2153,6 +2232,10 @@ func _show_menu() -> void:
 	state = State.MENU
 	# Park the caret on the first PLAYABLE row rather than on a "SOON" one, so
 	# pressing start does what the highlighted line says it will.
+	# Q-040: re-read levels/ every time the menu is shown, so a sync between
+	# runs shows up without restarting the game.
+	_level_ids = Level.list_ids()
+	_level_i = clampi(_level_i, 0, maxi(0, _level_ids.size() - 1))
 	for r in MODE_ROWS.size():
 		if MODE_ROWS[r]["ready"]:
 			_menu_row = r
@@ -2267,6 +2350,23 @@ func _mode_detail_text(i: int) -> String:
 		# The < > only appear on the SELECTED row: arrows you cannot press yet
 		# read as a control that is broken.
 		out.append("< %s >  %s" % [rush.ability_name(), rush.ability_blurb()])
+	if row["mode"] == Mode.LEVEL:
+		# Q-040: read the file to describe it — a menu that names a level it
+		# cannot actually load would be worse than one that says so.
+		if _level_ids.is_empty():
+			out.append("no levels synced — run tools/sync-levels.sh")
+		else:
+			var lid := _level_ids[_level_i]
+			out.append("< %s >" % lid)
+			var lv := Level.load_file("res://levels/%s.json" % lid, WaveDirector.KNOWN_TYPES,
+				PowerupPool.level_ids(), Vector2(HALF_X, HALF_Z))
+			if lv.errors.is_empty():
+				var rmode := String(lv.rules.get("mode", "arcade"))
+				out.append("%s — %ds, %d spawns%s" % [
+					lv.name, int(lv.duration), lv.spawns.size(),
+					"   RUSH VERBS" if rmode == "rush" else ""])
+			else:
+				out.append("cannot play: %s" % lv.errors[0])
 	if row["mode"] == Mode.DAILY:
 		var dm := Daily.mod_for(Daily.today())
 		out.append("today: %s" % (dm.to_upper() if dm != "" else "no twist"))
@@ -2293,8 +2393,13 @@ func _controls_text() -> String:
 ## Gating any of it on `mode == Mode.RUSH` alone silently disabled boost-kills
 ## inside challenges, which made the BOOST ONLY level literally unwinnable
 ## (tools/measure.gd scored it 0 on every run — that is how it was found).
+## Q-040 adds the third answer: an authored level whose file says
+## `rules.mode: "rush"`. Every call site goes through here — the two that
+## still inlined `mode == Mode.RUSH or mode == Mode.CHALLENGE` are routed
+## through it now, because the comment above describes exactly the bug a
+## third mode would hit next.
 func _rush_verbs() -> bool:
-	return mode == Mode.RUSH or mode == Mode.CHALLENGE
+	return mode == Mode.RUSH or mode == Mode.CHALLENGE or _level_rush
 
 ## True for the classic open-arena wave loop — Classic itself, and DAILY,
 ## which is Classic with a shared seed and (on 3 days out of 4) one twist
@@ -2310,7 +2415,10 @@ func _rush_verbs() -> bool:
 ## out cost it both its furniture and its HP readout (it was showing Rush's
 ## lives) for as long as the mode was playable here, which was one version.
 func _base_mode() -> bool:
-	return mode == Mode.CLASSIC or mode == Mode.DAILY or mode == Mode.ROGUELIKE
+	# Q-040: an ARCADE authored level wears the classic HP/score presentation;
+	# a RUSH one wears Rush's lives and heat. The file decides which.
+	return mode == Mode.CLASSIC or mode == Mode.DAILY or mode == Mode.ROGUELIKE \
+		or (mode == Mode.LEVEL and not _level_rush)
 
 ## A pod changes the gun for the rest of the run, or until the next pod.
 func _on_pod_taken(mode_name: String, col: Color) -> void:
@@ -2445,6 +2553,22 @@ func _update_hud() -> void:
 		_wave_bar.value = clampf(_ch_clock / float(clv["duration"]), 0.0, 1.0)
 		var rn: String = Challenges.RULE_NAME[_ch_rule]
 		_rush_label.text = ("x%d   %s" % [rush.multiplier, rn]) if rn != "" else "x%d" % rush.multiplier
+	elif mode == Mode.LEVEL and waves.level != null:
+		# Q-040: an authored level's HUD is the FILE's — its name and its own
+		# clock, because neither a wave number nor Rush's level means anything
+		# inside one. Rush levels keep the heat/chain row; arcade ones keep HP.
+		var lt2 := waves.level.duration - waves.wave_timer
+		_hp_label.text = ("LIVES " if _level_rush else "HP ") + pips \
+			+ ("" if _level_rush else "o".repeat(maxi(player.max_hp - player.hp, 0)))
+		_wave_label.text = "%s  %d:%02d" % [waves.level.name, int(lt2) / 60, int(lt2) % 60]
+		_wave_bar.value = clampf(waves.wave_timer / maxf(0.001, waves.level.duration), 0.0, 1.0)
+		if _level_rush:
+			var hp2 := int(round(rush.heat * 10.0))
+			var heat2 := "OVERHEAT" if rush.overheated_now else "HEAT " + "#".repeat(hp2) + "·".repeat(10 - hp2)
+			_rush_label.text = "%s   x%d%s" % [heat2, rush.multiplier,
+				("  " + rush.ability_name()) if rush.ability_ready() else ""]
+		else:
+			_rush_label.text = "%d kills" % rush.level_kills
 	elif mode == Mode.RUSH:
 		_hp_label.text = "LIVES " + pips
 		# v227: the live tier sits with the level, so a run has feedback long

@@ -108,6 +108,71 @@ not in doubt and the upstream screenshot is the measurement. Smoke PASS,
 boot clean. Upstream added `scripts/shader-lint.mjs` to refuse the class;
 worth a Godot twin if this shader ever grows another sentinel.
 
+## Q-040 — an authored RUSH level plays, and LEVELS is a menu row (2026-09-06)
+
+**Owner, 2026-09-06: "go ahead with adding Rush mode and next steps."** Q-039
+left both of these open by name; this closes them.
+
+**The decision an authored Rush level needed, stated:** *an authored timeline
+replaces the DIRECTOR, and nothing else.* Every Rush verb stays exactly as it
+is — boost kills, firing drops the shield, shared heat, the chain, the four
+abilities, three lives. What it does not keep is Rush's own difficulty
+**clock**: levelling up mid-file would move the difficulty out from under a
+hand-placed timeline, and `take_hit()` levelling you DOWN would restart a
+clock the file owns. `RushRules.authored` parks both, and the file's duration
+is the only clock in the run. The browser reaches the same place from the
+other side (`rush.levelDuration()` returns 1e9 while a level plays, v237) —
+same rule, two spellings. `Level.MODES` gains `"rush"`; `"melee"` is still
+refused by name, because there is no CLOSE COMBAT here to refuse it from.
+
+**`_rush_verbs()` is now the ONE gate**, and that matters more than it looks.
+Its own comment already recorded the bug a second mode caused — boost-kills
+silently off inside CHALLENGES, which made BOOST ONLY unwinnable and was
+found by `tools/measure.gd` scoring it 0 every run. Two call sites still
+inlined `mode == Mode.RUSH or mode == Mode.CHALLENGE`; a third mode would
+have hit the identical bug. They route through the helper now.
+
+**LEVELS is a menu row** — the last mile Q-039 named. `Level.list_ids()`
+reads `res://levels/`, left/right walks the synced files (the same idiom the
+CHALLENGE and RUSH rows use), and the detail line loads the file to describe
+it: name, duration, spawn count, and `RUSH VERBS` when the file asks for
+them. An empty `levels/` says *"no levels synced — run tools/sync-levels.sh"*
+and refuses to start, rather than offering a row that drops you into a blank
+arena. A level's HUD is the FILE's — its name and its own clock, because
+neither a wave number nor a Rush level means anything inside one — and the
+results card GRADES it against the same PAR table Rush uses, which works for
+an arcade level too because the tiers are a kills-per-second RATE, not a
+Rush-only idea.
+
+**And the export ships the files now.** The v3.6 export found that
+`levels/*.json` never reached the pck — `export_filter` is `all_resources`
+and a plain JSON file is not a resource — which would have made this row read
+"no levels synced" on every real device. `export_presets.cfg` carries
+`include_filter="levels/*.json"`; the files pack as raw files, which
+`Level.list_ids()` reads (it accepts both `.json` and a `.json.remap`).
+Verify on the NEXT export by opening LEVELS on the phone: it must list them.
+
+**Gates:** `tests/smoke.gd` PASS with 13 new checks, including the falsifying
+pair — with `authored` ON the clock never climbs and a hit never levels you
+down; with it OFF both still do exactly what they did. Boot sanity 0 errors.
+**`tools/trace.gd` on the classic seed is byte-identical** to `master`, so
+none of this reaches ordinary play.
+
+**MEASURED, 2026-09-08: the Rush level is the same level in both engines.**
+Upstream's `boost-lane.json` (56 spawns, 40 s, `mode: "rush"`) synced and
+traced: **`level-parity.mjs boost-lane` 169/169**, alongside first-light
+46/46 and three-rings 34/34. The gate earned its keep twice on the way:
+
+- A first cut of `_start_game()` cleared `level_id` for every mode but LEVEL.
+  `tools/trace.gd` sets `level_id` directly and starts in the default mode —
+  so the gate failed on **all three** levels at once, bodies on the spawn
+  ring instead of at the file's px/pz (first-light 2/4). The menu clears the
+  id now, `_start_game()` only assigns it.
+- `trace.gd` re-asserted `hp = 999` each frame but a RUSH level ends through
+  `rush.lives`; a stationary player was dead by t≈8 s and the trace stopped
+  at the 12th body of 56 (36/37, every seen body correct). The guard covers
+  lives now.
+
 ## Q-039 — ONE format for two engines: the port reads the editor's JSON (2026-09-05)
 
 **Owner ask, 2026-09-05: "make the Godot side read the same level JSON."**
