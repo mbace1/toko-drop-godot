@@ -144,6 +144,14 @@ results card GRADES it against the same PAR table Rush uses, which works for
 an arcade level too because the tiers are a kills-per-second RATE, not a
 Rush-only idea.
 
+**And the export ships the files now.** The v3.6 export found that
+`levels/*.json` never reached the pck — `export_filter` is `all_resources`
+and a plain JSON file is not a resource — which would have made this row read
+"no levels synced" on every real device. `export_presets.cfg` carries
+`include_filter="levels/*.json"`; the files pack as raw files, which
+`Level.list_ids()` reads (it accepts both `.json` and a `.json.remap`).
+Verify on the NEXT export by opening LEVELS on the phone: it must list them.
+
 **Gates:** `tests/smoke.gd` PASS with 13 new checks, including the falsifying
 pair — with `authored` ON the clock never climbs and a hit never levels you
 down; with it OFF both still do exactly what they did. Boot sanity 0 errors.
