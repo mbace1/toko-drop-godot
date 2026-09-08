@@ -550,6 +550,34 @@ the AgX split stays and the reason in the docs is now correct. If colour
 wins, disable glow on the compat tier and revert to ACES there (with glow
 off, AgX's compensation is no longer wanted — re-measure).
 
+### Q-040 — A menu row to PLAY a synced level (and ship the files at all)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: S
+- blocked-by: —
+- design: PORT_STATUS.md, the Q-039 "Open, and named" paragraph; upstream's
+  `toko-drop/PARITY_WITH_GODOT.md` §4, which calls this "the last mile"
+- gate: a photograph of the row, and a level reached from it on a device —
+  plus `grep -ac "res://levels" build/web/index.pck` > 0 on the export
+
+`level_id` is reachable only through `tools/trace.gd` and `tools/capture.gd`,
+so a level authored on the phone in `index.html?editor` plays on the iPad
+only under a developer's hands. That is the whole point of Q-039's shared
+format, so it is the last mile.
+
+**It is two changes, not one.** Found while exporting v3.6: the Web preset
+is `export_filter="all_resources"` with an empty `include_filter`, and a
+plain JSON file is not a Godot resource — the shipped pck contains no
+`res://levels/` path at all. A menu row alone would list nothing on the web
+build, which is the only build a phone runs. `include_filter="levels/*.json"`
+goes in the same commit, and the gate greps the pck so it cannot regress
+silently.
+
+Note the ordering rule this does NOT break (`CLAUDE.md`, "Which build
+leads"): a menu row is not a new verb. Playing an authored level is
+upstream's verb, already shipped there; this is the port catching up to it.
+
 ## Landed
 
 ### Q-039 — One level format for two engines: read the editor's JSON

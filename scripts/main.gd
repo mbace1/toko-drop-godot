@@ -66,7 +66,7 @@ func _set_arena_size(hx: float, hz: float) -> void:
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "3.5"
+const VERSION := "3.6"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286

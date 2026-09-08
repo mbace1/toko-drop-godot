@@ -5,12 +5,42 @@ Living doc — update this in the same commit as any change to `scripts/` or
 `mbace1/Suds-Jack`, `toko-drop/js/*.js` (referenced per line below). Visual
 target is `PORT_BRIEF.md`.
 
-## Start here (handoff, 2026-09-04)
+## Start here (handoff, 2026-09-08)
 
-Everything as of this note is **committed, pushed, and live** — v3.4 deployed
-and confirmed at `mbace1.github.io/Suds-Jack/toko-drop-godot/`, `master`
-clean, smoke green. Read `CLAUDE.md`'s "Which build leads" section first if
-this is a fresh session — it decides what belongs in this repo at all.
+**v3.6 is deployed** at `mbace1.github.io/Suds-Jack/toko-drop-godot/`
+(`Suds-Jack` `gh-pages` `657f44d4`), `master` clean, all gates green. Read
+`CLAUDE.md`'s "Which build leads" section first if this is a fresh session —
+it decides what belongs in this repo at all.
+
+**The lesson this deploy paid for: LANDED IS NOT SHIPPED.** Four items landed
+on 2026-09-05 — Q-037 (the floor draws a level's region), Q-038 (the owner's
+glow-off call for the Compatibility tier), Q-039 (one level format for two
+engines) and Q-036 (the dark-crush negative result) — and for three days none
+of them existed anywhere a phone could reach. The tell was cheap and nobody
+looked: the deployed `index.pck` was BYTE-IDENTICAL to `build/web/index.pck`,
+and that file's date was the day before the work. Q-038 in particular is an
+owner decision about how the game looks on the owner's own phone, so leaving
+it unexported made the decision unverifiable. **Check the deployed pck's hash
+against the local build at the end of any session that touched `scripts/` or
+`shaders/`.**
+
+v3.6 was gated before it went: smoke PASS, `arena_check` 8,396/8,396, boot
+0 script errors, and the cross-build level parity gate still stands at
+`first-light` 46/46 / `three-rings` 34/34 — its two level files re-synced
+from the deployed tree are byte-identical to the ones upstream's 2026-09-06
+re-audit measured, so that result carries. Photographed on both renderers on
+one seed (`seed:C0FFEE`, `level:three-rings`): the region reads the same on
+each, the compat tier no longer blooms, and the corner stamp says v3.6.
+
+**A gap the export itself revealed: `levels/*.json` DOES NOT SHIP.** The Web
+preset is `export_filter="all_resources"` with an empty `include_filter`, and
+a plain JSON file in a git-ignored directory is not a Godot resource — the
+exported pck contains no `res://levels/` path at all (`grep -ac "res://levels"
+build/web/index.pck` → 0). This does not break anything today, because the
+only way to reach `level_id` is `tools/trace.gd` / `capture.gd` on a desktop.
+It does mean the "menu row to play a synced level" item is TWO changes, not
+one: the row, and `include_filter="levels/*.json"` in `export_presets.cfg`.
+Filed as Q-040.
 
 **Browser build assessed through v236** (2026-09-04). v232–v236 read; see
 "Catching up: v232–v236" below. Audit the DEPLOYED tree (`gh-pages`, not
