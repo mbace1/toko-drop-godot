@@ -75,7 +75,15 @@ void fragment() {
 	float k = grid * pulse * 0.7;
 
 	// Q-037: the region (see the uniform block).
-	float neutral = mix(1e5, -1e5, u_shape_mode.y);
+	// Q-041: the "far away" sentinel MUST fit a half float. The term came in
+	// (Q-037) with 1e5, which is past mediump's 65504 — on a phone GPU that is
+	// Inf, mix() computes 0 * (-Inf) = NaN, and mix(col, NaN, 0.0) is NaN too,
+	// so the pass being OFF does not save it: every floor pixel goes white.
+	// Upstream shipped the identical bug as v240 and an owner screenshot found
+	// it (Android, base mode, white floor, 61 FPS); fixed there as v242. The
+	// web export is gl_compatibility, where fragment mediump is common. The
+	// arena is ~40 units across; 1e4 is as far away as the maths needs.
+	float neutral = mix(1e4, -1e4, u_shape_mode.y);
 	float sd = neutral;
 	float d0 = shape_d(u_shape0, world_xz, neutral);
 	float d1 = shape_d(u_shape1, world_xz, neutral);
