@@ -88,6 +88,26 @@ one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
 
+## Q-041 — HOTFIX: the floor's shape sentinel overflows a half float (2026-09-08)
+
+**Found upstream by an owner screenshot** (Android Chrome, base mode): the
+game running at 61 FPS with HUD and score fine and the WHOLE FLOOR WHITE —
+a NaN in the floor fragment shader. The shape term's "far away" sentinel
+was `mix(1e5, -1e5, u_shape_mode.y)`; on a phone GPU fragment floats are
+commonly **mediump — a 16-bit half whose largest finite value is 65504** —
+so 1e5 is Inf, `mix()` computes `0 × (−Inf) = NaN`, and `mix(col, NaN, 0.0)`
+is NaN as well. The pass being OFF does not save it.
+
+**This port has the identical line** — `floor_grid.gdshader` took the term
+from the same source (Q-037), and the web export is `gl_compatibility`,
+where fragment mediump is exactly what a phone or an iPad gives you. Fixed
+the same way upstream did as v242: the sentinel is `1e4`. One number.
+
+**Not reproduced here** — no phone GPU in this sandbox; the arithmetic is
+not in doubt and the upstream screenshot is the measurement. Smoke PASS,
+boot clean. Upstream added `scripts/shader-lint.mjs` to refuse the class;
+worth a Godot twin if this shader ever grows another sentinel.
+
 ## Q-039 — ONE format for two engines: the port reads the editor's JSON (2026-09-05)
 
 **Owner ask, 2026-09-05: "make the Godot side read the same level JSON."**
