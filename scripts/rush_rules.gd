@@ -133,6 +133,21 @@ var stars := 0
 var level := 1
 var level_t := 0.0
 var run_t := 0.0
+## Q-040: an AUTHORED level is running, so the level CLOCK belongs to the file.
+##
+## The decision this encodes (owner, 2026-09-06 — "go ahead"): an authored
+## timeline replaces the DIRECTOR, and nothing else. Every Rush verb stays
+## exactly as it is — boost kills, firing drops the shield, shared heat, the
+## chain, the abilities, three lives. What it does NOT keep is Rush's own
+## difficulty CLOCK: `level_duration()` levelling you up mid-file would move
+## the difficulty out from under a hand-placed timeline, and `take_hit()`
+## levelling you DOWN would restart a clock the file owns. So both are parked,
+## and the file's duration is the only clock in the run.
+##
+## The browser reaches the same place from the other side: its
+## `rush.levelDuration()` returns 1e9 while a level is playing (v237), which
+## is the same "park it" with a different spelling. Same rule, both builds.
+var authored := false
 
 var ability_charge := 0.0
 var buff_t := 0.0
@@ -172,6 +187,7 @@ func reset() -> void:
 	multiplier = 1
 	mult_t = 0.0
 	lives = LIVES_START
+	authored = false
 	ladder.clear()
 	stars = 0
 	_fresh_attempt()
@@ -235,6 +251,9 @@ func update(delta: float, want_boost: bool, firing: bool) -> void:
 	if ability_charge < charge_time():
 		ability_charge = minf(charge_time(), ability_charge + delta)
 
+	# Q-040: the file owns the clock — no level-up inside an authored level.
+	if authored:
+		return
 	level_t += delta
 	if level_t >= level_duration(level):
 		# Stamp the attempt just finished. Reaching here means the whole
@@ -293,6 +312,11 @@ func take_hit() -> bool:
 	mult_t = 0.0
 	lives -= 1
 	life_lost.emit(lives)
+	# Q-040: an authored level's difficulty is what the author placed. Levelling
+	# down would also restart `level_t`, which is the file's clock now.
+	if authored:
+		_fresh_attempt()
+		return lives <= 0
 	# Difficulty moves BOTH ways — Blade Rush shows "level down" text too.
 	if level > 1:
 		level -= 1

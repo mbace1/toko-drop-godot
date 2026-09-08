@@ -2975,9 +2975,49 @@ func _test_level_loader() -> void:
 	melee["rules"] = { "mode": "melee" }
 	var me := Level.validate(melee, names, pickups)
 	_check(me.size() == 1 and me[0].contains("CLOSE COMBAT"), "mode \"melee\" is refused BY NAME, not as a bad value (%s)" % ", ".join(me))
+	# Q-040: "rush" PLAYS now — an authored timeline replaces the director and
+	# every Rush verb stays. Only "melee" is still refused (no CLOSE COMBAT here).
 	var rushy: Dictionary = ed.duplicate(true)
 	rushy["rules"] = { "mode": "rush" }
-	_check(Level.validate(rushy, names, pickups).size() == 1, "mode \"rush\" is refused by name too (Q-039 leaves it open)")
+	var rl := Level.parse(rushy, names, pickups, Vector2(19.0, 11.0))
+	_check(rl.errors.is_empty(), "an authored RUSH level loads (Q-040) (%s)" % ", ".join(rl.errors))
+	_check(String(rl.rules["mode"]) == "rush", "…and the file's ruleset survives the parse")
+	_check(Level.MODES.has("arcade") and Level.MODES.has("rush") and not Level.MODES.has("melee"),
+		"this build plays arcade + rush, and refuses melee")
+
+	# Q-040: the level CLOCK belongs to the file. RushRules.authored parks
+	# Rush's own difficulty clock, both ways — no level-up on the timer, and
+	# no level-DOWN (which would also restart a clock the file owns).
+	var rr := RushRules.new()
+	rr.reset()
+	rr.authored = true
+	rr.level = 3
+	var lv0 := rr.level
+	for _i in 400:
+		rr.update(0.5, false, false)     # 200s — far past any level_duration
+	_check(rr.level == lv0, "authored: Rush's own clock never levels you up mid-file (%d)" % rr.level)
+	_check(rr.level_t == 0.0, "authored: and the level clock never advances")
+	rr.lives = 3
+	var dead := rr.take_hit()
+	_check(not dead and rr.level == lv0 and rr.lives == 2,
+		"authored: a hit costs a life but never levels you down (level %d, lives %d)" % [rr.level, rr.lives])
+	# …and with it off, the old behaviour is exactly as it was.
+	var rr2 := RushRules.new()
+	rr2.reset()
+	rr2.level = 3
+	rr2.lives = 3
+	rr2.take_hit()
+	_check(rr2.level == 2, "not authored: a hit still levels you down (%d)" % rr2.level)
+	var lvl_before := rr2.level
+	for _i in 400:
+		rr2.update(0.5, false, false)
+	_check(rr2.level > lvl_before, "not authored: the level clock still climbs (%d -> %d)" % [lvl_before, rr2.level])
+	_check(not RushRules.new().authored, "authored defaults OFF — a plain Rush run is untouched")
+
+	# Q-040: the LEVELS menu row reads the same directory the loader does.
+	var ids := Level.list_ids()
+	_check(ids.has("first-light") and ids.has("three-rings"),
+		"Level.list_ids() finds the synced files (%s)" % ", ".join(ids))
 	var badpk: Dictionary = ed.duplicate(true)
 	badpk["spawns"][1]["id"] = "key"
 	_check(Level.validate(badpk, names, pickups).size() == 1, "a pickup this pool cannot build is refused")

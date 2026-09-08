@@ -108,6 +108,52 @@ not in doubt and the upstream screenshot is the measurement. Smoke PASS,
 boot clean. Upstream added `scripts/shader-lint.mjs` to refuse the class;
 worth a Godot twin if this shader ever grows another sentinel.
 
+## Q-040 — an authored RUSH level plays, and LEVELS is a menu row (2026-09-06)
+
+**Owner, 2026-09-06: "go ahead with adding Rush mode and next steps."** Q-039
+left both of these open by name; this closes them.
+
+**The decision an authored Rush level needed, stated:** *an authored timeline
+replaces the DIRECTOR, and nothing else.* Every Rush verb stays exactly as it
+is — boost kills, firing drops the shield, shared heat, the chain, the four
+abilities, three lives. What it does not keep is Rush's own difficulty
+**clock**: levelling up mid-file would move the difficulty out from under a
+hand-placed timeline, and `take_hit()` levelling you DOWN would restart a
+clock the file owns. `RushRules.authored` parks both, and the file's duration
+is the only clock in the run. The browser reaches the same place from the
+other side (`rush.levelDuration()` returns 1e9 while a level plays, v237) —
+same rule, two spellings. `Level.MODES` gains `"rush"`; `"melee"` is still
+refused by name, because there is no CLOSE COMBAT here to refuse it from.
+
+**`_rush_verbs()` is now the ONE gate**, and that matters more than it looks.
+Its own comment already recorded the bug a second mode caused — boost-kills
+silently off inside CHALLENGES, which made BOOST ONLY unwinnable and was
+found by `tools/measure.gd` scoring it 0 every run. Two call sites still
+inlined `mode == Mode.RUSH or mode == Mode.CHALLENGE`; a third mode would
+have hit the identical bug. They route through the helper now.
+
+**LEVELS is a menu row** — the last mile Q-039 named. `Level.list_ids()`
+reads `res://levels/`, left/right walks the synced files (the same idiom the
+CHALLENGE and RUSH rows use), and the detail line loads the file to describe
+it: name, duration, spawn count, and `RUSH VERBS` when the file asks for
+them. An empty `levels/` says *"no levels synced — run tools/sync-levels.sh"*
+and refuses to start, rather than offering a row that drops you into a blank
+arena. A level's HUD is the FILE's — its name and its own clock, because
+neither a wave number nor a Rush level means anything inside one — and the
+results card GRADES it against the same PAR table Rush uses, which works for
+an arcade level too because the tiers are a kills-per-second RATE, not a
+Rush-only idea.
+
+**Gates:** `tests/smoke.gd` PASS with 13 new checks, including the falsifying
+pair — with `authored` ON the clock never climbs and a hit never levels you
+down; with it OFF both still do exactly what they did. Boot sanity 0 errors.
+**`tools/trace.gd` on the classic seed is byte-identical** to `master`, so
+none of this reaches ordinary play.
+
+**Still open:** the browser's `boost-lane.json` (a Rush level authored to
+teach the verb) is not merged upstream yet, so the parity gate has not run on
+a Rush level in both engines — only on the two arcade ones.
+
 ## Q-039 — ONE format for two engines: the port reads the editor's JSON (2026-09-05)
 
 **Owner ask, 2026-09-05: "make the Godot side read the same level JSON."**

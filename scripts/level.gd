@@ -55,7 +55,10 @@ const RULE_KEYS   := ["mode", "outside"]
 ## What the FORMAT allows, and what THIS build plays. The difference is
 ## refused with a message that names the gap.
 const FORMAT_MODES := ["arcade", "melee", "rush"]
-const MODES        := ["arcade"]
+## Q-040: "rush" plays here now — an authored timeline replaces the director
+## and every Rush verb stays (see RushRules.authored). "melee" is still
+## refused by name: this build has no CLOSE COMBAT to refuse it FROM.
+const MODES        := ["arcade", "rush"]
 const OUTSIDE      := ["push"]
 
 var id := ""
@@ -165,8 +168,7 @@ static func validate(json, type_names: Array, pickup_ids: Array = []) -> PackedS
 		elif not MODES.has(mode):
 			# The format allows it; this build does not play it. Named, so the
 			# file is not blamed — see the header.
-			var why := "CLOSE COMBAT is not in this build" if mode == "melee" else "an authored Rush level is not in this build yet (Q-039)"
-			errs.append('rules: mode "%s" — %s' % [mode, why])
+			errs.append('rules: mode "%s" — CLOSE COMBAT is not in this build' % mode)
 		if R.has("outside") and not OUTSIDE.has(R["outside"]):
 			errs.append("rules: outside must be one of %s (owner decision 2026-09-04: push)" % ", ".join(OUTSIDE))
 
@@ -302,6 +304,25 @@ static func parse(json, type_names: Array, pickup_ids: Array = [], auto_half: Ve
 			})
 	lv.rules = { "mode": json["rules"]["mode"], "outside": json["rules"].get("outside", "push") }
 	return lv
+
+
+## Q-040: every level id sitting in `res://levels/`, sorted. The menu's LEVELS
+## row walks this. Empty means nobody has run `tools/sync-levels.sh` — which is
+## a state the menu shows plainly rather than a row that does nothing.
+static func list_ids() -> PackedStringArray:
+	var out: PackedStringArray = []
+	var d := DirAccess.open("res://levels")
+	if d == null:
+		return out
+	for f in d.get_files():
+		# Godot renames imported resources; a .json is left alone, but an
+		# exported build serves it as .json.remap — accept both spellings.
+		if f.ends_with(".json"):
+			out.append(f.get_basename())
+		elif f.ends_with(".json.remap"):
+			out.append(f.trim_suffix(".json.remap"))
+	out.sort()
+	return out
 
 
 ## Reads and parses `res://levels/<id>.json` (or any path). A missing file is
