@@ -158,9 +158,20 @@ down; with it OFF both still do exactly what they did. Boot sanity 0 errors.
 **`tools/trace.gd` on the classic seed is byte-identical** to `master`, so
 none of this reaches ordinary play.
 
-**Still open:** the browser's `boost-lane.json` (a Rush level authored to
-teach the verb) is not merged upstream yet, so the parity gate has not run on
-a Rush level in both engines — only on the two arcade ones.
+**MEASURED, 2026-09-08: the Rush level is the same level in both engines.**
+Upstream's `boost-lane.json` (56 spawns, 40 s, `mode: "rush"`) synced and
+traced: **`level-parity.mjs boost-lane` 169/169**, alongside first-light
+46/46 and three-rings 34/34. The gate earned its keep twice on the way:
+
+- A first cut of `_start_game()` cleared `level_id` for every mode but LEVEL.
+  `tools/trace.gd` sets `level_id` directly and starts in the default mode —
+  so the gate failed on **all three** levels at once, bodies on the spawn
+  ring instead of at the file's px/pz (first-light 2/4). The menu clears the
+  id now, `_start_game()` only assigns it.
+- `trace.gd` re-asserted `hp = 999` each frame but a RUSH level ends through
+  `rush.lives`; a stationary player was dead by t≈8 s and the trace stopped
+  at the 12th body of 56 (36/37, every seen body correct). The guard covers
+  lives now.
 
 ## Q-039 — ONE format for two engines: the port reads the editor's JSON (2026-09-05)
 

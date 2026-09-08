@@ -1076,6 +1076,9 @@ func _process(delta: float) -> void:
 				# player into a blank arena.
 				if mode == Mode.LEVEL and _level_ids.is_empty():
 					return
+				# A LEVELS run must not follow the player into the next mode.
+				if mode != Mode.LEVEL:
+					level_id = ""
 				_start_game()
 
 	_update_shake(delta)
@@ -1750,9 +1753,14 @@ func _start_game() -> void:
 	# a previous level's ruleset cannot leak into a mode that is not one.
 	_level_rush = false
 	rush.authored = false
-	# CHALLENGE carries its own levels (Challenges.get_level), not these files,
-	# so every mode but LEVEL clears it — a stale id must not follow a run.
-	level_id = (_level_ids[_level_i] if _level_i < _level_ids.size() else "") if mode == Mode.LEVEL else ""
+	# Only ASSIGN here, never clear: tools/trace.gd and capture.gd set
+	# `level_id` directly and start in the default mode, and the cross-build
+	# parity gate runs through them. A first cut cleared it for every mode but
+	# LEVEL — and the gate failed on all three levels at once, bodies on the
+	# spawn ring instead of at the file's px/pz. The menu clears it instead
+	# (see the start handler), which is the only path a stale id can leak from.
+	if mode == Mode.LEVEL:
+		level_id = _level_ids[_level_i] if _level_i < _level_ids.size() else ""
 	save.mode = _cur_mode_key()   # every read below follows from this
 	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
 	rush.reset()
