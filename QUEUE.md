@@ -605,6 +605,8 @@ Five families with one idea each; level 2 is earned by a second pod of the same 
 
 The rooms already play here (Q-042, Q-043); missing are the ARCADE/CAMPAIGN doors, the campaign screen, the survive / quota / flawless goals and the grades. Upstream moved RUSH into its pause-menu cabinets at the same time; this build's Rush is a first-class mode with its own lives decision (Q-029), so its place here is the owner's call, not a port.
 
+**Decided 2026-09-25 — "always follow exactly":** RUSH moved to a pause-menu cabinet in Q-051, so this item is the doors, the campaign screen, the goals and the grades only.
+
 ### Q-049 — Sound per world (upstream v267)
 
 - status: Queued
@@ -628,6 +630,17 @@ A synthesised bed per world that answers to the world's rule and rises for a bos
 Where a person stops, whether they go again, what they leave on the floor — local only. On the web export it can write the site's shared log (`tokoPlayLog.v1`) through `JavaScriptBridge`, so both cabinets are read the same way.
 
 ## Landed
+
+### Q-051 — Follow exactly: RUSH is a cabinet, on HP, with no ZONE
+
+- status: **Landed, 2026-09-25** — this commit (`git log -S "Q-051"`)
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: owner, 2026-09-25: "Always follow exactly"; upstream v226, v235, v263, v232
+- gate: smoke (the title has no RUSH row; the armed cabinet makes CLASSIC's start a Rush run; ZONE gone; HP dots and a rising maximum; NONE never fires); trace unchanged; boost-lane parity
+
+Closes this build's last "kept on purpose" gameplay divergences. RUSH leaves the title and becomes the one ARCADE CABINET in a pause panel (also the title's OPTIONS, on PAUSE); Rush's lives show as HP dots and an extra life raises the maximum; the ZONE boost scheme and its toggle are removed; the ability list is upstream's — NONE (the default) and all four, with no CHALLENGES unlock. Detail in `PORT_STATUS.md` → Q-051.
 
 ### Q-040 — A menu row to PLAY a synced level (and ship the files at all)
 

@@ -41,23 +41,14 @@ class Stick:
 		return (delta / STICK_RADIUS).limit_length(1.0)
 
 ## Rush Mode needs a HELD boost, which the classic touch scheme cannot
-## express — its dash fires on RELEASE of the aim stick. Owner direction was to
-## try BOTH answers and put a toggle in a corner, so both are implemented and
-## `boost_scheme` picks between them live:
+## express — its dash fires on RELEASE of the aim stick. The touch boost is the
+## RIM: push the move stick past BOOST_RIM_FRAC of its travel.
 ##
-##   RIM  — push the move stick past BOOST_RIM_FRAC of its travel. No new
-##          screen furniture, and it reads as "run harder", but it costs you
-##          the ability to walk at full speed without boosting.
-##   ZONE — a dedicated pad in the bottom-left corner held with a third
-##          finger (or the left thumb sliding down onto it). Costs screen
-##          space, but move and boost stay independent.
-enum BoostScheme { RIM, ZONE }
-
+## Q-051: the ZONE scheme (a boost pad held with a third finger, and a corner
+## toggle between the two) is GONE, as it is upstream (v235). Owner direction
+## 2026-09-25: the port follows the browser exactly, and ZONE belongs to Rush.
 const BOOST_RIM_FRAC := 0.86
-const BOOST_ZONE_R := 78.0
-const TOGGLE_R := 30.0
-
-var boost_scheme := BoostScheme.RIM
+const BOOST_ZONE_R := 78.0     # the ABILITY pad's radius (the name is historical)
 var camera: Camera3D
 var left := Stick.new()
 var right := Stick.new()
@@ -66,8 +57,7 @@ var using_touch := false
 var _dash_queued := false
 var _pause_queued := false
 var _ability_queued := false
-var _boost_zone_touch := -1
-var _rush_active := false      # main.gd raises this so the zone/toggle exist
+var _rush_active := false      # main.gd raises this so the ability pad exists
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -81,16 +71,6 @@ func _on_touch(e: InputEventScreenTouch) -> void:
 		# Pause strip along the top centre — the one place a touch is not a stick.
 		if e.position.y < PAUSE_ZONE_H and absf(e.position.x - _screen_mid()) < PAUSE_ZONE_W * 0.5:
 			_pause_queued = true
-			return
-		# The scheme toggle: a small corner target, live only in Rush Mode.
-		if _rush_active and e.position.distance_to(toggle_pos()) < TOGGLE_R:
-			boost_scheme = BoostScheme.ZONE if boost_scheme == BoostScheme.RIM \
-				else BoostScheme.RIM
-			return
-		# The boost pad, when that scheme is selected.
-		if _rush_active and boost_scheme == BoostScheme.ZONE \
-				and e.position.distance_to(boost_zone_pos()) < BOOST_ZONE_R:
-			_boost_zone_touch = e.index
 			return
 		# The ability pad, bottom-centre, always live in Rush.
 		if _rush_active and e.position.distance_to(ability_pos()) < BOOST_ZONE_R:
@@ -107,9 +87,6 @@ func _on_touch(e: InputEventScreenTouch) -> void:
 		s.down_at = _now()
 		s.travelled = 0.0
 	else:
-		if e.index == _boost_zone_touch:
-			_boost_zone_touch = -1
-			return
 		for s in [left, right]:
 			if s.touch_id != e.index:
 				continue
@@ -134,21 +111,12 @@ func _screen_mid() -> float:
 func _screen() -> Vector2:
 	return get_viewport().get_visible_rect().size
 
-func boost_zone_pos() -> Vector2:
-	var r := _screen()
-	return Vector2(r.x * 0.10, r.y * 0.50)
-
 func ability_pos() -> Vector2:
 	var r := _screen()
 	return Vector2(r.x * 0.90, r.y * 0.50)
 
-func toggle_pos() -> Vector2:
-	return Vector2(_screen().x - 46.0, 46.0)
-
 func set_rush(active: bool) -> void:
 	_rush_active = active
-	if not active:
-		_boost_zone_touch = -1
 
 ## Held, unlike dash. Gamepad: left trigger or B. Keyboard: Shift (held).
 func boost_held() -> bool:
@@ -157,9 +125,7 @@ func boost_held() -> bool:
 	if Input.get_joy_axis(0, JOY_AXIS_TRIGGER_LEFT) > 0.4 \
 			or Input.is_joy_button_pressed(0, JOY_BUTTON_B):
 		return true
-	if _boost_zone_touch != -1:
-		return true
-	if boost_scheme == BoostScheme.RIM and left.active:
+	if left.active:
 		return left.delta.length() >= STICK_RADIUS * BOOST_RIM_FRAC
 	return false
 
@@ -249,4 +215,3 @@ func reset() -> void:
 		s.delta = Vector2.ZERO
 	_dash_queued = false
 	_ability_queued = false
-	_boost_zone_touch = -1

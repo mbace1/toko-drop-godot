@@ -66,7 +66,7 @@ func _set_arena_size(hx: float, hz: float) -> void:
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "3.7"
+const VERSION := "3.8"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -109,8 +109,6 @@ const MODE_ROWS := [
 	 # — pure arcade survival", which is its text for the mode being OFF: the
 	 # row described the ABSENCE of the feature as though it were the feature.
 	 "note": "upgrade cards every 3rd wave", "ready": true, "accent": Color(0.00, 1.00, 0.80)},
-	{"mode": Mode.RUSH, "label": "RUSH MODE",
-	 "note": "boost to kill — shoot and you lose your shield", "ready": true, "accent": Color(1.00, 0.53, 0.27)},
 	{"mode": Mode.CHALLENGE, "label": "CHALLENGES",
 	 "note": "levels, each with its own rule — reach C to open the next",
 	 "ready": true, "accent": Color(0.80, 0.53, 1.00)},
@@ -384,6 +382,7 @@ func _ready() -> void:
 
 	rush = RushRules.new()
 	add_child(rush)
+	_load_cabinet()   # Q-051: the armed cabinet and the ability, remembered
 	rush.overheated.connect(func(): audio.play("player"))
 	rush.level_changed.connect(func(_n, up): audio.play("wave" if up else "hit"))
 
@@ -999,6 +998,66 @@ func _make_hud_label(font_size: int) -> Label:
 	ThemeKit.style_hud_label(l, font_size)
 	return l
 
+## Q-051 — THE ARCADE CABINET, upstream's pause-menu cycle (v263: "RUSH is a
+## cabinet, not a door"). This build has one cabinet, RUSH; OFF is the
+## ordinary game. Left/right cycles it; up/down cycles Rush's ability while it
+## is armed. It applies to the NEXT run started, as upstream's does, and is
+## remembered (upstream: localStorage `tokoDropCabinet`).
+const CABINETS := ["", "rush"]
+const SETTINGS_PATH := "user://settings.cfg"
+var cabinet := ""
+var _title_opts := false
+
+func _load_cabinet() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(SETTINGS_PATH) == OK:
+		var v := String(cf.get_value("arcade", "cabinet", ""))
+		cabinet = v if v in CABINETS else ""
+		rush.ability = clampi(int(cf.get_value("arcade", "rush_ability", rush.ability)), 0, RushRules.ABILITY_DEF.size() - 1)
+
+func _save_cabinet() -> void:
+	var cf := ConfigFile.new()
+	cf.load(SETTINGS_PATH)
+	cf.set_value("arcade", "cabinet", cabinet)
+	cf.set_value("arcade", "rush_ability", rush.ability)
+	cf.save(SETTINGS_PATH)
+
+func _render_pause() -> void:
+	var head := "PAUSED" if state == State.PAUSED else "OPTIONS"
+	var cab := "RUSH" if cabinet == "rush" else "OFF"
+	# short lines: the message label is 40 px and centred, and a long line
+	# pushed the whole panel off both edges of a phone
+	var lines := [head, "", "CABINET  < %s >" % cab]
+	if cabinet == "rush":
+		lines.append("boost to kill")
+		# the ability is chosen BEFORE a run (upstream picks it off the
+		# ladder, never mid-fight), so pause shows it and the title sets it
+		if state == State.PAUSED:
+			lines.append("ABILITY  %s" % rush.ability_name())
+		else:
+			lines.append("ABILITY  ^ %s v" % rush.ability_name())
+		lines.append("from your next start")
+	else:
+		lines.append("the ordinary game")
+	lines.append("")
+	lines.append("PAUSE to %s" % ("resume" if state == State.PAUSED else "go back"))
+	_msg_label.text = "\n".join(lines)
+
+func _pause_input() -> void:
+	var changed := false
+	if Input.is_action_just_pressed("move_left") or Input.is_action_just_pressed("move_right"):
+		var step := 1 if Input.is_action_just_pressed("move_right") else -1
+		var k := (CABINETS.find(cabinet) + step + CABINETS.size()) % CABINETS.size()
+		cabinet = CABINETS[k]
+		changed = true
+	elif cabinet == "rush" and state == State.MENU \
+			and (Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("move_down")):
+		rush.cycle_ability(1 if Input.is_action_just_pressed("move_down") else -1)
+		changed = true
+	if changed:
+		_save_cabinet()
+		_render_pause()
+
 func _process(delta: float) -> void:
 	# The floor pulses on its own clock even on the menu — a still first screen
 	# reads as a broken page.
@@ -1008,11 +1067,27 @@ func _process(delta: float) -> void:
 		if state == State.PLAYING:
 			state = State.PAUSED
 			_menu_chrome(false)
-			_msg_label.text = "PAUSED\n\npress PAUSE to resume"
+			_render_pause()
 			_msg_label.show()
 		elif state == State.PAUSED:
 			state = State.PLAYING
 			_msg_label.hide()
+		elif state == State.MENU:
+			# Q-051: the title's OPTIONS, which is where upstream keeps the
+			# cabinet picker — the same panel as pause
+			_title_opts = not _title_opts
+			_menu_chrome(not _title_opts)
+			if _title_opts:
+				_render_pause()
+				_msg_label.show()
+			else:
+				_msg_label.hide()
+				_refresh_menu()
+			return
+	if state == State.PAUSED or (state == State.MENU and _title_opts):
+		_pause_input()
+		if state == State.MENU:
+			return
 
 	match state:
 		State.PLAYING:
@@ -1045,12 +1120,6 @@ func _process(delta: float) -> void:
 						break
 				_refresh_menu()
 				return
-			if MODE_ROWS[_menu_row]["mode"] == Mode.RUSH \
-					and (Input.is_action_just_pressed("move_left") \
-					or Input.is_action_just_pressed("move_right")):
-				rush.cycle_ability(1 if Input.is_action_just_pressed("move_right") else -1)
-				_refresh_menu()
-				return
 			# Q-040: and left/right walks the synced level files, same idiom.
 			if MODE_ROWS[_menu_row]["mode"] == Mode.LEVEL and not _level_ids.is_empty() \
 					and (Input.is_action_just_pressed("move_left") \
@@ -1069,6 +1138,10 @@ func _process(delta: float) -> void:
 					or input_mgr.left.active or input_mgr.right.active:
 				var row: Dictionary = MODE_ROWS[_menu_row]
 				mode = row["mode"] if row["ready"] else Mode.CLASSIC
+				# Q-051: upstream's startRun() routes the arcade start through the
+				# armed cabinet — RUSH is a cabinet now, not a title row
+				if mode == Mode.CLASSIC and cabinet == "rush":
+					mode = Mode.RUSH
 				if mode == Mode.CHALLENGE and not Challenges.unlocked(challenge_i, save):
 					challenge_i = 0
 				# Q-040: an empty levels/ is not a run. The row already says so;
@@ -1770,11 +1843,9 @@ func _start_game() -> void:
 	save.mode = _cur_mode_key()   # every read below follows from this
 	sticks.show_hints = save.runs.is_empty()   # hints for a first-timer only
 	rush.reset()
-	# GW3's drones arrive over its campaign; so do these. An ability that has
-	# not been earned yet is simply not selectable.
-	var owned := Challenges.unlocked_abilities(save)
-	if not owned.has(rush.ability):
-		rush.ability = owned[0]
+	# Q-051: every ability is selectable, as upstream — the unlock gate hung
+	# off CHALLENGES, which was dropped (Q-028), so a new player could only
+	# ever have HEAT EXCHANGE whatever the cabinet said
 	_start_challenge() if mode == Mode.CHALLENGE else _clear_challenge()
 	_apply_level()   # Q-032: after the size reset above, so the level's arena wins
 	_wave_peak = 0
@@ -2352,10 +2423,10 @@ func _mode_detail_text(i: int) -> String:
 		out.append("%ds — %s" % [int(lv["duration"]), Challenges.RULE_BLURB[lv["rule"]]])
 		if best > 0:
 			out.append("best %d%s" % [best, ("   GRADE " + g) if g != "" else ""])
-	if row["mode"] == Mode.RUSH:
-		# The < > only appear on the SELECTED row: arrows you cannot press yet
-		# read as a control that is broken.
-		out.append("< %s >  %s" % [rush.ability_name(), rush.ability_blurb()])
+	if row["mode"] == Mode.CLASSIC and cabinet == "rush":
+		# Q-051: the armed cabinet is what CLASSIC's start plays — say so here,
+		# or the menu lies about its own button
+		out.append("RUSH cabinet armed — %s   (PAUSE to change)" % rush.ability_name())
 	if row["mode"] == Mode.LEVEL:
 		# Q-040: read the file to describe it — a menu that names a level it
 		# cannot actually load would be worse than one that says so.
@@ -2564,8 +2635,8 @@ func _update_hud() -> void:
 		# clock, because neither a wave number nor Rush's level means anything
 		# inside one. Rush levels keep the heat/chain row; arcade ones keep HP.
 		var lt2 := waves.level.duration - waves.wave_timer
-		_hp_label.text = ("LIVES " if _level_rush else "HP ") + pips \
-			+ ("" if _level_rush else "o".repeat(maxi(player.max_hp - player.hp, 0)))
+		_hp_label.text = "HP " + pips \
+			+ "o".repeat(maxi((rush.max_lives - rush.lives) if _level_rush else (player.max_hp - player.hp), 0))
 		_wave_label.text = "%s  %d:%02d" % [waves.level.name, int(lt2) / 60, int(lt2) % 60]
 		_wave_bar.value = clampf(waves.wave_timer / maxf(0.001, waves.level.duration), 0.0, 1.0)
 		if _level_rush:
@@ -2576,7 +2647,8 @@ func _update_hud() -> void:
 		else:
 			_rush_label.text = "%d kills" % rush.level_kills
 	elif mode == Mode.RUSH:
-		_hp_label.text = "LIVES " + pips
+		# Q-051: Rush runs on HP, as upstream — the lives are the HP dots
+		_hp_label.text = "HP " + pips + "o".repeat(maxi(rush.max_lives - rush.lives, 0))
 		# v227: the live tier sits with the level, so a run has feedback long
 		# before the level-up stamp lands.
 		var lt := rush.live_tier()
