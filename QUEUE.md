@@ -550,9 +550,88 @@ the AgX split stays and the reason in the docs is now correct. If colour
 wins, disable glow on the compat tier and revert to ACES there (with glow
 off, AgX's compensation is no longer wanted — re-measure).
 
-### Q-040 — A menu row to PLAY a synced level (and ship the files at all)
+### Q-044 — Waves become FRONTS: the clocked round (upstream v256–v258)
 
 - status: Queued
+- repo: toko-drop-godot
+- size: L
+- blocked-by: —
+- design: upstream `VERSIONS.md` v256, v257, v258; `PORT_STATUS.md` → "Catching up: v237-v268" item 1
+- gate: a Godot soak to wave 40 — no stall, a bounded floor, a bounded revenge field; smoke; the level gate still 18/18
+
+Upstream's director is no longer "clear the floor, next wave": a 12–15 s clocked round with pulsed arrivals and survivors carried over, drops and gates that survive the boundary, a front that pulls in when the floor empties, THE CURTAIN kind, a ceiling on the live floor and a revenge cap that scales. Every later item is built on this shape. The soak is part of the item because upstream found its freeze and its unbounded floor only at depth.
+
+### Q-045 — Revenge is a species trait (upstream v253, v254)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: upstream `VERSIONS.md` v253, v254; `tuning.js` `revenge`
+- gate: smoke: a GLOBBO corpse is silent, a SPITTOR's answers from wave 3, the field cap binds
+
+Here every corpse still answers in its dialect. Upstream now has only the ten shooters' corpses answer, from wave 3, capped on the field — wave-2 revenge bullets went 37 → 0 and survival 42 → 57 s. VOLATILE fires at revenge speed.
+
+### Q-046 — THE DROP: depths, the fall, a rule per world, a boss per world (upstream v260, v261, v264, v266)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: L
+- blocked-by: Q-044
+- design: upstream `VERSIONS.md` v260, v261, v264, v266; `tuning.js` `depth`
+- gate: every depth reached in a seeded run with its look, roster and rule; the fall photographed on both renderers
+
+Every boss floor is a DEPTH with its own look, roster and one rule (current, sweep, dark, slip, updraft); the floor gives and you fall to the next; while a world's boss lives, the rule comes from the boss. The rules are gameplay and follow upstream's numbers; the fall and the looks are exactly the presentation and physics this build exists to push.
+
+### Q-047 — The weapon pods refreshed: families, level 2 earned (upstream v262)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: upstream `VERSIONS.md` v262; `tuning.js` `weapons`
+- gate: smoke: a second pod of a family is level 2, a hit takes it back, the SHOTGUN pod drops outside RUSH
+
+Five families with one idea each; level 2 is earned by a second pod of the same family and lost on a hit; the SHOTGUN leaves RUSH as a pod. Here LV2 still drops directly from wave 4 at 28%. Upstream's pierce bug does not exist here (no weapon pierces).
+
+### Q-048 — Two doors and the campaign: rooms with goals and grades (upstream v263, v265)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: upstream `VERSIONS.md` v263, v265; `tuning.js` `campaign`
+- gate: every room reachable from a CAMPAIGN screen; a graded result per goal; where RUSH lives decided by the owner
+
+The rooms already play here (Q-042, Q-043); missing are the ARCADE/CAMPAIGN doors, the campaign screen, the survive / quota / flawless goals and the grades. Upstream moved RUSH into its pause-menu cabinets at the same time; this build's Rush is a first-class mode with its own lives decision (Q-029), so its place here is the owner's call, not a port.
+
+### Q-049 — Sound per world (upstream v267)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: M
+- blocked-by: Q-046
+- design: upstream `VERSIONS.md` v267; `js/bed.js`
+- gate: each world's bed rendered offline and measured the way upstream measured it (levels, the cue each rule sends)
+
+A synthesised bed per world that answers to the world's rule and rises for a boss. Here it would be an `AudioStreamGenerator` or a bus of effects. It waits for Q-046, because a world has to exist to have a sound.
+
+### Q-050 — The play reader (upstream v268)
+
+- status: Queued
+- repo: toko-drop-godot
+- size: S
+- blocked-by: —
+- design: upstream `VERSIONS.md` v268; `js/playlog.js`
+- gate: the report's numbers from a scripted session; one shared-log line per run on the web export
+
+Where a person stops, whether they go again, what they leave on the floor — local only. On the web export it can write the site's shared log (`tokoPlayLog.v1`) through `JavaScriptBridge`, so both cabinets are read the same way.
+
+## Landed
+
+### Q-040 — A menu row to PLAY a synced level (and ship the files at all)
+
+- status: **Landed** in `01cea7f` (PR #4)
 - repo: toko-drop-godot
 - size: S
 - blocked-by: —
@@ -577,8 +656,6 @@ silently.
 Note the ordering rule this does NOT break (`CLAUDE.md`, "Which build
 leads"): a menu row is not a new verb. Playing an authored level is
 upstream's verb, already shipped there; this is the port catching up to it.
-
-## Landed
 
 ### Q-043 — The swarm's spacing: upstream's crowd, and a parity gate that survives it
 
