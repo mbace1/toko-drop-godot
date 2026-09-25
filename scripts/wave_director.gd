@@ -59,7 +59,8 @@ signal level_pickup(id: String, x: float, z: float, life: float)
 ## rather than becoming a GLOBBO at spawn.
 const KNOWN_TYPES := ["GLOBBO", "YELA_CUBE", "SPITTOR", "FANNER", "ORANGE_CUBE", "WEEVA",
 	"SLUDGE_CUBE", "SPLITTA", "REDD_CUBE", "PURP_CUBE", "TORO", "PYRA", "BOTFLY", "BULWARK",
-	"WARDEN", "BAMBU", "CLOAKER", "MAGNA", "DRAPER", "SHEPHERD", "SIREN", "REDD_MINI", "PURP_MINI"]
+	"WARDEN", "BAMBU", "CLOAKER", "MAGNA", "DRAPER", "SHEPHERD", "SIREN", "REDD_MINI", "PURP_MINI",
+	"RIBBON", "SLUG"]
 
 const POOL := {
 	"GLOBBO":      [1, 1, false],
@@ -85,6 +86,10 @@ const POOL := {
 	"CLOAKER":     [9, 4, true],
 	"MAGNA":       [10, 5, false],
 	"DRAPER":      [7, 5, true],
+	# Q-042: upstream v251's TESTERS — the arc-movers, from wave 2 at cost 3
+	# (which keeps them out of swarm groups), appended as upstream appends them.
+	"RIBBON":      [2, 3, false],
+	"SLUG":        [2, 3, false],
 }
 
 ## Children are spawned BY a parent's death, never drawn from the wave budget,
@@ -491,6 +496,8 @@ func _make(name: String) -> Enemy:
 		"SIREN":       return Siren.new()
 		"REDD_MINI":   return ReddMini.new()
 		"PURP_MINI":   return PurpMini.new()
+		"RIBBON":      return Ribbon.new()
+		"SLUG":        return Slug.new()
 	push_error("WaveDirector: unknown enemy '%s'" % name)
 	return Globbo.new()
 
@@ -521,6 +528,7 @@ func update(delta: float) -> void:
 			corpses.append(e)
 			continue
 		e.update(delta)
+	_spawn_slug_halves()
 
 	_run_support(delta)
 
@@ -559,6 +567,27 @@ func _split(parent: Enemy) -> void:
 		c.drips = drips
 		c.rng = rng          # children inherit the run's gameplay stream
 		c.init()
+		enemies.append(c)
+
+## Q-042: a SLUG hit in the middle SPLITS — the back half, reversed, becomes a
+## second animal with its own head, spawned the frame after the hit exactly as
+## main.js does. The chain rebuild is the same path a fresh slug takes, and the
+## child inherits the parent's speed (upstream passes its speedMult on) and
+## never splits again (v253).
+func _spawn_slug_halves() -> void:
+	for i in enemies.size():
+		var e := enemies[i]
+		if not (e is Slug) or (e as Slug).split_pts.is_empty():
+			continue
+		var pts: Array = (e as Slug).split_pts
+		(e as Slug).split_pts = []
+		var c := Slug.new()
+		enemies_root.add_child(c)
+		c.position = Vector3((pts[0] as Vector2).x, 0.0, (pts[0] as Vector2).y)
+		_wire_body(c)
+		c.build_chain(pts)
+		c.speed = e.speed
+		c.no_split = true
 		enemies.append(c)
 
 ## The support species act on the SWARM, not on the player, so they are run

@@ -88,6 +88,64 @@ one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
 
+## Q-042 — the arc-movers: RIBBON and SLUG, and every synced level plays (2026-09-25)
+
+**What was found.** Upstream's campaign (v265) is eighteen authored rooms in
+six worlds, all in the one level format this build reads (Q-039). Synced and
+loaded here, **15 of 18 loaded; the three refused were exactly world 2, THE
+WELL** — `undertow`, `eddy`, `slug-run` — each by name: `unknown enemy type
+"RIBBON"` / `"SLUG"`. Those are upstream v251's arc-mover testers, which this
+build never had.
+
+**What landed.**
+- `scripts/arc_mover.gd` — the shared steering, `enemy.js` `_arcSteer` line
+  for line: a TURN-RATE cap (2.2 rad/s), a serpentine that is a heading
+  OFFSET (1.7 Hz, 0.55 rad) rather than a sideways shove, a wall that bends
+  the heading off it. The weave phase bends the path, so it is drawn from the
+  run's gameplay stream (upstream uses `Math.random()`; CLAUDE.md's rule).
+- `scripts/slug.gd` — eleven gel domes 0.50 apart, 0.46 tapering to 0.18,
+  hp = the segment count. **The rule:** a shot to an END shortens it; a shot to
+  the MIDDLE splits it, the back half REVERSED so its old tail is a new head
+  facing you; the director spawns that second animal the next frame
+  (`WaveDirector._spawn_slug_halves`, main.js's order), with the parent's speed.
+  v253's limits: a chain under four never splits, a split child never splits
+  again. An environment kill (bomb, boost) takes the whole animal, as upstream.
+- `scripts/ribbon.gd` — a strip swept along the head's own recent path,
+  sampled by DISTANCE (22 × 0.30), hit along its length at the width it has
+  there. The gameplay reads the samples exactly as upstream does; the strip
+  drawn through them (Catmull-Rom, both faces, the gel material) is this
+  build's own.
+- `Enemy.long_body` / `hit_test` / `touches`: `main.gd` asks a long body
+  instead of the head circle — shots, contact, and RUSH's boost contact. Every
+  other body keeps its inline circle test, untouched. Both are in the wave
+  pool from wave 2 at cost 3, and in the melee set.
+
+**One thing done differently, on purpose.** Upstream's `touches()` IS
+`hitTest()`, so contact records the segment the player brushed, and the next
+hit that arrives without its own test (a gate's edge) is charged to that
+segment. Here contact does not record: `Slug.touches` restores the segment.
+Worth a one-line fix upstream.
+
+**Not ported:** the dash that EATS segments (`_slugCut`) — it belongs to CLOSE
+COMBAT, which this build does not have.
+
+**Gates.** All 18 synced levels load. Cross-build parity on the three that use
+the new bodies: `undertow` **55/55**, `eddy` **91/91**, `slug-run` **49/49**.
+Smoke **PASS** (667 checks; 33 new in `_test_arc_movers`), with four mutants
+of the new code — the slug never splitting, the split half not reversed, the
+v253 limits gone, a touch re-charging the segment — and one of the ribbon
+(hittable only at its head) each turning it red. `arena_check` PASS; the scene
+boots with no script errors. **The seeded trace changes, and only because of
+the pool:** two more eligible types reshuffle wave 3's draw even when neither
+is picked; with the two pool lines removed and everything else in place the
+trace is byte-identical to `master` (0 lines), and the new trace reproduces
+itself run to run (0 lines).
+
+A trap paid for here, worth knowing: after a `git stash -u` round-trip, Godot's
+`global_script_class_cache.cfg` no longer lists classes the stash removed, and
+a headless `--script` run then HANGS on the parse error instead of exiting.
+Re-run `--import` after any stash that adds or removes a `class_name` file.
+
 ## Q-041 — HOTFIX: the floor's shape sentinel overflows a half float (2026-09-08)
 
 **Found upstream by an owner screenshot** (Android Chrome, base mode): the

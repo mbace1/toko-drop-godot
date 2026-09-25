@@ -28,6 +28,7 @@ func _init() -> void:
 	_test_cloaker(root)
 	_test_magna(root)
 	_test_draper(root)
+	_test_arc_movers(root)
 	_test_cargo(root)
 	_test_vault_crate(root)
 	_test_escort_bot(root)
@@ -737,6 +738,102 @@ func _rev_director(root: Node3D, target: Node3D, bullets: BulletPool) -> WaveDir
 	wd.bullets = bullets
 	wd.wave = 1   # non-zero so update() is in a "wave running" state
 	return wd
+
+## Q-042: the v251 arc-movers. Upstream's rules, checked on the bodies: the
+## RIBBON is hit along its length at the width it has there; the SLUG
+## SHORTENS from an end, SPLITS from the middle into a reversed second animal
+## (spawned by the director next frame, and never splitting again), does not
+## split below four, and an environment kill takes the whole animal. Both
+## steer under a turn-rate cap and are in the roster, the pool and the melee set.
+func _test_arc_movers(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(0.0, 0.0, -6.0)
+	var enemies_root := Node3D.new()
+	root.add_child(enemies_root)
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+	wd.half_x = 19.0
+	wd.half_z = 11.0
+	wd.target = target
+	wd.enemies_root = enemies_root
+	wd.wave = 1
+
+	for n in ["RIBBON", "SLUG"]:
+		_check(n in WaveDirector.KNOWN_TYPES, "%s is in the roster a level is validated against" % n)
+		_check(WaveDirector.POOL.has(n) and WaveDirector.POOL[n][0] == 2 and WaveDirector.POOL[n][1] == 3,
+			"%s draws from wave 2 at cost 3, as upstream's tester (tuning.js pool)" % n)
+
+	# --- the RIBBON -----------------------------------------------------------
+	var rb: Ribbon = _place(root, Ribbon.new(), Vector3(4.0, 0.0, 2.0), target, null)
+	_check(rb.hp == 4 and rb.long_body, "RIBBON: hp 4, and a long body")
+	_check(rb.trail.size() == Ribbon.SAMPLES, "its body is %d samples" % Ribbon.SAMPLES)
+	# the initial trail runs straight back along -z from the head, 0.30 apart
+	var mid := rb.trail[10]
+	var w10 := Ribbon.WIDTH * (1.0 - 10.0 / Ribbon.SAMPLES)
+	_check(rb.hit_test(mid.x + w10 * 0.8, mid.y, 0.0), "it is hittable along its length (sample 10, inside its width)")
+	_check(not rb.hit_test(mid.x + w10 + 0.05, mid.y, 0.0), "and only at the width it has there")
+	_check(rb.hit_test(rb.position.x + 0.39, rb.position.z, 0.0) and not rb.hit_test(rb.position.x + 0.41, rb.position.z, 0.0),
+		"the head is the species radius, 0.40")
+	# the turn-rate cap: turn to face a target straight behind it
+	var h0 := rb.heading
+	target.position = Vector3(rb.position.x - cos(h0) * 5.0, 0.0, rb.position.z - sin(h0) * 5.0)
+	rb.update(1.0 / 60.0)
+	var dh := absf(wrapf(rb.heading - h0, -PI, PI))
+	_check(dh <= ArcMover.TURN_RATE / 60.0 + 1e-6, "it cannot turn faster than %.1f rad/s (turned %.4f in a frame)" % [ArcMover.TURN_RATE, dh])
+	var before := rb.trail[0]
+	for i in 30:
+		rb.update(1.0 / 60.0)
+	_check(rb.trail[0] != before and rb.trail.size() == Ribbon.SAMPLES, "moving lays new samples down and keeps the length")
+
+	# --- the SLUG -------------------------------------------------------------
+	target.position = Vector3(0.0, 0.0, -6.0)
+	var sl: Slug = _place(root, Slug.new(), Vector3(-4.0, 0.0, 3.0), target, null)
+	_check(sl.hp == 11 and sl.chain.size() == 11, "SLUG: eleven segments, hp is the count")
+	var d01 := Vector2(sl.chain[0]["x"], sl.chain[0]["z"]).distance_to(Vector2(sl.chain[1]["x"], sl.chain[1]["z"]))
+	_check(absf(d01 - Slug.SPACING) < 1e-4, "segments sit 0.50 apart")
+	var tail: Dictionary = sl.chain[10]
+	_check(sl.hit_test(tail["x"], tail["z"], 0.1), "it is hittable at the tail (a long body)")
+	_check(sl.touches(tail["x"], tail["z"], Player.RADIUS), "and it hurts to touch there")
+	_check(sl._hit_seg == 10, "a touch does not re-charge the hit to the segment the player brushed")
+	_check(not sl.take_hit(1) and sl.chain.size() == 10 and sl.hp == 10 and sl.split_pts.is_empty(),
+		"a shot to the TAIL shortens it (10 left), no split")
+	var seg1 := Vector2(sl.chain[1]["x"], sl.chain[1]["z"])
+	sl.hit_test(sl.chain[0]["x"], sl.chain[0]["z"], 0.05)
+	sl.take_hit(1)
+	_check(sl.chain.size() == 9 and Vector2(sl.position.x, sl.position.z).distance_to(seg1) < 1e-4,
+		"a shot to the HEAD shortens it from the front: segment 1 is the new head")
+	# a middle hit: segment 4 of 9 — the front keeps 4, the back (4 more) is reversed
+	var back_tail := Vector2(sl.chain[8]["x"], sl.chain[8]["z"])
+	sl.hit_test(sl.chain[4]["x"], sl.chain[4]["z"], 0.05)
+	_check(not sl.take_hit(1) and sl.chain.size() == 4 and sl.split_pts.size() == 4,
+		"a shot to the MIDDLE splits it: 4 in front, 4 behind (the hit segment is gone)")
+	_check((sl.split_pts[0] as Vector2).distance_to(back_tail) < 1e-4, "and the back half is REVERSED: its old tail is its new head")
+	wd.enemies.append(sl)
+	wd.update(1.0 / 60.0)
+	var halves := wd.enemies.filter(func(e): return e is Slug)
+	_check(halves.size() == 2, "the director spawns the second animal next frame (%d slugs)" % halves.size())
+	var child: Slug = halves[1]
+	_check(child.no_split and child.chain.size() == 4 and child.hp == 4 and child.speed == sl.speed,
+		"the child: 4 segments, the parent's speed, and it never splits")
+	# (a zero-radius probe ON segment 1: a fatter one reaches the head, 0.50 away at r 0.46, first)
+	child.hit_test(child.chain[1]["x"], child.chain[1]["z"], 0.0)
+	_check(child._hit_seg == 1, "the probe lands on segment 1, a middle segment")
+	child.take_hit(1)
+	_check(child.chain.size() == 3 and child.split_pts.is_empty(), "a middle shot on a split child only shortens it")
+	child.hit_test(child.chain[1]["x"], child.chain[1]["z"], 0.0)
+	child.take_hit(1)
+	_check(child.chain.size() == 2 and child.split_pts.is_empty(), "and a chain under four never splits (v253)")
+	child.take_hit(1)
+	_check(child.alive and child.chain.size() == 1, "down to one segment")
+	_check(child.take_hit(1) and not child.alive, "and the last one kills it")
+	var sl2: Slug = _place(root, Slug.new(), Vector3(6.0, 0.0, -3.0), target, null)
+	_check(sl2.take_hit(99) and not sl2.alive, "an environment kill (a bomb, a boost) takes the whole animal")
+
+	# --- the melee set ----------------------------------------------------------
+	var main_script: Script = load("res://scripts/main.gd")
+	var src: String = main_script.source_code
+	_check(src.contains("or e is Ribbon or e is Slug"), "both are in the melee set (they attack by touch, along the body)")
 
 func _test_wave_clears_and_advances(root: Node3D) -> void:
 	var target := Node3D.new()
