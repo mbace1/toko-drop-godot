@@ -7,7 +7,11 @@ target is `PORT_BRIEF.md`.
 
 ## Start here (handoff, 2026-09-25)
 
-**v3.7 ships Q-040 → Q-043** to `mbace1.github.io/Suds-Jack/toko-drop-godot/`:
+**v3.8 ships Q-051 — FOLLOW EXACTLY** (owner, 2026-09-25): RUSH is a
+pause-menu cabinet, on HP dots, with no ZONE and upstream's ability list.
+This build now has no decided gameplay divergences; see `CLAUDE.md`.
+
+**v3.7 shipped Q-040 → Q-043** to `mbace1.github.io/Suds-Jack/toko-drop-godot/`:
 the LEVELS menu row (with the level files actually in the pck), the
 half-float floor hotfix (Q-041 — the deployed v3.6 still had the white-floor
 bug on phones), RIBBON and SLUG (all 18 synced levels load), and the crowd.
@@ -119,6 +123,41 @@ own work**: some other agent's plain (non-`--check`) `versions.mjs` run on
 one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
+
+## Q-051 — follow exactly: RUSH is a cabinet, on HP, with no ZONE (2026-09-25)
+
+**Owner direction: "Always follow exactly."** On gameplay this build now has
+NO decided divergences from the browser (the rule is in `CLAUDE.md`). Four
+things converged:
+
+- **RUSH is an ARCADE CABINET, not a title row** (upstream v263: "a cabinet,
+  not a door"). The title loses its RUSH MODE row. PAUSE opens a panel —
+  in a run as PAUSED, on the title as OPTIONS, which is where upstream keeps
+  its cabinet picker — with `CABINET < OFF | RUSH >`. Armed, the CLASSIC
+  start plays Rush (upstream's `startRun()` routes through the cabinet), the
+  CLASSIC row says so, and the choice is remembered (`user://settings.cfg`,
+  upstream's `tokoDropCabinet`). It applies from the next start.
+- **The ability is chosen before a run, from upstream's list** — NONE (the
+  default) and the four, cycled up/down on the title's OPTIONS; read-only
+  while paused. The CHALLENGES unlock gate is gone: it hung off a dropped
+  mode (Q-028), so a new player could only ever have HEAT EXCHANGE whatever
+  they picked — found by photographing the panel.
+- **Rush on HP** (upstream v226). The numbers never differed — three to
+  start, one more every 25,000, a hit costs one and a level — so this is
+  the HUD: `HP @@o`, and an extra life raises the maximum as `maxHp++`
+  does upstream. Q-029's "rush lives is 3" still holds; the number is
+  upstream's `TUNING.rush.lives.start`.
+- **ZONE is gone** (upstream v235): the corner toggle, the held pad, the
+  enum. The RIM boost remains.
+
+**Gates.** Smoke PASS ×3 (677 checks; new: no RUSH row, the armed cabinet
+changes CLASSIC's start and its row text, ZONE absent, HP dots and a rising
+maximum, NONE is the default and never fires). A pre-existing smoke flake
+fixed on the way: two gates spawned close together both paid out when the
+dash crossed them. `arena_check` PASS, crowd 12/12, boot clean, seeded trace
+0 lines vs Q-043, parity `boost-lane` 281/281. Photographed in the web
+build: OPTIONS armed with RUSH, the next start a Rush run reading `HP @@o`,
+and the PAUSED panel.
 
 ## Q-043 — the swarm's spacing: upstream's crowd, exactly (2026-09-25)
 

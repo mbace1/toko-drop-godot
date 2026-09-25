@@ -57,16 +57,20 @@ further Godot build-out. The design docs stay as a record, same shape as
 `sudsjack/`'s "SET DOWN" — do not resume without the owner asking in their
 own words.
 
-**Both of the once-open Rush divergences are now settled.** The four
-selectable abilities went upstream as v232 and their numbers lead. **RUSH
-lives: owner decision 2026-09-04, "rush lives is 3" (Q-029).** Upstream v226
-removed the browser's `rush.lives` as dead code (it was never spent there;
-extra lives already worked through player HP), while this repo's `rush.lives`
-is a live, spent resource. That divergence is KEPT on purpose: this build
-runs Rush on 3 lives, `tests/smoke.gd` pins the number, and v226 is not to
-be ported. Recorded in `mbace1/Suds-Jack`'s `toko-drop/PARITY_WITH_GODOT.md`
-and [PR #311](https://github.com/mbace1/Suds-Jack/pull/311); whether the
-browser converges back to lives is upstream's call, not a port task.
+## FOLLOW EXACTLY — owner direction, 2026-09-25
+
+> "Always follow exactly."
+
+**On gameplay this build follows the browser EXACTLY — no decided
+divergences.** Where the two differ, the browser is right and this build
+converges; a difference is a port task, never a feature to keep. The
+earlier "kept on purpose" divergences are all closed by this (Q-051): Rush
+runs on HP as upstream's v226 (Q-029's "lives is 3" still holds — three HP
+dots, an extra one every 25,000, a hit costs one and a level), the ZONE boost
+scheme is gone as upstream's v235, and RUSH is a pause-menu ARCADE CABINET,
+not a title row, as upstream's v263 — its ability is chosen there before a
+run, from all four plus NONE, with no unlock. The graphics/physics PUSH above
+is unchanged: that is HOW it looks and moves, not WHAT the game is.
 
 ## Two renderers, two gel tiers — Q-030, 2026-09-04
 

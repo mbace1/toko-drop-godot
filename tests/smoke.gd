@@ -554,12 +554,14 @@ func _test_rush_rules(root: Node3D) -> void:
 
 	# --- lives, and levels that move BOTH ways -----------------------------
 	r.reset()
-	_check(r.lives == RushRules.LIVES_START, "a Rush run starts on lives, not HP")
-	# Q-029, owner decision 2026-09-04: "rush lives is 3". This build KEEPS its
-	# spent lives counter and does NOT port the browser's v226 (which removed
-	# theirs as dead code and runs Rush on HP). Pinning the number itself, not
-	# just the constant, so a drift to the HP model cannot hide behind a rename.
-	_check(RushRules.LIVES_START == 3, "Rush starts on exactly 3 lives (Q-029, owner decision)")
+	_check(r.lives == RushRules.LIVES_START and r.max_lives == RushRules.LIVES_START, "a Rush run starts on 3 HP dots, all full")
+	# Q-051, owner direction 2026-09-25 ("always follow exactly"): Rush runs on
+	# HP as upstream does (v226) — the lives ARE the HP dots, three to start
+	# (TUNING.rush.lives.start), and an extra life raises the maximum too.
+	_check(RushRules.LIVES_START == 3, "Rush starts on exactly 3 (TUNING.rush.lives.start)")
+	r.note_score(RushRules.EXTRA_LIFE_EVERY)
+	_check(r.lives == 4 and r.max_lives == 4, "an extra life adds a dot AND raises the maximum (main.js maxHp++, hp++)")
+	r.reset()
 	r.level = 3
 	r.take_hit()
 	_check(r.lives == RushRules.LIVES_START - 1, "a hit costs a life")
@@ -624,11 +626,17 @@ func _test_rush_rules(root: Node3D) -> void:
 	_check(not r.overcharged(), "and is not confused with OVERCHARGE")
 
 	# Cycling wraps, so a single input can walk the whole list.
-	r.ability = RushRules.Ability.HEAT_EXCHANGE
+	r.ability = RushRules.Ability.NONE
 	r.cycle_ability(-1)
 	_check(r.ability == RushRules.Ability.QUANTUM_SHIELD, "ability selection wraps")
 	r.cycle_ability(1)
-	_check(r.ability == RushRules.Ability.HEAT_EXCHANGE, "and wraps back")
+	_check(r.ability == RushRules.Ability.NONE, "and wraps back to NONE")
+	# Q-051: NONE is upstream's default and never fires
+	_check(RushRules.new().ability == RushRules.Ability.NONE, "a fresh Rush starts with NO ability, as upstream")
+	r.ability = RushRules.Ability.NONE
+	r.ability_charge = 1e12
+	r.heat = 1.0
+	_check(not r.ability_ready() and r.fire_ability() == -1.0, "and NONE never fires")
 
 	# --- extra lives -------------------------------------------------------
 	r.reset()
@@ -982,6 +990,29 @@ func _test_collisions() -> void:
 	_check(not e2.alive, "in Rush, BOOSTING through a body kills it instead")
 	_check(main.player.hp == Player.MAX_HP, "and costs the player nothing")
 	_check(main.rush.multiplier > 1, "and chains the multiplier")
+
+	# --- Q-051: RUSH is a cabinet, not a title row (upstream v263) ------------
+	var rows_have_rush := false
+	for row in main.MODE_ROWS:
+		if row["mode"] == main.Mode.RUSH:
+			rows_have_rush = true
+	_check(not rows_have_rush, "RUSH is not a title row any more")
+	_check(main.CABINETS == ["", "rush"], "the arcade cabinet cycles OFF and RUSH")
+	var had_cab: String = main.cabinet
+	main.cabinet = "rush"
+	main._menu_row = 0
+	main.state = main.State.MENU
+	_check(main._mode_detail_text(0).contains("RUSH cabinet armed"), "CLASSIC says the cabinet is armed, so start does what it says")
+	main.cabinet = had_cab
+	var im_src: String = (load("res://scripts/input_manager.gd") as Script).source_code
+	_check(not im_src.contains("enum BoostScheme") and not im_src.contains("func toggle_pos"),
+		"the ZONE boost scheme and its toggle are gone (upstream v235)")
+	main.mode = main.Mode.RUSH
+	main.rush.reset()
+	main.rush.lives = 2
+	main.state = main.State.PLAYING
+	main._update_hud()
+	_check(main._hp_label.text == "HP @@o", "Rush's HUD shows lives as HP dots (got %s)" % main._hp_label.text)
 
 	main.queue_free()
 
@@ -2380,6 +2411,12 @@ func _test_gates_wiring() -> void:
 	# below fails intermittently. Caught 2026-08-27 as a one-in-several flake;
 	# the game was right and the test was assuming.
 	g0.risk = false
+	# And the OTHER live gate out of the way: both spawn at random spots, and
+	# when they land close the dash crosses both and two pods drop. A flake
+	# seen 2026-09-25, same shape as the RISK one above.
+	for og in main.gates:
+		if og != g0:
+			og.position = g0.position + Vector3(30.0, 0.0, 30.0)
 	main.player.position = g0.position
 	main.player._dash_time = 0.5
 	main.pods.clear()

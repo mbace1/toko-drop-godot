@@ -61,7 +61,9 @@ const LEVEL_SECONDS_STEP := 30.0
 ##                    climbs double. Rewards already being safe.
 ##   QUANTUM_SHIELD — a window where enemy fire is REFLECTED back as yours.
 ##                    The only one that rewards standing still and shooting.
-enum Ability { HEAT_EXCHANGE, HYPER_BOMB, OVERCHARGE, QUANTUM_SHIELD }
+## Q-051: NONE first and the default, as upstream (`RUSH_ABILITIES =
+## ['none', 'heatExchange', 'hyperBomb', 'overcharge', 'quantumShield']`).
+enum Ability { NONE, HEAT_EXCHANGE, HYPER_BOMB, OVERCHARGE, QUANTUM_SHIELD }
 
 ## Numbers are the BROWSER'S, as of its v232/v234 (`TUNING.rush.abilities`).
 ##
@@ -74,6 +76,10 @@ enum Ability { HEAT_EXCHANGE, HYPER_BOMB, OVERCHARGE, QUANTUM_SHIELD }
 ## numbers to set — upstream's playtest owns them, exactly as it owns the v227
 ## tier table. Every value below was this repo's once and has been replaced.
 const ABILITY_DEF := {
+	Ability.NONE: {
+		"name": "NONE", "charge": 1e9, "min_heat": 0.0, "kind": "none",
+		"blurb": "no ability — boost and the gun",
+	},
 	Ability.HEAT_EXCHANGE: {
 		"name": "HEAT EXCHANGE", "charge": 8.0, "min_heat": 0.15,
 		"kind": "burst", "radius": 3.0, "radius_per_heat": 5.0,
@@ -101,7 +107,7 @@ signal overheated()
 signal life_lost(lives_left: int)
 signal ability_fired(kind: String, radius: float)
 
-var ability: int = Ability.HEAT_EXCHANGE
+var ability: int = Ability.NONE
 
 var heat := 0.0
 var overheated_now := false
@@ -112,6 +118,10 @@ var multiplier := 1
 var mult_t := 0.0
 
 var lives := LIVES_START
+## Q-051: upstream runs Rush on HP — the lives ARE the HP dots, and an extra
+## life raises the maximum as well (main.js: `player.maxHp++; player.hp++`).
+## The count and every rule on it are unchanged; this is the dots' ceiling.
+var max_lives := LIVES_START
 
 ## v227 — the stamped ladder. One stamp per level SURVIVED, graded against PAR,
 ## plus the two goals a level can keep clean.
@@ -187,6 +197,7 @@ func reset() -> void:
 	multiplier = 1
 	mult_t = 0.0
 	lives = LIVES_START
+	max_lives = LIVES_START
 	authored = false
 	ladder.clear()
 	stars = 0
@@ -366,6 +377,8 @@ func _stamp_level() -> void:
 	_fresh_attempt()
 
 func ability_ready() -> bool:
+	if ability == Ability.NONE:
+		return false
 	return ability_charge >= charge_time() and heat >= float(def()["min_heat"])
 
 ## Fires the selected ability. Returns a radius for "burst" kinds (0 for
@@ -397,4 +410,5 @@ func note_score(total: int) -> bool:
 		return false
 	_next_extra_life += EXTRA_LIFE_EVERY
 	lives += 1
+	max_lives += 1
 	return true
