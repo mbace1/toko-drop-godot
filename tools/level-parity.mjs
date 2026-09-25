@@ -27,8 +27,9 @@ if (!GODOT) { console.error('set GODOT to the Godot console binary'); process.ex
 const parse = (text, label) => {
   const out = [];
   for (const line of text.split(/\r?\n/)) {
-    const m = line.match(/SPAWN (\d+) ([A-Z_]+) t=([-\d.]+) x=([-\d.]+) z=([-\d.]+)/);
-    if (m) out.push({ i: +m[1], type: m[2], t: +m[3], x: +m[4], z: +m[5] });
+    const m = line.match(/SPAWN (\d+) ([A-Z_]+) t=([-\d.]+) x=([-\d.]+) z=([-\d.]+)(?: ax=([-\d.]+) az=([-\d.]+))?/);
+    if (m) out.push({ i: +m[1], type: m[2], t: +m[3], x: +m[4], z: +m[5],
+                      ax: m[6] != null ? +m[6] : null, az: m[7] != null ? +m[7] : null });
   }
   if (!out.length) { console.error(`✘ no SPAWN lines from ${label}`); process.exit(1); }
   return out;
@@ -45,6 +46,8 @@ const r = spawnSync(GODOT, ['--headless', '--fixed-fps', '60', '--script', 'tool
 const godot = parse((r.stdout || '') + (r.stderr || ''), 'the Godot trace');
 
 let checks = 0, fails = 0;
+const drift = [];
+const SHOVE_MAX = 2.5;
 const ok = (name, cond) => { checks++; if (!cond) { fails++; console.error(`✘ ${name}`); } };
 
 ok(`same spawn count (browser ${browser.length}, godot ${godot.length})`, browser.length === godot.length);
@@ -53,9 +56,30 @@ for (let k = 0; k < n; k++) {
   const b = browser[k], g = godot[k];
   ok(`#${k} same type (${b.type} vs ${g.type})`, b.type === g.type);
   ok(`#${k} ${b.type} same second (${b.t.toFixed(2)} vs ${g.t.toFixed(2)})`, Math.abs(b.t - g.t) <= 0.15);
-  ok(`#${k} ${b.type} same place ((${b.x.toFixed(2)},${b.z.toFixed(2)}) vs (${g.x.toFixed(2)},${g.z.toFixed(2)}))`,
-     Math.abs(b.x - g.x) <= 1.0 && Math.abs(b.z - g.z) <= 1.0);
+  // Q-043: SAME PLACE is where the pump PLACED the body, compared exactly,
+  // when both sides report it. First sighting is one step into a body's life,
+  // after its own motion AND the crowd pass — and with the crowd on in both
+  // builds, a body standing near a spawn point shoves the newcomer, and WHO
+  // stands there depends on thirty seconds of movement neither build can make
+  // the other reproduce (upstream's pounce timing is Math.random). Upstream's
+  // own level-smoke switched to the placement for the same reason (v266).
+  // Where either side lacks it, the old first-sighting rule stands.
+  if (b.ax != null && g.ax != null) {
+    ok(`#${k} ${b.type} same place — placed at (${b.ax.toFixed(3)},${b.az.toFixed(3)}) vs (${g.ax.toFixed(3)},${g.az.toFixed(3)})`,
+       Math.abs(b.ax - g.ax) <= 0.0015 && Math.abs(b.az - g.az) <= 0.0015);
+    // a shove on arrival is at most about one contact distance (two radii and
+    // the 0.6 pad); a body first seen further than that from where it was put
+    // was moved by something that is not the crowd, in either build
+    for (const [who, q] of [['browser', b], ['godot', g]])
+      ok(`#${k} ${b.type} ${who} first seen within ${SHOVE_MAX} of where it was placed (${Math.hypot(q.x - q.ax, q.z - q.az).toFixed(2)})`,
+         Math.hypot(q.x - q.ax, q.z - q.az) <= SHOVE_MAX);
+    if (Math.abs(b.x - g.x) > 1.0 || Math.abs(b.z - g.z) > 1.0) drift.push(`#${k} ${b.type} first seen (${b.x.toFixed(2)},${b.z.toFixed(2)}) vs (${g.x.toFixed(2)},${g.z.toFixed(2)})`);
+  } else {
+    ok(`#${k} ${b.type} same place ((${b.x.toFixed(2)},${b.z.toFixed(2)}) vs (${g.x.toFixed(2)},${g.z.toFixed(2)}))`,
+       Math.abs(b.x - g.x) <= 1.0 && Math.abs(b.z - g.z) <= 1.0);
+  }
 }
+if (drift.length) console.log(`  note: ${drift.length} bod${drift.length === 1 ? 'y was' : 'ies were'} placed identically but shoved on arrival by different neighbours:\n    ` + drift.join('\n    '));
 console.log(`${checks - fails}/${checks} parity checks passed for '${id}'`);
 if (fails) { console.error(`✘ ${fails} FAILED — the two builds do not play this level the same way`); process.exit(1); }
 console.log('✔ both builds play the level identically');

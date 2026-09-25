@@ -55,6 +55,14 @@ func _pick_dir() -> void:
 	_flop_t = 0.0
 	_state = FlopState.FLOP
 
+## Q-043: a flop re-derives its position from `_origin` every frame, so a
+## crowd nudge that did not move the origin would be undone next frame
+## (upstream keeps `_flopX0/_flopZ0` in step for the same reason).
+func crowd_nudge(dx: float, dz: float) -> void:
+	super(dx, dz)
+	if _state == FlopState.FLOP:
+		_origin += Vector2(dx, dz)
+
 func _step_flop(delta: float) -> void:
 	_flop_t += delta
 	var t := clampf(_flop_t / _flop_dur, 0.0, 1.0)

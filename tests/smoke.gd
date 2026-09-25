@@ -29,6 +29,7 @@ func _init() -> void:
 	_test_magna(root)
 	_test_draper(root)
 	_test_arc_movers(root)
+	_test_crowd_wiring(root)
 	_test_cargo(root)
 	_test_vault_crate(root)
 	_test_escort_bot(root)
@@ -834,6 +835,36 @@ func _test_arc_movers(root: Node3D) -> void:
 	var main_script: Script = load("res://scripts/main.gd")
 	var src: String = main_script.source_code
 	_check(src.contains("or e is Ribbon or e is Slug"), "both are in the melee set (they attack by touch, along the body)")
+
+## Q-043: the director RUNS the crowd. tests/crowd_check.gd proves the module
+## against upstream; this proves the game calls it — two bodies dropped on the
+## same spot are apart one frame later, a boss standing in a pack is never the
+## one that yields to COMFORT, and the crowd's velocity is measured.
+func _test_crowd_wiring(root: Node3D) -> void:
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(0.0, 0.0, -8.0)
+	var enemies_root := Node3D.new()
+	root.add_child(enemies_root)
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+	wd.half_x = 19.0
+	wd.half_z = 11.0
+	wd.target = target
+	wd.enemies_root = enemies_root
+	wd.wave = 1
+	var a: YelaCube = _place(root, YelaCube.new(), Vector3(3.0, 0.0, 2.0), target, null)
+	var b: YelaCube = _place(root, YelaCube.new(), Vector3(3.05, 0.0, 2.0), target, null)
+	wd.enemies.append(a)
+	wd.enemies.append(b)
+	wd.update(1.0 / 60.0)
+	var d := Vector2(a.position.x - b.position.x, a.position.z - b.position.z).length()
+	_check(d >= a.radius + b.radius + Crowd.DEFAULTS["pad"] - 0.05,
+		"two bodies dropped on one spot are a contact apart a frame later (%.2f)" % d)
+	var o := Vector2(a._origin.x - a.position.x, a._origin.y - a.position.z).length()
+	_check(a._state != YelaCube.FlopState.FLOP or o < 1.5,
+		"and a flopping cube's origin went with it (it does not snap back)")
+	_check(a.crowd_vel != Vector2.ZERO or b.crowd_vel != Vector2.ZERO, "the director measures the crowd's velocity")
 
 func _test_wave_clears_and_advances(root: Node3D) -> void:
 	var target := Node3D.new()

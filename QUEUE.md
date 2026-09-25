@@ -580,6 +580,22 @@ upstream's verb, already shipped there; this is the port catching up to it.
 
 ## Landed
 
+### Q-043 — The swarm's spacing: upstream's crowd, and a parity gate that survives it
+
+- status: **Landed, 2026-09-25** — this commit (`git log -S "Q-043"`)
+- repo: both (the port's crowd; upstream's `scripts/level-smoke.sh` prints placements)
+- size: M
+- blocked-by: —
+- design: upstream `VERSIONS.md` v245 and `js/crowd.js`'s header; v266 (why
+  upstream's own level gate compares the placement)
+- gate: `tests/crowd_check.gd` 12/12; `tools/crowd-parity.mjs` 12/12;
+  `level-parity.mjs` 18/18; smoke; trace moves only with the crowd on
+
+This build had no body-to-body spacing at all — not v245's COMFORT/SLIDE/PAD,
+and not the plain overlap resolve upstream carried for 244 versions before
+it. Found through `siren-song`'s one parity miss (a SIREN the browser shoved
+1.02 off its spawn point). Detail in `PORT_STATUS.md` → Q-043.
+
 ### Q-042 — The arc-movers: RIBBON and SLUG, so every synced level plays
 
 - status: **Landed, 2026-09-25** — this commit (`git log -S "Q-042"`)
