@@ -88,6 +88,62 @@ one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
 
+## Q-043 — the swarm's spacing: upstream's crowd, exactly (2026-09-25)
+
+**What was found.** With RIBBON and SLUG in (Q-042), 17 of 18 synced levels
+passed the parity gate. The eighteenth, `siren-song`, missed by 0.02 of the
+1.0 tolerance: the browser's SIREN was first seen 1.02 from its spawn point,
+this build's exactly on it. Upstream v245's crowd pass shoves a newcomer off
+whoever is standing there, and **this build had no body-to-body spacing at
+all** — not v245's, and not the plain overlap resolve upstream carried for
+the 244 versions before it. Bodies pursuing one point stacked into one body's
+width of gel.
+
+**What landed.** `scripts/crowd.gd`, upstream's `js/crowd.js` term for term:
+the RESOLVE (half the overlap each), the COMFORT following distance for the
+body behind that is closing on the target, the SLIDE round the body ahead,
+the 0.6 PAD; anchored bodies never move, a boss never yields, the clamp is
+the arena rectangle. `WaveDirector.update` runs it after every body has moved
+and before anything collides (main.js's order), and measures each body's
+CROWD velocity around its own update with upstream's 0.3 smoothing — the
+trail's `_vel` is a different measurement and is left alone. `Enemy.crowd_nudge`
+is how the crowd moves a body; YELA_CUBE (and every cube that flops) moves
+its flop origin with it, or the tumble would snap the body back next frame.
+
+**Measured against upstream's own code.** `tests/crowd_check.gd` is
+`crowd-check.mjs` check for check (12/12; the old-solver line reads
+`nn=1.14 pile=1.80 cov=302°` on both builds). `tools/crowd-parity.mjs` runs
+upstream's `crowd.js` itself on the same scenes: the hard resolve agrees to
+4.8e-7; six seconds of nine bodies from one door agree to **5e-16 per body**
+once upstream's positions are stored as float32 — at its native float64, one
+fan body ends 0.85 away (a pile is chaotic) while spacing, radius and
+coverage stay equal, which is what proved the 0.85 was precision and not a
+different crowd. A flipped SLIDE sign fails it (coverage 312° → 2°).
+
+**The level gate had to learn the same thing upstream did in v266.** Turning
+the crowd on here took the parity gate from 17/18 to **14/18** — `crossfire`,
+`siren-song`, `the-pull`, `three-rings` — because first sighting now depends
+on who stands near a spawn point, and that depends on thirty seconds of
+movement neither build can make the other reproduce (upstream's pounce timing
+is `Math.random`). Upstream's own `level-smoke.sh` stopped trusting first
+sighting for exactly this reason in v266 and compares where the pump PLACED
+the body. So now both sides print it — upstream's seen lines gain
+`ax=/az=` (`scripts/level-smoke.sh`, a tooling change there), this build's
+trace prints the same from `WaveDirector._spawn_level_entry` — and
+`level-parity.mjs` compares the placement exactly, bounds each side's arrival
+shove at 2.5 (a shove, not a teleport), and prints a different shove as a
+note. **18/18, 2,678 checks**; three notes (one in `crossfire`, two in
+`siren-song`). Falsified both ways: the pump nudged 0.01 fails 15 checks on
+`first-light`; one body reported 3 units off its placement fails the shove
+bound.
+
+**Gates.** Smoke PASS (+3 wiring checks: two bodies dropped on one spot are
+a contact apart a frame later; a flop's origin goes with the nudge; the
+velocity is measured — the first fails with the call removed). `arena_check`
+PASS; boot clean. **The seeded trace changes, and only because of the crowd**:
+with the one `Crowd.resolve` call disabled it is byte-identical to the Q-042
+trace (0 lines); on, it differs (26 lines) and reproduces itself (0 lines).
+
 ## Q-042 — the arc-movers: RIBBON and SLUG, and every synced level plays (2026-09-25)
 
 **What was found.** Upstream's campaign (v265) is eighteen authored rooms in

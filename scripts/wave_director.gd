@@ -413,6 +413,9 @@ func _spawn_level_entry(entry: Dictionary) -> void:
 	var e := _make(entry["type"])
 	enemies_root.add_child(e)
 	e.position = Vector3(float(entry["px"]), 0.0, float(entry["pz"]))
+	# Q-043: where the pump PLACED it, for the parity gate — with the crowd on,
+	# a body's first sighting depends on who is standing near its spawn point
+	e.set_meta("spawn_at", Vector2(e.position.x, e.position.z))
 	_wire_body(e)
 	e.speed *= float(entry["speed_mult"])
 	if e.fire_interval > 0.0:
@@ -527,8 +530,20 @@ func update(delta: float) -> void:
 				_split(e)
 			corpses.append(e)
 			continue
+		var pre_x := e.position.x
+		var pre_z := e.position.z
 		e.update(delta)
+		# Q-043: the crowd's velocity, enemy.js's 0.3-per-frame smoothing of
+		# what the body's own update did
+		var inv := 1.0 / maxf(delta, 1e-4)
+		e.crowd_vel.x += ((e.position.x - pre_x) * inv - e.crowd_vel.x) * 0.3
+		e.crowd_vel.y += ((e.position.z - pre_z) * inv - e.crowd_vel.y) * 0.3
 	_spawn_slug_halves()
+	# Q-043 (upstream v245, js/crowd.js): the swarm's spacing, after every body
+	# has moved and before anything collides — main.js's order. The children a
+	# slug split just made take part; the corpses do not.
+	if target != null:
+		Crowd.resolve(enemies, delta, arena.half_x, arena.half_z, Vector2(target.position.x, target.position.z))
 
 	_run_support(delta)
 

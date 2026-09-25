@@ -193,7 +193,21 @@ cross-build gate is `GODOT=… node tools/level-parity.mjs <id> <seen-file>`,
 where the seen file comes from upstream's `scripts/level-smoke.sh` — run it
 whenever the pump, the arena or a level file changes. A level that plays
 differently in the two builds is a bug in whichever build diverged from the
-file, never a reason to edit the file.
+file, never a reason to edit the file. **Same place means where the pump PUT
+the body** (`ax=/az=` on both sides, compared exactly) since Q-043: with the
+crowd on in both builds, a newcomer is shoved by whoever stands near its
+spawn point, and who stands there depends on thirty seconds of movement the
+builds cannot reproduce for each other. First sighting must still land within
+2.5 of the placement on each side (a shove, not a teleport); a different
+shove is printed as a note.
+
+`godot --headless --path . --script tests/crowd_check.gd` — the swarm's
+spacing (Q-043), upstream's `scripts/crowd-check.mjs` check for check.
+`GODOT=… UPSTREAM=… node tools/crowd-parity.mjs` runs upstream's own
+`crowd.js` on the same scenes: every body within 1e-6 once upstream's
+positions are stored as float32 the way a `Node3D` stores them (measured
+5e-16), and the pack's shape within 5% at upstream's native float64. Run both
+on any change to `scripts/crowd.gd` or to the director's update order.
 
 `godot --headless --fixed-fps 60 --script tools/trace.gd -- seed:9D6875 300`
 — a seeded GAMEPLAY-STATE trace: every body's class and exact float32

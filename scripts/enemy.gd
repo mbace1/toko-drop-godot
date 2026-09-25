@@ -287,6 +287,18 @@ func init() -> void:
 ## for contact when this is set; every other body keeps the head-circle test
 ## it always had, inline, untouched.
 var long_body := false
+
+## Q-043: the crowd's velocity — how far this body's OWN update moved it, per
+## second, smoothed 0.3 per frame (enemy.js's `_velX/_velZ`). Measured by the
+## director around update(), so the crowd's own nudges never count as closing
+## on the target. (`_vel` is the trail's, measured frame to frame; a different
+## question.)
+var crowd_vel := Vector2.ZERO
+## The crowd moves a body through this, so a species that re-derives its
+## position from an anchor every frame can move the anchor too.
+func crowd_nudge(dx: float, dz: float) -> void:
+	position.x += dx
+	position.z += dz
 func hit_test(x: float, z: float, r: float) -> bool:
 	var dx := x - position.x
 	var dz := z - position.z

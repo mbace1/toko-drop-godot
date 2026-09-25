@@ -77,7 +77,11 @@ func _process(_delta: float) -> bool:
 			if e.get_meta("_traced", false):
 				continue
 			e.set_meta("_traced", true)
-			print("SPAWN %d %s t=%.3f x=%.3f z=%.3f" % [_seen, _type_name(e), _main.waves.wave_timer, e.position.x, e.position.z])
+			var line := "SPAWN %d %s t=%.3f x=%.3f z=%.3f" % [_seen, _type_name(e), _main.waves.wave_timer, e.position.x, e.position.z]
+			if e.has_meta("spawn_at"):   # Q-043: the pump's placement, compared exactly
+				var at: Vector2 = e.get_meta("spawn_at")
+				line += " ax=%.3f az=%.3f" % [at.x, at.y]
+			print(line)
 			_seen += 1
 	if _frame >= 5 and (_frame % EVERY == 0 or _frame == _last):
 		var wd = _main.waves
