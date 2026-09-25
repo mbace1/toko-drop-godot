@@ -5,12 +5,44 @@ Living doc — update this in the same commit as any change to `scripts/` or
 `mbace1/Suds-Jack`, `toko-drop/js/*.js` (referenced per line below). Visual
 target is `PORT_BRIEF.md`.
 
-## Start here (handoff, 2026-09-08)
+## Start here (handoff, 2026-09-25)
 
-**v3.6 is deployed** at `mbace1.github.io/Suds-Jack/toko-drop-godot/`
-(`Suds-Jack` `gh-pages` `657f44d4`), `master` clean, all gates green. Read
-`CLAUDE.md`'s "Which build leads" section first if this is a fresh session —
-it decides what belongs in this repo at all.
+**v3.7 ships Q-040 → Q-043** to `mbace1.github.io/Suds-Jack/toko-drop-godot/`:
+the LEVELS menu row (with the level files actually in the pck), the
+half-float floor hotfix (Q-041 — the deployed v3.6 still had the white-floor
+bug on phones), RIBBON and SLUG (all 18 synced levels load), and the crowd.
+**Browser build assessed through v268** — see "Catching up: v237-v268" below
+for what is done, what is queued (Q-044 → Q-050, in order) and what is
+deliberately not ported. Read `CLAUDE.md`'s "Which build leads" section first
+if this is a fresh session.
+
+**How v3.7 was built, and two things worth knowing about the next export.**
+- **The deployed runtime is Godot 4.7.2** (`index.js`: "Godot Engine
+  v4.7.2.stable.official"), and deploys ship only `index.pck` + `index.html`
+  against it. Export with 4.7.2 — v3.7's `index.js`, `index.wasm` and both
+  audio worklets came out byte-identical to the deployed ones, which is the
+  check that the pck and the runtime match. It was exported headless on
+  Linux (`--export-release "Web"`) with the 4.7.2 web no-threads template.
+- **v3.6's pck carried junk from the machine that exported it**: six
+  `_shots/*.png` screenshots, the previous build's icons and `webshot.png`,
+  all swept in by `export_filter="all_resources"` (1.63 MB). A clean tree
+  exports 0.48 MB. Export from a clean checkout, or those files ship again.
+- Paths in the pck are stored WITHOUT `res://`, so Q-040's gate as written
+  (`grep -ac "res://levels"`) reads 0 even when the levels are in; grep
+  `levels/first-light` instead (1 on v3.7).
+
+**Photographed in the web build** (Chromium, the compatibility tier):
+`slug-run` plays — the slug's chain chases, and the death screen asks about
+"a slug"; `eddy` from a throwaway no-damage export — the RIBBON enters as a
+straight strip and curls into its serpentine, and the GLOBBOs stand in a
+spaced ring round the player instead of a pile (Q-043).
+
+---
+
+## Previous handoff (2026-09-08)
+
+**v3.6 was deployed** at `mbace1.github.io/Suds-Jack/toko-drop-godot/`
+(`Suds-Jack` `gh-pages` `657f44d4`).
 
 **The lesson this deploy paid for: LANDED IS NOT SHIPPED.** Four items landed
 on 2026-09-05 — Q-037 (the floor draws a level's region), Q-038 (the owner's
@@ -1617,6 +1649,78 @@ Six versions shipped upstream after v225. What each meant here:
 - **v228 Arena pass 2, v229/v230 haptics + reduce-motion, v231 press kit** —
   not yet assessed. v229/v230 are portable (Godot has
   `Input.vibrate_handheld()`); v231 is not a game change.
+
+## Catching up: v237-v268 (assessed 2026-09-25)
+
+Read from the DEPLOYED tree (`gh-pages` at `af5cd359`), same as every pass.
+Thirty-two versions, sorted by what each one is to this build. Queue IDs are
+in `QUEUE.md`; the order below is the order they should land, because each
+leans on the one before.
+
+**Done in this pass**
+- **v251 / v253 — RIBBON and SLUG** → Q-042. Upstream's campaign put them in
+  world 2's rooms; three synced levels were refused until they existed.
+- **v245 — the crowd** → Q-043. This build had no body spacing at all.
+- **Tooling:** both builds now print where the pump PLACED a body, and the
+  level gate compares that (upstream's v266 lesson, applied cross-build).
+
+**Already here** — v239 (one level format, Q-039), v240 (the floor draws the
+region, Q-037), v242 (the half-float sentinel, Q-041), v243 (BOOST LANE plays,
+Q-040).
+
+**To port, in order** (gameplay leads upstream; this build follows):
+1. **Q-044 — waves become FRONTS (v256, v257, v258).** A 12–15 s clocked
+   round with pulsed arrivals and survivors carried over, drops and gates
+   surviving the boundary, the front pulling in when the floor empties (idle
+   5.5 → 2.4 s), THE CURTAIN kind, a ceiling on the live floor, a revenge cap
+   that scales. This is the director's shape now, and every later item is
+   built on it. Gate: a Godot soak to wave 40 (upstream's v258/v259 lesson —
+   the freeze and the unbounded floor were only found at depth).
+2. **Q-045 — revenge is a species trait (v253, v254).** Here every corpse
+   still answers in its dialect; upstream now has only the ten shooters'
+   corpses answer, from wave 3, capped on the field (wave-2 bullets 37 → 0).
+   VOLATILE at revenge speed.
+3. **Q-046 — THE DROP (v260, v261, v264, v266).** Every boss floor is a
+   DEPTH with its own look, roster and ONE rule (current, sweep, dark, slip,
+   updraft); the floor falls away to the next; the boss per world changes the
+   rule while it lives. Mostly presentation and physics once Q-044 exists —
+   the half of the work this build is meant to push.
+4. **Q-047 — the weapon pods refreshed (v262).** Five families with one idea
+   each, level 2 EARNED by a second pod of the family and lost on a hit, the
+   SHOTGUN out of RUSH as a pod. Here LV2 still drops directly from wave 4 at
+   28%. Upstream's pierce bug (`_hitIds` never cleared on pooled bullets) does
+   not exist here — no weapon pierces.
+5. **Q-048 — two doors and the campaign (v263, v265).** ARCADE and CAMPAIGN on
+   the title; six worlds × three rooms from `TUNING.campaign`; goals survive /
+   quota / flawless; grades a room can pay. The rooms already play here
+   (Q-042, Q-043); what is missing is the campaign screen, the goals and the
+   grades. Upstream moved RUSH into its pause-menu cabinets at the same time;
+   this build's Rush is a first-class mode with its own lives decision
+   (Q-029), so where it lives here is the owner's call, not a port.
+6. **Q-049 — sound per world (v267).** A synthesised bed per world that
+   answers to the world's rule. Upstream built it on any audio context and
+   measured it offline; here it would be an `AudioStreamGenerator` or a bus of
+   effects. Waits for Q-046 (a world has to exist to have a sound).
+7. **Q-050 — the play reader (v268).** Where a person stops, whether they go
+   again, what they leave on the floor — local only. On the web export it can
+   write the same shared site log (`tokoPlayLog.v1`) through
+   `JavaScriptBridge`, so both cabinets are read the same way.
+
+**Not ported, with the reason**
+- v237 the level EDITOR — a browser tool; its FORMAT was the port's job (v239).
+- v244 / v248 / v249 / v250 — the white-out diagnostics, the WebGL
+  context-loss ratchet and the pixel budget: browser-renderer problems. The
+  port's twin of the one real bug (v242) is Q-041.
+- v246 contrast floor, v247 camera framing, v255 TORO's sawblade — the look
+  and the camera are this build's own (`CLAUDE.md`, "Which build leads"). Worth
+  reading as references when this build next pushes on presentation.
+- v252 tester costs, v259 the soak — upstream performance and tooling; the
+  soak's LESSON is taken into Q-044's gate.
+
+**For upstream, found here:** a SLUG's `touches()` is its `hitTest()`, so
+contact records the segment the player brushed, and a hit that arrives
+without its own test (a gate's edge) is charged to that segment. One line
+(`Slug.touches` here keeps the recorded segment).
 
 ## Catching up: v232-v236 (assessed 2026-09-04)
 
