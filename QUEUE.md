@@ -580,6 +580,25 @@ upstream's verb, already shipped there; this is the port catching up to it.
 
 ## Landed
 
+### Q-042 — The arc-movers: RIBBON and SLUG, so every synced level plays
+
+- status: **Landed, 2026-09-25** — this commit (`git log -S "Q-042"`)
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: upstream `VERSIONS.md` v251 (the testers) and v253 (the slug's
+  limits); `enemy.js` `_arcSteer` / `_buildChain` / `_slugHit` / `_buildRibbon`
+- gate: all synced levels load (18/18); `level-parity.mjs` on the three that
+  use them; smoke; the seeded trace changes ONLY because the pool grew
+
+Upstream's campaign (v265) put RIBBON and SLUG in world 2's three rooms, and
+this build refused all three by name (`unknown enemy type "RIBBON"`): 15 of
+18 synced levels loaded. Both bodies ported with upstream's numbers and rules
+— the turn-rate-capped serpentine, the slug that shortens from an end and
+splits from the middle into a reversed second animal (never below four, never
+twice), the ribbon hit along its own path — and added to the wave pool from
+wave 2 at cost 3, as upstream's testers. Detail in `PORT_STATUS.md` → Q-042.
+
 ### Q-039 — One level format for two engines: read the editor's JSON
 **Landed 2026-09-05.** `scripts/level.gd` mirrors upstream v239's unified
 `level.js` clause for clause: named arenas, pickups (down the pump, via

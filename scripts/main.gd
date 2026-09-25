@@ -1155,11 +1155,17 @@ func _collide_player_bullets() -> void:
 		for b in bullets.active:
 			if not b.alive or not b.is_player:
 				continue
-			var dx := b.x - e.position.x
-			var dz := b.z - e.position.z
-			var r := e.radius + 0.15
-			if dx * dx + dz * dz >= r * r:
-				continue
+			if e.long_body:
+				# Q-042: a long body is hit along its length (and a SLUG
+				# remembers which segment, for its rule)
+				if not e.hit_test(b.x, b.z, 0.15):
+					continue
+			else:
+				var dx := b.x - e.position.x
+				var dz := b.z - e.position.z
+				var r := e.radius + 0.15
+				if dx * dx + dz * dz >= r * r:
+					continue
 			# BULWARK shrugs off anything landing on its front plate, and a
 			# WARDEN's umbrella protects everything under it. Both consume the
 			# shot rather than passing it through, so a blocked hit still costs
@@ -1273,7 +1279,7 @@ func _collide_contact() -> void:
 			var bdx := e.position.x - player.position.x
 			var bdz := e.position.z - player.position.z
 			var br := e.radius + Player.RADIUS
-			if bdx * bdx + bdz * bdz < br * br:
+			if (e.touches(player.position.x, player.position.z, Player.RADIUS) if e.long_body else bdx * bdx + bdz * bdz < br * br):
 				var bmax := e.max_hp
 				if e.take_hit(99):
 					rush.add_boost_kill(e is YelaCube)
@@ -1291,7 +1297,7 @@ func _collide_contact() -> void:
 		var dx := e.position.x - player.position.x
 		var dz := e.position.z - player.position.z
 		var r := e.radius + Player.RADIUS
-		if dx * dx + dz * dz < r * r:
+		if (e.touches(player.position.x, player.position.z, Player.RADIUS) if e.long_body else dx * dx + dz * dz < r * r):
 			_note_killer(e.display_name(), Feedback.Cause.MELEE)
 			_damage_player()
 			return
@@ -1520,7 +1526,7 @@ func _collide_escort() -> bool:
 ## SHEPHERD/SIREN/WARDEN/MAGNA have their own non-contact mechanics and
 ## aren't a bump hazard to a passing bot the way a blob or a cube is.
 func _is_melee_type(e: Enemy) -> bool:
-	return e is Globbo or e is Splitta or e is Bulwark or e is YelaCube 		or e is SludgeCube or e is ReddCube or e is PurpCube 		or e is ReddMini or e is PurpMini or e is Toro
+	return e is Globbo or e is Splitta or e is Bulwark or e is YelaCube 		or e is SludgeCube or e is ReddCube or e is PurpCube 		or e is ReddMini or e is PurpMini or e is Toro 		or e is Ribbon or e is Slug   # Q-042: touch hurts along the body
 
 func _escort_died() -> void:
 	debris.burst(escort.position.x, escort.position.z, 6,

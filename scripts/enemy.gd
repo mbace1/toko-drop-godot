@@ -282,6 +282,18 @@ func display_name() -> String:
 func init() -> void:
 	pass
 
+## Q-042: a LONG body (the v251 arc-movers, RIBBON and SLUG) is hit along its
+## length, not at its head. main.gd asks `hit_test` for a shot and `touches`
+## for contact when this is set; every other body keeps the head-circle test
+## it always had, inline, untouched.
+var long_body := false
+func hit_test(x: float, z: float, r: float) -> bool:
+	var dx := x - position.x
+	var dz := z - position.z
+	return dx * dx + dz * dz < (radius + r) * (radius + r)
+func touches(x: float, z: float, r: float) -> bool:
+	return hit_test(x, z, r)
+
 ## Returns true if this hit killed the enemy.
 func take_hit(dmg: int) -> bool:
 	if not alive:
