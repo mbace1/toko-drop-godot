@@ -5,7 +5,11 @@ Living doc — update this in the same commit as any change to `scripts/` or
 `mbace1/Suds-Jack`, `toko-drop/js/*.js` (referenced per line below). Visual
 target is `PORT_BRIEF.md`.
 
-## Start here (handoff, 2026-09-25)
+## Start here (handoff, 2026-09-28)
+
+**v3.9 ships Q-052 — a boss dies as jelly, cut in two.** A look, not
+gameplay; see the section below for the cost (≈4–6 ms/frame in the web
+build for 1.3 s) and what is not done yet (the reference's refraction).
 
 **v3.8 ships Q-051 — FOLLOW EXACTLY** (owner, 2026-09-25): RUSH is a
 pause-menu cabinet, on HP dots, with no ZONE and upstream's ability list.
@@ -123,6 +127,64 @@ own work**: some other agent's plain (non-`--check`) `versions.mjs` run on
 one's. Restored by hand (`f1684e0b`); the other three
 (`eerigodot`/`eyetest`/`neonronin`) were left for their own owners — see that
 commit for why.
+
+## Q-052 — a boss dies as jelly, cut in two (2026-09-28)
+
+**The reference** (owner-supplied): a WebGPU "melon jelly" you slice with a
+knife — a tetrahedral soft body solved with XPBD, cut by a blade plane into
+pieces that keep simulating, a smooth render surface pinned to the
+tetrahedra, refraction and Beer–Lambert colour. Every body here is gel, so
+the spike was the one place it could land as a pure look: a BOSS's death.
+
+**What landed** — `scripts/jelly_body.gd`:
+- a dome of tetrahedra (a cube lattice, six Kuhn tets a cube, cubes kept if
+  any corner is inside the dome, so the tets COVER it) in the body's own
+  silhouette — gel_geo.gd's unit sphere raised 0.7 and cut at the floor,
+  scaled `radius × base_shape`;
+- XPBD: 6 substeps a frame, one iteration each; edge lengths (compliance
+  0.02 — the wobble) and tet volumes (held rigidly); gravity, damping on
+  velocity, the floor with friction;
+- a smooth 20 × 8 dome pinned to the tets by barycentric weights, built once
+  per resolution and cached, WARMED AT BOOT (it costs ~90 ms native the first
+  time; that must not be the first boss kill);
+- the CUT: a vertical blade along the line from the player through the boss.
+  Tets go to the side of their centroid; the seam's particles are moved onto
+  the blade AND clipped to the dome (the lattice's overhang showed as ragged
+  fins until they were), so the flesh is a flat face inside the silhouette;
+  skin triangles go to the side of their centre and every skin vertex is
+  re-pinned to a tet of its own half — never a tet the flattening squashed:
+  the first cut pinned to those and threw spikes metres into the camera,
+  caught in a picture, and a smoke check now pins the skin to its half.
+- `WaveDirector`: a boss that dies hands its position, size and gel material
+  to two halves, pushed 1.6 u/s off the blade; its own pop is hidden; they
+  fade over 1.3 s and are freed. The kill, the revenge, the score happened
+  first and are untouched; the jelly draws nothing from `rng` (checked).
+
+**What it costs** (4 cells: 150 particles, 384 tets for both halves):
+
+| | native | web build (wasm, Chromium) |
+|---|---|---|
+| both halves, per frame | 2.5 ms | 4.0–6.1 ms (four runs) |
+| the cut, once | 3.3 ms | — |
+| the skin template, once, at boot | 87 ms | — |
+
+`tools/jelly_bench.gd` prints the ladder: 5 cells 4.2 ms, 6 cells 6.1 ms, 8
+cells 12.0 ms native — so 4 is the choice, and the budget is ONE cut body at
+a time on a phone, not a swarm's worth.
+
+**Photographed** in the web build (a throwaway capture export: never hurt,
+a boss killed three seconds in, time slowed to 0.2 for the frames): the dome
+parts into a smooth half-dome and a half showing its flat cut face, both
+slump onto the floor and fade. Not yet: the reference's refraction and
+Beer–Lambert colour — the halves wear the ordinary gel material.
+
+**Gates.** Smoke PASS ×2 (+ `_test_jelly`: two pieces, the body minus the
+lattice's overhang (95.3%), volume held through the fall (100.0%), every
+particle on the floor, every skin vertex on its half, the halves part along
+the blade, a real boss kill makes two halves, an ordinary kill does not, the
+gameplay stream untouched, all freed after fading). Arena PASS, crowd 12/12,
+boot clean, seeded trace 0 lines vs Q-051, parity `three-rings` 56/56 and
+`boost-lane` 281/281.
 
 ## Q-051 — follow exactly: RUSH is a cabinet, on HP, with no ZONE (2026-09-25)
 

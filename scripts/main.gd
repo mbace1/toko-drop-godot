@@ -66,7 +66,7 @@ func _set_arena_size(hx: float, hz: float) -> void:
 
 ## main.js GRID_CELL — world units per floor-grid cell, chosen to keep the
 ## Shown in the corner, the way the browser prints v221.
-const VERSION := "3.8"
+const VERSION := "3.9"
 
 ## cells square on a non-square arena.
 const GRID_CELL := 1.286
@@ -383,6 +383,10 @@ func _ready() -> void:
 	rush = RushRules.new()
 	add_child(rush)
 	_load_cabinet()   # Q-051: the armed cabinet and the ability, remembered
+	# Q-052: pin the jelly's render dome once, at boot (~90 ms native), so the
+	# first boss death is not a hitch
+	if WaveDirector.JELLY_DEATHS:
+		JellyBody._template(WaveDirector.JELLY_CELLS)
 	rush.overheated.connect(func(): audio.play("player"))
 	rush.level_changed.connect(func(_n, up): audio.play("wave" if up else "hit"))
 
