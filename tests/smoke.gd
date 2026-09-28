@@ -30,6 +30,7 @@ func _init() -> void:
 	_test_draper(root)
 	_test_arc_movers(root)
 	_test_crowd_wiring(root)
+	_test_jelly(root)
 	_test_cargo(root)
 	_test_vault_crate(root)
 	_test_escort_bot(root)
@@ -873,6 +874,85 @@ func _test_crowd_wiring(root: Node3D) -> void:
 	_check(a._state != YelaCube.FlopState.FLOP or o < 1.5,
 		"and a flopping cube's origin went with it (it does not snap back)")
 	_check(a.crowd_vel != Vector2.ZERO or b.crowd_vel != Vector2.ZERO, "the director measures the crowd's velocity")
+
+## Q-052: a boss dies as a soft body cut in two. The solver holds its volume
+## and the floor, the cut makes two pieces that part along the blade, the
+## director spawns them from a real boss kill and frees them when they fade,
+## and none of it touches the run's gameplay stream.
+func _test_jelly(root: Node3D) -> void:
+	var jb := JellyBody.dome(0.87, 0.68, 4)
+	var v0 := jb.volume()
+	var parts := jb.cut(Vector3.ZERO, Vector3(1, 0, 0))
+	_check(parts.size() == 2 and parts[0] != null and parts[1] != null, "a cut through the middle makes two pieces")
+	var vs: float = parts[0].volume() + parts[1].volume()
+	# the cut face is clipped to the dome, which trims only the lattice's
+	# overhang past the silhouette (the lattice covers the dome on purpose)
+	_check(vs > 0.9 * v0 and vs <= v0 * 1.0001, "and the pieces are the body, trimmed only of the lattice's overhang (%.1f%%)" % (100.0 * vs / v0))
+	_check(parts[0].seam.size() > 0 and parts[1].seam.size() > 0, "each piece has cut flesh on its seam")
+	parts[0].kick(Vector3(1.6, 1.2, 0))
+	parts[1].kick(Vector3(-1.6, 1.2, 0))
+	for f in 90:
+		for q in parts:
+			q.step(1.0 / 60.0)
+	var ok_floor := true
+	var cx := [0.0, 0.0]
+	for s in 2:
+		for pt in parts[s].x:
+			if pt.y < -1e-4 or not is_finite(pt.x):
+				ok_floor = false
+			cx[s] += pt.x / parts[s].x.size()
+	_check(ok_floor, "every particle stays finite and on the floor")
+	var kept: float = (parts[0].volume() + parts[1].volume()) / vs
+	_check(absf(kept - 1.0) < 0.02, "the jelly keeps its volume through the fall (%.1f%%)" % (100.0 * kept))
+	_check(cx[0] > 0.3 and cx[1] < -0.3, "the halves part along the blade (%.2f / %.2f)" % [cx[0], cx[1]])
+	# the SKIN stays on the body: a vertex pinned to a squashed tet flew metres
+	# into the camera in the first cut of this (caught in a picture)
+	var skin_ok := true
+	var worst := 0.0
+	for q in parts:
+		var pc := Vector3.ZERO
+		for pt in q.x:
+			pc += pt / q.x.size()
+		for i in q.rv_tet.size():
+			var d: float = (q._rv_pos(i) - pc).length()
+			worst = maxf(worst, d)
+			if q.rv_tet[i] < 0 or d > 2.0:
+				skin_ok = false
+	_check(skin_ok, "every skin vertex stays on its half (furthest %.2f)" % worst)
+	for q in parts:
+		q.free()
+	jb.free()
+
+	# through the director: a real boss kill
+	var target := Node3D.new()
+	root.add_child(target)
+	target.position = Vector3(0, 0, -6)
+	var er := Node3D.new()
+	root.add_child(er)
+	var wd := WaveDirector.new()
+	root.add_child(wd)
+	wd.half_x = 19.0
+	wd.half_z = 11.0
+	wd.target = target
+	wd.enemies_root = er
+	wd.wave = 1
+	var boss: Globbo = _place(root, Globbo.new(), Vector3(2.0, 0.0, 1.0), target, null)
+	boss.apply_boss()
+	wd.enemies.append(boss)
+	var state := wd.rng.state
+	boss.take_hit(999)
+	wd.update(1.0 / 60.0)
+	_check(wd.jellies.size() == 2, "a boss kill leaves two jelly halves (%d)" % wd.jellies.size())
+	_check(not boss.visible, "and the boss's own pop is hidden under them")
+	_check(wd.rng.state == state, "the jelly draws nothing from the gameplay stream")
+	var plain: Globbo = _place(root, Globbo.new(), Vector3(-2.0, 0.0, 1.0), target, null)
+	wd.enemies.append(plain)
+	plain.take_hit(999)
+	wd.update(1.0 / 60.0)
+	_check(wd.jellies.size() == 2, "an ordinary body still dies the ordinary way")
+	for f in 100:
+		wd.update(1.0 / 60.0)
+	_check(wd.jellies.is_empty(), "and the halves are gone when they have faded")
 
 func _test_wave_clears_and_advances(root: Node3D) -> void:
 	var target := Node3D.new()

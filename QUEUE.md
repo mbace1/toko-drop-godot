@@ -631,6 +631,17 @@ Where a person stops, whether they go again, what they leave on the floor — lo
 
 ## Landed
 
+### Q-052 — A boss dies as jelly, cut in two
+
+- status: **Landed, 2026-09-28** — this commit (`git log -S "Q-052"`)
+- repo: toko-drop-godot
+- size: M
+- blocked-by: —
+- design: owner, 2026-09-28, on a reference (a WebGPU melon-jelly knife demo — XPBD tetrahedra, plane cuts, barycentric skin): "yes" to a spike; `PORT_STATUS.md` → Q-052
+- gate: smoke (volume held, floor held, the skin stays on its half, two halves from a real boss kill, nothing drawn from `rng`, gone when faded); cost measured natively AND in the web build; photographed
+
+A look, not gameplay (FOLLOW EXACTLY holds): a boss's death pop becomes a soft body of tetrahedra cut by a vertical blade along the shot line, the halves parting, slumping and fading. `scripts/jelly_body.gd`, `tools/jelly_bench.gd`. Next, if the owner wants it: the big bodies too (the budget below says a few at once), and the refraction/Beer–Lambert shading the reference uses.
+
 ### Q-051 — Follow exactly: RUSH is a cabinet, on HP, with no ZONE
 
 - status: **Landed, 2026-09-25** — this commit (`git log -S "Q-051"`)

@@ -525,6 +525,8 @@ func update(delta: float) -> void:
 			# carrying, then move it to the corpse list so the pop plays out
 			# without blocking the wave clear.
 			enemies.remove_at(i)
+			if e.is_boss and JELLY_DEATHS:
+				_jelly_death(e)
 			_fire_revenge(e)
 			if e.wants_children:
 				_split(e)
@@ -539,6 +541,7 @@ func update(delta: float) -> void:
 		e.crowd_vel.x += ((e.position.x - pre_x) * inv - e.crowd_vel.x) * 0.3
 		e.crowd_vel.y += ((e.position.z - pre_z) * inv - e.crowd_vel.y) * 0.3
 	_spawn_slug_halves()
+	_step_jellies(delta)   # Q-052
 	# Q-043 (upstream v245, js/crowd.js): the swarm's spacing, after every body
 	# has moved and before anything collides — main.js's order. The children a
 	# slug split just made take part; the corpses do not.
@@ -583,6 +586,52 @@ func _split(parent: Enemy) -> void:
 		c.rng = rng          # children inherit the run's gameplay stream
 		c.init()
 		enemies.append(c)
+
+## Q-052 — a boss dies as a soft body CUT IN TWO (jelly_body.gd): XPBD
+## tetrahedra split by a vertical blade along the line from the player, the
+## halves parting and falling on the floor, then fading. A LOOK: the kill, the
+## revenge and the score are untouched, and nothing here draws from `rng`.
+const JELLY_DEATHS := true
+const JELLY_CELLS := 4    # 150 particles, 384 tets: ~3 ms/frame native for both halves
+const JELLY_PART := 1.6    # u/s each half is pushed off the blade
+var jellies: Array[JellyBody] = []
+
+func _jelly_death(e: Enemy) -> void:
+	if enemies_root == null or e.mat == null:
+		return
+	var r := e.radius * e.base_shape.x
+	var h := e.radius * e.base_shape.y
+	var jb := JellyBody.dome(r, h, JELLY_CELLS)
+	var from := Vector3.ZERO
+	if target != null:
+		from = Vector3(target.position.x, 0.0, target.position.z)
+	var toward := Vector3(e.position.x, 0.0, e.position.z) - from
+	if toward.length() < 1e-4:
+		toward = Vector3(0.0, 0.0, 1.0)
+	toward = toward.normalized()
+	# the blade runs ALONG the shot line, so the halves fall to either side of it
+	var nrm := Vector3(-toward.z, 0.0, toward.x)
+	var pieces := jb.cut(Vector3.ZERO, nrm)
+	jb.free()
+	var m := e.mat.duplicate() as ShaderMaterial
+	e.visible = false   # the pop would draw over the halves
+	for s in 2:
+		var piece: JellyBody = pieces[s]
+		if piece == null:
+			continue
+		piece.position = Vector3(e.position.x, 0.0, e.position.z)
+		piece.fade_mat = m
+		piece.kick(nrm * (JELLY_PART if s == 0 else -JELLY_PART) + Vector3(0.0, 1.2, 0.0))
+		enemies_root.add_child(piece)
+		jellies.append(piece)
+
+func _step_jellies(delta: float) -> void:
+	for i in range(jellies.size() - 1, -1, -1):
+		var j := jellies[i]
+		if not is_instance_valid(j) or not j.advance(delta):
+			if is_instance_valid(j):
+				j.queue_free()
+			jellies.remove_at(i)
 
 ## Q-042: a SLUG hit in the middle SPLITS — the back half, reversed, becomes a
 ## second animal with its own head, spawned the frame after the hit exactly as
@@ -694,4 +743,8 @@ func clear() -> void:
 		if is_instance_valid(c):
 			c.queue_free()
 	corpses.clear()
+	for j in jellies:
+		if is_instance_valid(j):
+			j.queue_free()
+	jellies.clear()
 	wave = 0
